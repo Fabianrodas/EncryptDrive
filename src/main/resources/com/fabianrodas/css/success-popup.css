@@ -1,0 +1,67 @@
+.popup-root {
+    -fx-background-color: white;
+    -fx-border-color: #D9E2EC;
+    -fx-border-width: 1;
+}
+
+.popup-top {
+    -fx-padding: 10 12 0 12;
+}
+
+.popup-content {
+    -fx-padding: 0 35 30 35;
+}
+
+.popup-close {
+    -fx-background-color: transparent;
+    -fx-text-fill: #64748B;
+    -fx-font-size: 22px;
+    -fx-cursor: hand;
+    -fx-padding: 0 8 2 8;
+}
+
+.popup-close:hover {
+    -fx-background-color: #F1F5F9;
+    -fx-text-fill: #0F172A;
+}
+
+.success-icon {
+    -fx-background-color: #DCFCE7;
+    -fx-background-radius: 100;
+    -fx-min-width: 72;
+    -fx-min-height: 72;
+    -fx-pref-width: 72;
+    -fx-pref-height: 72;
+}
+
+.success-icon-text {
+    -fx-text-fill: #16A34A;
+    -fx-font-size: 38px;
+    -fx-font-weight: bold;
+}
+
+.popup-title {
+    -fx-text-fill: #0F172A;
+    -fx-font-size: 23px;
+    -fx-font-weight: bold;
+}
+
+.popup-message {
+    -fx-text-fill: #64748B;
+    -fx-font-size: 13px;
+    -fx-text-alignment: center;
+}
+
+.popup-primary-button {
+    -fx-background-color: #2563EB;
+    -fx-text-fill: white;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 7;
+    -fx-padding: 10 24 10 24;
+    -fx-cursor: hand;
+}
+
+.popup-primary-button:hover {
+    -fx-background-color: #1D4ED8;
+}

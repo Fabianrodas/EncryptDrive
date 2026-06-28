@@ -1,10 +1,5 @@
 package com.fabianrodas.encryptdrive;
 
-/**
- *
- * @author Fabian
- */
-
 import java.io.IOException;
 import java.net.URL;
 import java.util.ResourceBundle;
@@ -17,6 +12,12 @@ import javafx.scene.control.TextField;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
+
+/**
+ * FXML Controller class
+ * 
+ * @author Fabian Rodas
+ */
 
 public class LoginController implements Initializable {
 
