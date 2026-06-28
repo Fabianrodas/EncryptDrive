@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane fx:id="root"
+            prefHeight="280.0"
+            prefWidth="420.0"
+            styleClass="popup-root"
+            stylesheets="@../css/success-popup.css"
+            xmlns="http://javafx.com/javafx/21"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.fabianrodas.encryptdrive.SuccessPopupController">
+
+    <top>
+        <HBox alignment="CENTER_RIGHT" styleClass="popup-top">
+            <children>
+                <Region HBox.hgrow="ALWAYS" />
+                <Button mnemonicParsing="false"
+                        onAction="#closePopup"
+                        styleClass="popup-close"
+                        text="×" />
+            </children>
+        </HBox>
+    </top>
+
+    <center>
+        <VBox alignment="CENTER" spacing="14.0" styleClass="popup-content">
+
+            <children>
+                <StackPane styleClass="success-icon">
+                    <children>
+                        <Label styleClass="success-icon-text" text="✓" />
+                    </children>
+                </StackPane>
+
+                <Label styleClass="popup-title" text="Account created!" />
+
+                <Label maxWidth="320.0"
+                       styleClass="popup-message"
+                       text="Your EncryptDrive account was created successfully. You can now log in."
+                       textAlignment="CENTER"
+                       wrapText="true" />
+
+                <Button mnemonicParsing="false"
+                        onAction="#goToLogin"
+                        styleClass="popup-primary-button"
+                        text="Go to Log In" />
+            </children>
+
+        </VBox>
+    </center>
+</BorderPane>

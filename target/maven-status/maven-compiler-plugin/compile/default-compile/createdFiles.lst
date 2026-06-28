@@ -1,4 +1,10 @@
-module-info.class
+com\fabianrodas\encryptdrive\HomeController.class
+com\fabianrodas\models\User.class
+com\fabianrodas\security\PasswordHasher.class
 com\fabianrodas\encryptdrive\RegisterController.class
+com\fabianrodas\controllers\UserController$1.class
 com\fabianrodas\encryptdrive\LoginController.class
+com\fabianrodas\encryptdrive\SuccessPopupController.class
+module-info.class
+com\fabianrodas\controllers\UserController.class
 com\fabianrodas\encryptdrive\App.class

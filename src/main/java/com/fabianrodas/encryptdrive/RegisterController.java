@@ -1,10 +1,5 @@
 package com.fabianrodas.encryptdrive;
 
-/**
- *
- * @author Fabian
- */
-
 import java.io.IOException;
 import java.net.URL;
 import java.util.ResourceBundle;
@@ -17,6 +12,19 @@ import javafx.scene.control.TextField;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
+import com.fabianrodas.controllers.UserController;
+import com.fabianrodas.models.User;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.stage.Modality;
+import javafx.stage.StageStyle;
+
+/**
+ * FXML Controller class
+ * 
+ * @author Fabian Rodas
+ */
 
 public class RegisterController implements Initializable {
 
@@ -54,6 +62,8 @@ public class RegisterController implements Initializable {
     private double yOffset;
     private boolean passwordVisible = false;
     private boolean confirmPasswordVisible = false;
+    
+    private final UserController userController = new UserController();
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -179,7 +189,21 @@ public class RegisterController implements Initializable {
             return;
         }
 
-        showSuccess("Information validated. Ready to create the account.");
+        User user = new User(fullName, username, password);
+
+        int result = userController.create(user);
+
+        if (result == UserController.SUCCESS) {
+            showRegistrationSuccessPopup();
+            return;
+        }
+
+        if (result == UserController.USERNAME_ALREADY_EXISTS) {
+            showError("That username is already in use.");
+            return;
+        }
+
+        showError("Could not create the account. Please try again.");
     }
 
     @FXML
@@ -201,6 +225,39 @@ public class RegisterController implements Initializable {
 
         if (!feedbackLabel.getStyleClass().contains("success")) {
             feedbackLabel.getStyleClass().add("success");
+        }
+    }
+    
+    private void showRegistrationSuccessPopup() {
+        try {
+            FXMLLoader loader = new FXMLLoader(
+                    App.class.getResource("success-popup.fxml")
+            );
+
+            Parent popupRoot = loader.load();
+
+            SuccessPopupController popupController = loader.getController();
+
+            Stage popupStage = new Stage();
+
+            Stage owner = getStage();
+            if (owner != null) {
+                popupStage.initOwner(owner);
+            }
+
+            popupStage.initModality(Modality.APPLICATION_MODAL);
+            popupStage.initStyle(StageStyle.UNDECORATED);
+            popupStage.setResizable(false);
+            popupStage.setScene(new Scene(popupRoot));
+
+            popupStage.showAndWait();
+
+            if (popupController.isGoToLoginRequested()) {
+                App.setRoot("login");
+            }
+
+        } catch (IOException e) {
+            showError("Account was created, but the login screen could not be opened.");
         }
     }
 
