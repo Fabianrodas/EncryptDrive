@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane id="root" fx:id="root" prefHeight="600.0" prefWidth="1000.0" styleClass="window-root" stylesheets="@../css/login.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.fabianrodas.encryptdrive.LoginController">
+
+    <top>
+        <HBox id="titleBar" alignment="CENTER_RIGHT" onMouseDragged="#dragWindow" onMousePressed="#beginDrag" prefHeight="38.0">
+
+            <children>
+                <Label styleClass="window-name" text="EncryptDrive" />
+
+                <Region HBox.hgrow="ALWAYS" />
+
+                <Button id="minimize" mnemonicParsing="false" onAction="#minimize" styleClass="window-control" text="—" />
+
+                <Button id="close" mnemonicParsing="false" onAction="#close" styleClass="window-control" text="×" />
+            </children>
+        </HBox>
+    </top>
+
+    <center>
+        <HBox>
+
+            <children>
+                <VBox alignment="CENTER" prefWidth="420.0" styleClass="brand-pane">
+
+                    <children>
+                        <VBox alignment="CENTER" spacing="16.0">
+
+                            <children>
+                                <StackPane maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefWidth="200.0" styleClass="logo-badge">
+                                    <children>
+                                        <ImageView fitHeight="135.0" fitWidth="135.0" preserveRatio="true">
+                                            <image>
+                                                <Image url="@../images/logo.png" />
+                                            </image>
+                                        </ImageView>
+                                    </children>
+                                </StackPane>
+
+                                <Label styleClass="brand-title" text="EncryptDrive" />
+                            </children>
+                        </VBox>
+                    </children>
+                </VBox>
+
+                <VBox alignment="CENTER" styleClass="login-pane" HBox.hgrow="ALWAYS">
+
+                    <children>
+                        <VBox prefWidth="390.0" spacing="14.0" styleClass="form-card">
+
+                            <children>
+                                <Label styleClass="headline" text="Log In" />
+
+                                <Label styleClass="subheadline" text="Log in to access your protected files." wrapText="true" />
+
+                                <VBox spacing="7.0">
+                                    <children>
+                                        <Label styleClass="field-label" text="Username" />
+
+                                        <TextField fx:id="usernameField" promptText="Husky2026" styleClass="input-field" />
+                                    </children>
+                                </VBox>
+
+                                <VBox spacing="7.0">
+                                    <children>
+                                        <Label styleClass="field-label" text="Password" />
+
+                                        <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                            <children>
+                                                <StackPane HBox.hgrow="ALWAYS">
+                                                    <children>
+
+                                                        <TextField fx:id="visiblePasswordField" managed="false" promptText="Make sure not to forget it" styleClass="input-field" visible="false" />
+                                                        <PasswordField fx:id="passwordField" promptText="Make sure not to forget it" styleClass="input-field" />
+                                                    </children>
+                                                </StackPane>
+
+                                                <Button fx:id="togglePasswordButton" mnemonicParsing="false" onAction="#togglePasswordVisibility" styleClass="ghost-button" text="View" />
+                                            </children>
+                                        </HBox>
+                                    </children>
+                                </VBox>
+
+                                <Label fx:id="feedbackLabel" minHeight="18.0" styleClass="feedback-label" wrapText="true" />
+
+                                <Button mnemonicParsing="false" onAction="#login" prefWidth="507.0" styleClass="primary-button" text="Log In" />
+
+                                <HBox alignment="CENTER" spacing="5.0">
+                                    <children>
+                                        <Label styleClass="muted-label" text="Don't have an account yet?" />
+
+                                        <Button mnemonicParsing="false" onAction="#openRegister" styleClass="link-button" text="Create account" />
+                                    </children>
+                                </HBox>
+                            </children>
+                        </VBox>
+                    </children>
+                </VBox>
+            </children>
+        </HBox>
+    </center>
+    <bottom>
+    <HBox alignment="CENTER" prefHeight="30.0" styleClass="footer">
+
+        <children>
+            <Label styleClass="footer-text" text="© 2026 Fabián Rodas. All rights reserved." />
+        </children>
+    </HBox>
+</bottom>
+</BorderPane>

@@ -1,0 +1,4 @@
+module-info.class
+com\fabianrodas\encryptdrive\RegisterController.class
+com\fabianrodas\encryptdrive\LoginController.class
+com\fabianrodas\encryptdrive\App.class
