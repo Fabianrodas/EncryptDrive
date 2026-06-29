@@ -19,6 +19,7 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import com.fabianrodas.utils.WindowDragHandler;
 
 /**
  * FXML Controller class
@@ -93,8 +94,8 @@ public class DashboardController implements Initializable {
 
     private final UserController userController = new UserController();
 
-    private double xOffset;
-    private double yOffset;
+    private final WindowDragHandler windowDragHandler
+        = new WindowDragHandler();
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -228,18 +229,12 @@ public class DashboardController implements Initializable {
 
     @FXML
     private void beginDrag(MouseEvent event) {
-        xOffset = event.getSceneX();
-        yOffset = event.getSceneY();
+        windowDragHandler.beginDrag(event, getStage());
     }
 
     @FXML
     private void dragWindow(MouseEvent event) {
-        Stage stage = getStage();
-
-        if (stage != null && !stage.isMaximized()) {
-            stage.setX(event.getScreenX() - xOffset);
-            stage.setY(event.getScreenY() - yOffset);
-        }
+        windowDragHandler.dragWindow(event, getStage());
     }
 
     @FXML

@@ -40,7 +40,7 @@
                         mnemonicParsing="false"
                         onAction="#minimize"
                         styleClass="window-control"
-                        text="—" />
+                        text="−" />
 
                 <Button id="maximize"
                         focusTraversable="false"

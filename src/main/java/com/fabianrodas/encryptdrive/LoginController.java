@@ -15,6 +15,10 @@ import javafx.scene.control.TextField;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.DoubleBinding;
+import javafx.scene.layout.VBox;
+import com.fabianrodas.utils.WindowDragHandler;
 
 /**
  * FXML Controller class
@@ -26,6 +30,9 @@ public class LoginController implements Initializable {
 
     @FXML
     private BorderPane root;
+    
+    @FXML
+    private VBox formCard;
 
     @FXML
     private TextField usernameField;
@@ -43,31 +50,28 @@ public class LoginController implements Initializable {
     private Label feedbackLabel;
 
     private final UserController userController = new UserController();
-
-    private double xOffset;
-    private double yOffset;
+    
+    private final WindowDragHandler windowDragHandler
+        = new WindowDragHandler();
+    
     private boolean passwordVisible = false;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
         visiblePasswordField.textProperty()
                 .bindBidirectional(passwordField.textProperty());
+        
+        configureResponsiveForm();
     }
 
     @FXML
     private void beginDrag(MouseEvent event) {
-        xOffset = event.getSceneX();
-        yOffset = event.getSceneY();
+        windowDragHandler.beginDrag(event, getStage());
     }
 
     @FXML
     private void dragWindow(MouseEvent event) {
-        Stage stage = getStage();
-
-        if (stage != null && !stage.isMaximized()) {
-            stage.setX(event.getScreenX() - xOffset);
-            stage.setY(event.getScreenY() - yOffset);
-        }
+        windowDragHandler.dragWindow(event, getStage());
     }
 
     @FXML
@@ -158,6 +162,18 @@ public class LoginController implements Initializable {
         } catch (IOException e) {
             showError("Could not open the registration screen.");
         }
+    }
+
+    private void configureResponsiveForm() {
+        DoubleBinding formWidth = Bindings.createDoubleBinding(
+                () -> Math.max(
+                        410,
+                        Math.min(560, root.getWidth() * 0.34)
+                ),
+                root.widthProperty()
+        );
+
+        formCard.prefWidthProperty().bind(formWidth);
     }
 
     private void showError(String message) {
