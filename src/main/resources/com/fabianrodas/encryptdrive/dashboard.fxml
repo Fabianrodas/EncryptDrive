@@ -2,6 +2,8 @@
 
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.image.Image?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.BorderPane?>
@@ -11,6 +13,8 @@
 <?import javafx.scene.layout.VBox?>
 
 <BorderPane fx:id="root"
+            minHeight="600.0"
+            minWidth="1000.0"
             prefHeight="600.0"
             prefWidth="1000.0"
             styleClass="dashboard-root"
@@ -31,12 +35,23 @@
 
                 <Region HBox.hgrow="ALWAYS" />
 
-                <Button mnemonicParsing="false"
+                <Button id="minimize"
+                        focusTraversable="false"
+                        mnemonicParsing="false"
                         onAction="#minimize"
                         styleClass="window-control"
                         text="—" />
 
-                <Button mnemonicParsing="false"
+                <Button id="maximize"
+                        focusTraversable="false"
+                        mnemonicParsing="false"
+                        onAction="#toggleMaximize"
+                        styleClass="window-control"
+                        text="□" />
+
+                <Button id="close"
+                        focusTraversable="false"
+                        mnemonicParsing="false"
                         onAction="#close"
                         styleClass="window-control"
                         text="×" />
@@ -45,45 +60,385 @@
     </top>
 
     <center>
-        <VBox alignment="CENTER" spacing="16.0" styleClass="dashboard-content">
-
+        <HBox>
             <children>
-                <StackPane styleClass="logo-badge">
+                <VBox fx:id="sidebar"
+                      spacing="18.0"
+                      styleClass="sidebar">
+
                     <children>
-                        <ImageView fitHeight="115.0"
-                                   fitWidth="115.0"
-                                   preserveRatio="true">
-                            <image>
-                                <Image url="@../images/logo.png" />
-                            </image>
-                        </ImageView>
+                        <HBox alignment="CENTER_LEFT"
+                              spacing="10.0"
+                              styleClass="sidebar-brand">
+
+                            <children>
+                                <StackPane styleClass="sidebar-logo-badge">
+                                    <children>
+                                        <ImageView fitHeight="34.0"
+                                                   fitWidth="34.0"
+                                                   preserveRatio="true">
+                                            <image>
+                                                <Image url="@../images/logo.png" />
+                                            </image>
+                                        </ImageView>
+                                    </children>
+                                </StackPane>
+
+                                <VBox spacing="1.0">
+                                    <children>
+                                        <Label styleClass="sidebar-brand-name"
+                                               text="EncryptDrive" />
+
+                                        <Label styleClass="sidebar-brand-subtitle"
+                                               text="LOCAL WORKSPACE" />
+                                    </children>
+                                </VBox>
+                            </children>
+                        </HBox>
+
+                        <VBox spacing="5.0">
+                            <children>
+                                <Label styleClass="sidebar-section-label"
+                                       text="WORKSPACE" />
+
+                                <Button fx:id="overviewNavButton"
+                                        maxWidth="1.7976931348623157E308"
+                                        mnemonicParsing="false"
+                                        onAction="#showDashboard"
+                                        prefHeight="42.0"
+                                        styleClass="sidebar-nav-button active"
+                                        text="Overview" />
+                            </children>
+                        </VBox>
+
+                        <Region VBox.vgrow="ALWAYS" />
+
+                        <VBox spacing="12.0" styleClass="sidebar-user-card">
+                            <children>
+                                <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                    <children>
+                                        <StackPane styleClass="sidebar-avatar">
+                                            <children>
+                                                <Label fx:id="sidebarInitialsLabel"
+                                                       styleClass="sidebar-avatar-text"
+                                                       text="U" />
+                                            </children>
+                                        </StackPane>
+
+                                        <VBox spacing="2.0">
+                                            <children>
+                                                <Label fx:id="sidebarFullNameLabel"
+                                                       styleClass="sidebar-user-name"
+                                                       text="User" />
+
+                                                <Label fx:id="sidebarUsernameLabel"
+                                                       styleClass="sidebar-user-username"
+                                                       text="@username" />
+                                            </children>
+                                        </VBox>
+                                    </children>
+                                </HBox>
+
+                                <Button fx:id="profileNavButton"
+                                        maxWidth="1.7976931348623157E308"
+                                        mnemonicParsing="false"
+                                        onAction="#showProfile"
+                                        prefHeight="40.0"
+                                        styleClass="sidebar-profile-button"
+                                        text="Personal profile" />
+                            </children>
+                        </VBox>
+
+                        <Button maxWidth="1.7976931348623157E308"
+                                mnemonicParsing="false"
+                                onAction="#logout"
+                                prefHeight="42.0"
+                                styleClass="logout-button"
+                                text="Log Out" />
                     </children>
-                </StackPane>
+                </VBox>
 
-                <Label fx:id="welcomeLabel" styleClass="welcome-title" />
+                <ScrollPane fx:id="workspaceScrollPane"
+                            fitToWidth="true"
+                            hbarPolicy="NEVER"
+                            pannable="false"
+                            styleClass="workspace-scroll"
+                            vbarPolicy="AS_NEEDED"
+                            HBox.hgrow="ALWAYS">
 
-                <Label maxWidth="470.0"
-                       styleClass="dashboard-message"
-                       text="Your protected EncryptDrive workspace will appear here."
-                       textAlignment="CENTER"
-                       wrapText="true" />
+                    <content>
+                        <VBox fx:id="workspaceContent"
+                              fillWidth="true"
+                              styleClass="workspace-content-root">
 
-                <Button mnemonicParsing="false"
-                        onAction="#logout"
-                        styleClass="logout-button"
-                        text="Log Out" />
-            </children>
+                            <children>
+                                <VBox fx:id="dashboardView"
+                                      alignment="TOP_LEFT"
+                                      fillWidth="true"
+                                      spacing="18.0"
+                                      styleClass="page-content"
+                                      VBox.vgrow="ALWAYS">
 
-        </VBox>
-    </center>
+                                    <children>
+                                        <HBox alignment="CENTER_LEFT">
+                                            <children>
+                                                <VBox spacing="5.0">
+                                                    <children>
+                                                        <Label fx:id="welcomeLabel"
+                                                               styleClass="page-title"
+                                                               text="Welcome!" />
 
-    <bottom>
-        <HBox alignment="CENTER" prefHeight="30.0" styleClass="footer">
-            <children>
-                <Label styleClass="footer-text"
-                       text="© 2026 Fabián Rodas. All rights reserved." />
+                                                        <Label styleClass="page-subtitle"
+                                                               text="Your protected workspace is ready." />
+                                                    </children>
+                                                </VBox>
+
+                                                <Region HBox.hgrow="ALWAYS" />
+
+                                                <HBox alignment="CENTER_LEFT"
+                                                      spacing="7.0"
+                                                      styleClass="session-pill">
+                                                    <children>
+                                                        <Label styleClass="status-dot" text="●" />
+                                                        <Label styleClass="session-text"
+                                                               text="Local session active" />
+                                                    </children>
+                                                </HBox>
+                                            </children>
+                                        </HBox>
+
+                                        <VBox spacing="10.0" styleClass="vault-card">
+                                            <children>
+                                                <Label styleClass="vault-label"
+                                                       text="YOUR VAULT" />
+
+                                                <Label styleClass="vault-title"
+                                                       text="No protected folder selected" />
+
+                                                <Label maxWidth="720.0"
+                                                       styleClass="vault-description"
+                                                       text="Your encrypted files and local workspace will appear here after vault setup."
+                                                       wrapText="true" />
+
+                                                <Button disable="true"
+                                                        mnemonicParsing="false"
+                                                        prefHeight="40.0"
+                                                        styleClass="vault-button"
+                                                        text="Vault setup coming soon" />
+                                            </children>
+                                        </VBox>
+
+                                        <HBox spacing="16.0">
+                                            <children>
+                                                <VBox HBox.hgrow="ALWAYS"
+                                                      spacing="8.0"
+                                                      styleClass="stat-card">
+                                                    <children>
+                                                        <Label styleClass="stat-label"
+                                                               text="PROTECTED FILES" />
+
+                                                        <Label styleClass="stat-value"
+                                                               text="0" />
+
+                                                        <Label styleClass="stat-description"
+                                                               text="No files have been added yet." />
+                                                    </children>
+                                                </VBox>
+
+                                                <VBox HBox.hgrow="ALWAYS"
+                                                      spacing="8.0"
+                                                      styleClass="stat-card">
+                                                    <children>
+                                                        <Label styleClass="stat-label"
+                                                               text="STORAGE USED" />
+
+                                                        <Label styleClass="stat-value"
+                                                               text="0 B" />
+
+                                                        <Label styleClass="stat-description"
+                                                               text="Storage details will appear after setup." />
+                                                    </children>
+                                                </VBox>
+                                            </children>
+                                        </HBox>
+
+                                        <VBox alignment="CENTER"
+                                              minHeight="105.0"
+                                              spacing="8.0"
+                                              styleClass="empty-files-card"
+                                              VBox.vgrow="ALWAYS">
+
+                                            <children>
+                                                <Label styleClass="empty-files-title"
+                                                       text="No protected files yet" />
+
+                                                <Label maxWidth="400.0"
+                                                       styleClass="empty-files-description"
+                                                       text="Set up a vault to begin adding and protecting local files."
+                                                       textAlignment="CENTER"
+                                                       wrapText="true" />
+                                            </children>
+                                        </VBox>
+                                    </children>
+                                </VBox>
+
+                                <VBox fx:id="profileView"
+                                      alignment="TOP_LEFT"
+                                      fillWidth="true"
+                                      managed="false"
+                                      spacing="18.0"
+                                      styleClass="page-content"
+                                      visible="false">
+
+                                    <children>
+                                        <VBox spacing="5.0">
+                                            <children>
+                                                <Label styleClass="page-title"
+                                                       text="Personal profile" />
+
+                                                <Label styleClass="page-subtitle"
+                                                       text="Review your account information or update your password." />
+                                            </children>
+                                        </VBox>
+
+                                        <VBox spacing="18.0" styleClass="profile-summary-card">
+                                            <children>
+                                                <HBox alignment="CENTER_LEFT" spacing="18.0">
+                                                    <children>
+                                                        <StackPane styleClass="profile-avatar">
+                                                            <children>
+                                                                <Label fx:id="profileInitialsLabel"
+                                                                       styleClass="profile-avatar-text"
+                                                                       text="U" />
+                                                            </children>
+                                                        </StackPane>
+
+                                                        <VBox spacing="4.0">
+                                                            <children>
+                                                                <Label fx:id="profileFullNameLabel"
+                                                                       styleClass="profile-name"
+                                                                       text="User name" />
+
+                                                                <Label fx:id="profileUsernameLabel"
+                                                                       styleClass="profile-username"
+                                                                       text="@username" />
+
+                                                                <HBox alignment="CENTER_LEFT" spacing="6.0">
+                                                                    <children>
+                                                                        <Label styleClass="status-dot" text="●" />
+                                                                        <Label styleClass="local-account-label"
+                                                                               text="Local account" />
+                                                                    </children>
+                                                                </HBox>
+                                                            </children>
+                                                        </VBox>
+                                                    </children>
+                                                </HBox>
+
+                                                <HBox spacing="14.0">
+                                                    <children>
+                                                        <VBox HBox.hgrow="ALWAYS"
+                                                              spacing="6.0"
+                                                              styleClass="profile-info-tile">
+                                                            <children>
+                                                                <Label styleClass="profile-info-label"
+                                                                       text="FULL NAME" />
+
+                                                                <Label fx:id="profileFullNameDetailLabel"
+                                                                       styleClass="profile-info-value"
+                                                                       text="User name" />
+                                                            </children>
+                                                        </VBox>
+
+                                                        <VBox HBox.hgrow="ALWAYS"
+                                                              spacing="6.0"
+                                                              styleClass="profile-info-tile">
+                                                            <children>
+                                                                <Label styleClass="profile-info-label"
+                                                                       text="USERNAME" />
+
+                                                                <Label fx:id="profileUsernameDetailLabel"
+                                                                       styleClass="profile-info-value"
+                                                                       text="username" />
+                                                            </children>
+                                                        </VBox>
+                                                    </children>
+                                                </HBox>
+                                            </children>
+                                        </VBox>
+
+                                        <VBox spacing="14.0" styleClass="change-password-card">
+                                            <children>
+                                                <VBox spacing="4.0">
+                                                    <children>
+                                                        <Label styleClass="section-title"
+                                                               text="Change password" />
+
+                                                        <Label styleClass="section-description"
+                                                               text="Confirm your current password before saving a new one." />
+                                                    </children>
+                                                </VBox>
+
+                                                <VBox spacing="6.0">
+                                                    <children>
+                                                        <Label styleClass="field-label"
+                                                               text="Current password" />
+
+                                                        <PasswordField fx:id="currentPasswordField"
+                                                                       promptText="Enter your current password"
+                                                                       styleClass="profile-input-field" />
+                                                    </children>
+                                                </VBox>
+
+                                                <HBox spacing="14.0">
+                                                    <children>
+                                                        <VBox HBox.hgrow="ALWAYS" spacing="6.0">
+                                                            <children>
+                                                                <Label styleClass="field-label"
+                                                                       text="New password" />
+
+                                                                <PasswordField fx:id="newPasswordField"
+                                                                               promptText="At least 8 characters"
+                                                                               styleClass="profile-input-field" />
+                                                            </children>
+                                                        </VBox>
+
+                                                        <VBox HBox.hgrow="ALWAYS" spacing="6.0">
+                                                            <children>
+                                                                <Label styleClass="field-label"
+                                                                       text="Confirm new password" />
+
+                                                                <PasswordField fx:id="confirmNewPasswordField"
+                                                                               promptText="Repeat new password"
+                                                                               styleClass="profile-input-field" />
+                                                            </children>
+                                                        </VBox>
+                                                    </children>
+                                                </HBox>
+
+                                                <Label fx:id="passwordFeedbackLabel"
+                                                       minHeight="18.0"
+                                                       styleClass="profile-feedback"
+                                                       wrapText="true" />
+
+                                                <HBox alignment="CENTER_RIGHT">
+                                                    <children>
+                                                        <Button mnemonicParsing="false"
+                                                                onAction="#changePassword"
+                                                                prefHeight="42.0"
+                                                                styleClass="primary-button"
+                                                                text="Update password" />
+                                                    </children>
+                                                </HBox>
+                                            </children>
+                                        </VBox>
+                                    </children>
+                                </VBox>
+                            </children>
+                        </VBox>
+                    </content>
+                </ScrollPane>
             </children>
         </HBox>
-    </bottom>
-
+    </center>
 </BorderPane>

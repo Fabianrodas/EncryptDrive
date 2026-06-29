@@ -23,6 +23,12 @@
                 <Region HBox.hgrow="ALWAYS" />
 
                 <Button id="minimize" mnemonicParsing="false" onAction="#minimize" styleClass="window-control" text="—" />
+                
+                <Button id="maximize"
+                    mnemonicParsing="false"
+                    onAction="#toggleMaximize"
+                    styleClass="window-control"
+                    text="□" />
 
                 <Button id="close" mnemonicParsing="false" onAction="#close" styleClass="window-control" text="×" />
             </children>

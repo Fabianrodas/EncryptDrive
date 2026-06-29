@@ -3,8 +3,6 @@
     -fx-font-family: "Segoe UI";
 }
 
-/* Barra superior */
-
 #titleBar {
     -fx-background-color: #0f172a;
     -fx-padding: 0 0 0 18;
@@ -30,7 +28,7 @@
     -fx-cursor: hand;
 }
 
-#minimize:hover {
+#minimize:hover, #maximize:hover {
     -fx-background-color: rgba(255, 255, 255, 0.12);
     -fx-text-fill: white;
 }
@@ -39,8 +37,6 @@
     -fx-background-color: #ef4444;
     -fx-text-fill: white;
 }
-
-/* Panel izquierdo */
 
 .brand-pane {
     -fx-background-color: linear-gradient(to bottom right, #0f172a, #1e3a8a, #0e7490);
@@ -58,10 +54,9 @@
     -fx-font-weight: bold;
 }
 
-/* Panel derecho */
-
 .register-pane {
     -fx-background-color: #f8fafc;
+    -fx-padding: 22px;
 }
 
 .form-card {

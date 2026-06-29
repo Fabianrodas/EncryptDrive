@@ -84,7 +84,7 @@ public class RegisterController implements Initializable {
     private void dragWindow(MouseEvent event) {
         Stage stage = getStage();
 
-        if (stage != null) {
+        if (stage != null && !stage.isMaximized()) {
             stage.setX(event.getScreenX() - xOffset);
             stage.setY(event.getScreenY() - yOffset);
         }
@@ -106,6 +106,11 @@ public class RegisterController implements Initializable {
         if (stage != null) {
             stage.setIconified(true);
         }
+    }
+    
+    @FXML
+    private void toggleMaximize() {
+        App.toggleMaximize(getStage());
     }
 
     @FXML
