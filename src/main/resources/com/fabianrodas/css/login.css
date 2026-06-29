@@ -1,180 +1,190 @@
 .window-root {
-    -fx-background-color: #f8fafc;
+    -fx-background-color: #F6F8FC;
     -fx-font-family: "Segoe UI";
 }
 
+/* Custom title bar */
+
 #titleBar {
-    -fx-background-color: #0f172a;
-    -fx-padding: 0 0 0 18;
+    -fx-background-color: #0F172A;
     -fx-cursor: move;
+    -fx-padding: 0 0 0 16;
 }
 
 .window-name {
-    -fx-text-fill: #e2e8f0;
     -fx-font-size: 13px;
     -fx-font-weight: bold;
+    -fx-text-fill: white;
 }
 
 .window-control {
+    -fx-alignment: center;
     -fx-background-color: transparent;
+    -fx-background-insets: 0;
     -fx-background-radius: 0;
-    -fx-border-width: 0;
-    -fx-min-width: 46px;
-    -fx-pref-width: 46px;
-    -fx-min-height: 38px;
-    -fx-pref-height: 38px;
-    -fx-text-fill: #cbd5e1;
-    -fx-font-size: 17px;
+    -fx-border-color: transparent;
     -fx-cursor: hand;
+    -fx-effect: null;
+    -fx-faint-focus-color: transparent;
+    -fx-focus-color: transparent;
+    -fx-font-size: 17px;
+    -fx-min-height: 38;
+    -fx-min-width: 46;
+    -fx-padding: 0;
+    -fx-pref-height: 38;
+    -fx-pref-width: 46;
+    -fx-text-fill: #CBD5E1;
 }
 
-#minimize:hover, #maximize:hover {
-    -fx-background-color: rgba(255, 255, 255, 0.12);
+.window-control:focused {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+#minimize:hover,
+#maximize:hover {
+    -fx-background-color: #263449;
     -fx-text-fill: white;
 }
 
 #close:hover {
-    -fx-background-color: #ef4444;
+    -fx-background-color: #DC2626;
     -fx-text-fill: white;
 }
 
+/* Left panel */
+
 .brand-pane {
-    -fx-background-color: linear-gradient(to bottom right, #0f172a, #1e3a8a, #0e7490);
+    -fx-background-color: linear-gradient(to bottom right, #0F172A, #1E3A8A, #0E7490);
+}
+
+.brand-content {
+    -fx-padding: 42;
 }
 
 .logo-badge {
+    -fx-alignment: center;
     -fx-background-color: rgba(255, 255, 255, 0.14);
-    -fx-background-radius: 32px;
-    -fx-padding: 22px;
+    -fx-background-radius: 32;
+    -fx-min-height: 190;
+    -fx-min-width: 190;
+    -fx-pref-height: 190;
+    -fx-pref-width: 190;
 }
 
 .brand-title {
-    -fx-text-fill: white;
     -fx-font-size: 31px;
     -fx-font-weight: bold;
-}
-
-.brand-subtitle {
-    -fx-text-fill: #dbeafe;
-    -fx-font-size: 17px;
-    -fx-font-weight: bold;
+    -fx-text-fill: white;
 }
 
 .brand-description {
-    -fx-text-fill: #bfdbfe;
     -fx-font-size: 13px;
-    -fx-line-spacing: 4px;
+    -fx-line-spacing: 3;
+    -fx-text-fill: #DBEAFE;
 }
 
-.login-pane {
-    -fx-background-color: #f8fafc;
-    -fx-padding: 24px;
+.brand-note {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #BFDBFE;
+}
+
+/* Right panel */
+
+.auth-pane {
+    -fx-background-color: #F6F8FC;
+    -fx-padding: 42;
 }
 
 .form-card {
     -fx-background-color: white;
-    -fx-background-radius: 18px;
-    -fx-padding: 34px 38px 32px 38px;
-    -fx-effect: dropshadow(gaussian, rgba(15, 23, 42, 0.16), 22, 0.16, 0, 7);
+    -fx-background-radius: 18;
+    -fx-border-color: #E2E8F0;
+    -fx-border-radius: 18;
+    -fx-effect: dropshadow(gaussian, rgba(15, 23, 42, 0.14), 24, 0.16, 0, 8);
+    -fx-padding: 38 42 38 42;
 }
 
 .headline {
-    -fx-text-fill: #0f172a;
-    -fx-font-size: 25px;
+    -fx-font-size: 26px;
     -fx-font-weight: bold;
+    -fx-text-fill: #0F172A;
 }
 
 .subheadline {
-    -fx-text-fill: #64748b;
     -fx-font-size: 13px;
-    -fx-padding: 0 0 10px 0;
+    -fx-padding: 0 0 8 0;
+    -fx-text-fill: #64748B;
 }
 
 .field-label {
-    -fx-text-fill: #334155;
     -fx-font-size: 12px;
     -fx-font-weight: bold;
+    -fx-text-fill: #334155;
 }
 
 .input-field {
-    -fx-background-color: #f8fafc;
-    -fx-background-radius: 10px;
-    -fx-border-color: #d7dee8;
-    -fx-border-radius: 10px;
-    -fx-border-width: 1px;
-    -fx-padding: 11px 13px 11px 13px;
+    -fx-background-color: #F8FAFC;
+    -fx-background-radius: 9;
+    -fx-border-color: #CBD5E1;
+    -fx-border-radius: 9;
     -fx-font-size: 13px;
-    -fx-text-fill: #0f172a;
-    -fx-prompt-text-fill: #94a3b8;
+    -fx-padding: 11 13 11 13;
+    -fx-prompt-text-fill: #94A3B8;
+    -fx-text-fill: #0F172A;
 }
 
 .input-field:focused {
     -fx-background-color: white;
-    -fx-border-color: #2563eb;
-    -fx-border-width: 1.5px;
-}
-
-.primary-button {
-    -fx-background-color: linear-gradient(to right, #2563eb, #0ea5e9);
-    -fx-background-radius: 10px;
-    -fx-padding: 12px 20px 12px 20px;
-    -fx-text-fill: white;
-    -fx-font-size: 13px;
-    -fx-font-weight: bold;
-    -fx-cursor: hand;
-}
-
-.primary-button:hover {
-    -fx-background-color: linear-gradient(to right, #1d4ed8, #0284c7);
-}
-
-.primary-button:pressed {
-    -fx-scale-x: 0.98;
-    -fx-scale-y: 0.98;
+    -fx-border-color: #2563EB;
 }
 
 .ghost-button {
-    -fx-background-color: #eff6ff;
-    -fx-background-radius: 9px;
-    -fx-border-color: #bfdbfe;
-    -fx-border-radius: 9px;
-    -fx-text-fill: #2563eb;
+    -fx-background-color: #EFF6FF;
+    -fx-background-radius: 9;
+    -fx-border-color: #BFDBFE;
+    -fx-border-radius: 9;
+    -fx-cursor: hand;
     -fx-font-size: 12px;
     -fx-font-weight: bold;
-    -fx-cursor: hand;
-    -fx-padding: 10px 12px 10px 12px;
+    -fx-padding: 10 12 10 12;
+    -fx-text-fill: #2563EB;
 }
 
 .ghost-button:hover {
-    -fx-background-color: #dbeafe;
+    -fx-background-color: #DBEAFE;
+}
+
+.primary-button {
+    -fx-background-color: linear-gradient(to right, #2563EB, #0EA5E9);
+    -fx-background-radius: 9;
+    -fx-cursor: hand;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+}
+
+.primary-button:hover {
+    -fx-background-color: linear-gradient(to right, #1D4ED8, #0284C7);
 }
 
 .feedback-label {
-    -fx-text-fill: #dc2626;
     -fx-font-size: 11px;
+    -fx-text-fill: #DC2626;
 }
 
 .muted-label {
-    -fx-text-fill: #64748b;
     -fx-font-size: 12px;
+    -fx-text-fill: #64748B;
 }
 
 .link-button {
     -fx-background-color: transparent;
-    -fx-text-fill: #2563eb;
+    -fx-cursor: hand;
     -fx-font-size: 12px;
     -fx-font-weight: bold;
     -fx-padding: 0;
-    -fx-cursor: hand;
+    -fx-text-fill: #2563EB;
     -fx-underline: true;
-}
-
-.footer {
-    -fx-background-color: #0f172a;
-    -fx-padding: 0 12px 0 12px;
-}
-
-.footer-text {
-    -fx-text-fill: #94a3b8;
-    -fx-font-size: 11px;
 }

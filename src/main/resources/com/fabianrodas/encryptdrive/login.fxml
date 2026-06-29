@@ -7,48 +7,90 @@
 <?import javafx.scene.image.Image?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.RowConstraints?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 
-<BorderPane id="root" fx:id="root" prefHeight="600.0" prefWidth="1000.0" styleClass="window-root" stylesheets="@../css/login.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.fabianrodas.encryptdrive.LoginController">
+<BorderPane fx:id="root"
+            minHeight="600.0"
+            minWidth="1000.0"
+            prefHeight="600.0"
+            prefWidth="1000.0"
+            styleClass="window-root"
+            stylesheets="@../css/login.css"
+            xmlns="http://javafx.com/javafx/21"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.fabianrodas.encryptdrive.LoginController">
 
     <top>
-        <HBox id="titleBar" alignment="CENTER_RIGHT" onMouseDragged="#dragWindow" onMousePressed="#beginDrag" prefHeight="38.0">
+        <HBox id="titleBar"
+              alignment="CENTER_RIGHT"
+              onMouseDragged="#dragWindow"
+              onMousePressed="#beginDrag"
+              prefHeight="38.0">
 
             <children>
                 <Label styleClass="window-name" text="EncryptDrive" />
 
                 <Region HBox.hgrow="ALWAYS" />
 
-                <Button id="minimize" mnemonicParsing="false" onAction="#minimize" styleClass="window-control" text="—" />
-                
-                <Button id="maximize"
-                    mnemonicParsing="false"
-                    onAction="#toggleMaximize"
-                    styleClass="window-control"
-                    text="□" />
+                <Button id="minimize"
+                        focusTraversable="false"
+                        mnemonicParsing="false"
+                        onAction="#minimize"
+                        styleClass="window-control"
+                        text="−" />
 
-                <Button id="close" mnemonicParsing="false" onAction="#close" styleClass="window-control" text="×" />
-                
+                <Button id="maximize"
+                        focusTraversable="false"
+                        mnemonicParsing="false"
+                        onAction="#toggleMaximize"
+                        styleClass="window-control"
+                        text="□" />
+
+                <Button id="close"
+                        focusTraversable="false"
+                        mnemonicParsing="false"
+                        onAction="#close"
+                        styleClass="window-control"
+                        text="×" />
             </children>
         </HBox>
     </top>
 
     <center>
-        <HBox>
+        <GridPane maxHeight="1.7976931348623157E308">
+
+            <columnConstraints>
+                <ColumnConstraints hgrow="ALWAYS" percentWidth="42.0" />
+                <ColumnConstraints hgrow="ALWAYS" percentWidth="58.0" />
+            </columnConstraints>
+
+            <rowConstraints>
+                <RowConstraints vgrow="ALWAYS" />
+            </rowConstraints>
 
             <children>
-                <VBox alignment="CENTER" prefWidth="420.0" styleClass="brand-pane">
+                <StackPane GridPane.columnIndex="0"
+                           maxHeight="1.7976931348623157E308"
+                           styleClass="brand-pane">
 
                     <children>
-                        <VBox alignment="CENTER" spacing="16.0">
+                        <VBox alignment="CENTER"
+                              maxWidth="340.0"
+                              spacing="17.0"
+                              styleClass="brand-content">
 
                             <children>
-                                <StackPane maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefWidth="200.0" styleClass="logo-badge">
+                                <StackPane styleClass="logo-badge">
                                     <children>
-                                        <ImageView fitHeight="135.0" fitWidth="135.0" preserveRatio="true">
+                                        <ImageView fitHeight="138.0"
+                                                   fitWidth="138.0"
+                                                   preserveRatio="true">
                                             <image>
                                                 <Image url="@../images/logo.png" />
                                             </image>
@@ -56,74 +98,117 @@
                                     </children>
                                 </StackPane>
 
-                                <Label styleClass="brand-title" text="EncryptDrive" />
+                                <Label styleClass="brand-title"
+                                       text="EncryptDrive" />
+
+                                <Label maxWidth="280.0"
+                                       styleClass="brand-description"
+                                       text="Local protection for your personal files and private workspace."
+                                       textAlignment="CENTER"
+                                       wrapText="true" />
+
+                                <Label styleClass="brand-note"
+                                       text="LOCAL • PRIVATE • PORTABLE" />
                             </children>
                         </VBox>
                     </children>
-                </VBox>
+                </StackPane>
 
-                <VBox alignment="CENTER" styleClass="login-pane" HBox.hgrow="ALWAYS">
+                <StackPane GridPane.columnIndex="1"
+                           maxHeight="1.7976931348623157E308"
+                           styleClass="auth-pane">
 
                     <children>
-                        <VBox prefWidth="390.0" spacing="14.0" styleClass="form-card">
+                        <VBox fx:id="formCard"
+                            alignment="TOP_LEFT"
+                            maxHeight="-Infinity"
+                            maxWidth="560.0"
+                            prefWidth="410.0"
+                            spacing="14.0"
+                            styleClass="form-card"
+                            StackPane.alignment="CENTER">
 
                             <children>
-                                <Label styleClass="headline" text="Log In" />
+                                <Label styleClass="headline"
+                                       text="Welcome back" />
 
-                                <Label styleClass="subheadline" text="Log in to access your protected files." wrapText="true" />
+                                <Label styleClass="subheadline"
+                                       text="Log in to access your EncryptDrive workspace."
+                                       wrapText="true" />
 
                                 <VBox spacing="7.0">
                                     <children>
-                                        <Label styleClass="field-label" text="Username" />
+                                        <Label styleClass="field-label"
+                                               text="Username" />
 
-                                        <TextField fx:id="usernameField" promptText="Husky2026" styleClass="input-field" />
+                                        <TextField fx:id="usernameField"
+                                                   promptText="Enter your username"
+                                                   styleClass="input-field" />
                                     </children>
                                 </VBox>
 
                                 <VBox spacing="7.0">
                                     <children>
-                                        <Label styleClass="field-label" text="Password" />
+                                        <Label styleClass="field-label"
+                                               text="Password" />
 
-                                        <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                        <HBox alignment="CENTER_LEFT"
+                                              spacing="8.0">
+
                                             <children>
                                                 <StackPane HBox.hgrow="ALWAYS">
                                                     <children>
+                                                        <TextField fx:id="visiblePasswordField"
+                                                                   managed="false"
+                                                                   promptText="Enter your password"
+                                                                   styleClass="input-field"
+                                                                   visible="false" />
 
-                                                        <TextField fx:id="visiblePasswordField" managed="false" promptText="Make sure not to forget it" styleClass="input-field" visible="false" />
-                                                        <PasswordField fx:id="passwordField" promptText="Make sure not to forget it" styleClass="input-field" />
+                                                        <PasswordField fx:id="passwordField"
+                                                                       promptText="Enter your password"
+                                                                       styleClass="input-field" />
                                                     </children>
                                                 </StackPane>
 
-                                                <Button fx:id="togglePasswordButton" mnemonicParsing="false" onAction="#togglePasswordVisibility" styleClass="ghost-button" text="View" />
+                                                <Button fx:id="togglePasswordButton"
+                                                        focusTraversable="false"
+                                                        mnemonicParsing="false"
+                                                        onAction="#togglePasswordVisibility"
+                                                        styleClass="ghost-button"
+                                                        text="View" />
                                             </children>
                                         </HBox>
                                     </children>
                                 </VBox>
 
-                                <Label fx:id="feedbackLabel" minHeight="18.0" styleClass="feedback-label" wrapText="true" />
+                                <Label fx:id="feedbackLabel"
+                                       minHeight="18.0"
+                                       styleClass="feedback-label"
+                                       wrapText="true" />
 
-                                <Button mnemonicParsing="false" onAction="#login" prefWidth="507.0" styleClass="primary-button" text="Log In" />
+                                <Button maxWidth="1.7976931348623157E308"
+                                        mnemonicParsing="false"
+                                        onAction="#login"
+                                        prefHeight="42.0"
+                                        styleClass="primary-button"
+                                        text="Log in" />
 
                                 <HBox alignment="CENTER" spacing="5.0">
                                     <children>
-                                        <Label styleClass="muted-label" text="Don't have an account yet?" />
+                                        <Label styleClass="muted-label"
+                                               text="Don't have an account?" />
 
-                                        <Button mnemonicParsing="false" onAction="#openRegister" styleClass="link-button" text="Create account" />
+                                        <Button mnemonicParsing="false"
+                                                onAction="#openRegister"
+                                                styleClass="link-button"
+                                                text="Create account" />
                                     </children>
                                 </HBox>
                             </children>
                         </VBox>
                     </children>
-                </VBox>
+                </StackPane>
             </children>
-        </HBox>
+        </GridPane>
     </center>
-    <bottom>
-    <HBox alignment="CENTER" prefHeight="30.0" styleClass="footer">
-
-        <children>
-            <Label styleClass="footer-text" text="© 2026 Fabián Rodas. All rights reserved." />
-        </children>
-    </HBox>
-</bottom>
 </BorderPane>

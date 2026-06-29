@@ -6,6 +6,7 @@ com\fabianrodas\controllers\UserController$1.class
 com\fabianrodas\encryptdrive\LoginController.class
 com\fabianrodas\encryptdrive\SuccessPopupController.class
 module-info.class
+com\fabianrodas\utils\WindowDragHandler.class
 com\fabianrodas\controllers\UserController.class
 com\fabianrodas\services\SessionService.class
 com\fabianrodas\encryptdrive\App.class

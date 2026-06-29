@@ -19,6 +19,10 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Modality;
 import javafx.stage.StageStyle;
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.DoubleBinding;
+import javafx.scene.layout.VBox;
+import com.fabianrodas.utils.WindowDragHandler;
 
 /**
  * FXML Controller class
@@ -30,6 +34,9 @@ public class RegisterController implements Initializable {
 
     @FXML
     private BorderPane root;
+    
+    @FXML
+    private VBox formCard;
 
     @FXML
     private TextField fullNameField;
@@ -58,12 +65,13 @@ public class RegisterController implements Initializable {
     @FXML
     private Label feedbackLabel;
 
-    private double xOffset;
-    private double yOffset;
     private boolean passwordVisible = false;
     private boolean confirmPasswordVisible = false;
     
     private final UserController userController = new UserController();
+    
+    private final WindowDragHandler windowDragHandler
+        = new WindowDragHandler();
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -72,22 +80,18 @@ public class RegisterController implements Initializable {
 
         visibleConfirmPasswordField.textProperty()
                 .bindBidirectional(confirmPasswordField.textProperty());
+        
+        configureResponsiveForm();
     }
 
     @FXML
     private void beginDrag(MouseEvent event) {
-        xOffset = event.getSceneX();
-        yOffset = event.getSceneY();
+        windowDragHandler.beginDrag(event, getStage());
     }
 
     @FXML
     private void dragWindow(MouseEvent event) {
-        Stage stage = getStage();
-
-        if (stage != null && !stage.isMaximized()) {
-            stage.setX(event.getScreenX() - xOffset);
-            stage.setY(event.getScreenY() - yOffset);
-        }
+        windowDragHandler.dragWindow(event, getStage());
     }
 
     @FXML
@@ -264,6 +268,18 @@ public class RegisterController implements Initializable {
         } catch (IOException e) {
             showError("Account was created, but the login screen could not be opened.");
         }
+    }
+
+    private void configureResponsiveForm() {
+        DoubleBinding formWidth = Bindings.createDoubleBinding(
+                () -> Math.max(
+                        480,
+                        Math.min(640, root.getWidth() * 0.38)
+                ),
+                root.widthProperty()
+        );
+
+        formCard.prefWidthProperty().bind(formWidth);
     }
 
     private Stage getStage() {
