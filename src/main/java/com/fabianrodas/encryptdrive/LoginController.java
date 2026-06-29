@@ -1,5 +1,8 @@
 package com.fabianrodas.encryptdrive;
 
+import com.fabianrodas.controllers.UserController;
+import com.fabianrodas.models.User;
+import com.fabianrodas.services.SessionService;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ResourceBundle;
@@ -12,12 +15,6 @@ import javafx.scene.control.TextField;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
-
-/**
- * FXML Controller class
- * 
- * @author Fabian Rodas
- */
 
 public class LoginController implements Initializable {
 
@@ -38,6 +35,8 @@ public class LoginController implements Initializable {
 
     @FXML
     private Label feedbackLabel;
+
+    private final UserController userController = new UserController();
 
     private double xOffset;
     private double yOffset;
@@ -97,10 +96,14 @@ public class LoginController implements Initializable {
 
         if (passwordVisible) {
             visiblePasswordField.requestFocus();
-            visiblePasswordField.positionCaret(visiblePasswordField.getText().length());
+            visiblePasswordField.positionCaret(
+                    visiblePasswordField.getText().length()
+            );
         } else {
             passwordField.requestFocus();
-            passwordField.positionCaret(passwordField.getText().length());
+            passwordField.positionCaret(
+                    passwordField.getText().length()
+            );
         }
     }
 
@@ -110,26 +113,52 @@ public class LoginController implements Initializable {
         String password = passwordField.getText();
 
         if (username.isEmpty() || password.isBlank()) {
-            feedbackLabel.setText("Enter username and password to continue.");
+            showError("Enter username and password to continue.");
             return;
         }
 
-        feedbackLabel.setText("");
+        User user = userController.authenticate(username, password);
+
+        if (user == null) {
+            if (userController.getLastError().isEmpty()) {
+                showError("Invalid username or password.");
+            } else {
+                showError("Could not access the local user database.");
+            }
+
+            return;
+        }
+
+        try {
+            SessionService.startSession(user);
+
+            passwordField.clear();
+            App.setRoot("dashboard");
+
+        } catch (IOException e) {
+            showError("Could not open the dashboard.");
+        }
     }
-    
+
     @FXML
     private void openRegister() {
         try {
             App.setRoot("register");
         } catch (IOException e) {
-            feedbackLabel.setText("Could not open the registration screen.");
+            showError("Could not open the registration screen.");
         }
+    }
+
+    private void showError(String message) {
+        feedbackLabel.setText(message);
+        feedbackLabel.getStyleClass().remove("success");
     }
 
     private Stage getStage() {
         if (root == null || root.getScene() == null) {
             return null;
         }
+
         return (Stage) root.getScene().getWindow();
     }
 }
