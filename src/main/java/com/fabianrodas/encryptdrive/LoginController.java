@@ -16,6 +16,12 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 
+/**
+ * FXML Controller class
+ * 
+ * @author Fabian Rodas
+ */
+
 public class LoginController implements Initializable {
 
     @FXML
@@ -58,7 +64,7 @@ public class LoginController implements Initializable {
     private void dragWindow(MouseEvent event) {
         Stage stage = getStage();
 
-        if (stage != null) {
+        if (stage != null && !stage.isMaximized()) {
             stage.setX(event.getScreenX() - xOffset);
             stage.setY(event.getScreenY() - yOffset);
         }
@@ -80,6 +86,11 @@ public class LoginController implements Initializable {
         if (stage != null) {
             stage.setIconified(true);
         }
+    }
+    
+    @FXML
+    private void toggleMaximize() {
+        App.toggleMaximize(getStage());
     }
 
     @FXML

@@ -31,6 +31,7 @@ public class UserController {
     public static final int STORAGE_ERROR = -1;
     public static final int INVALID_DATA = -2;
     public static final int USER_NOT_FOUND = -3;
+    public static final int INCORRECT_CURRENT_PASSWORD = -4;
 
     private static final Path USERS_FILE = Paths.get(
             System.getProperty("user.dir"),
@@ -193,10 +194,13 @@ public class UserController {
         }
     }
 
-    public int changePassword(int id, String newPassword) {
+    public int changePassword(int id, String currentPassword, String newPassword) {
         lastError = "";
 
-        if (isBlank(newPassword) || newPassword.length() < 8) {
+        if (isBlank(currentPassword)
+                || isBlank(newPassword)
+                || newPassword.length() < 8) {
+
             return INVALID_DATA;
         }
 
@@ -205,6 +209,17 @@ public class UserController {
 
             for (User user : users) {
                 if (user.getId() == id) {
+
+                    boolean currentPasswordMatches = PasswordHasher.matches(
+                            currentPassword,
+                            user.getSalt(),
+                            user.getPasswordHash()
+                    );
+
+                    if (!currentPasswordMatches) {
+                        return INCORRECT_CURRENT_PASSWORD;
+                    }
+
                     String salt = PasswordHasher.generateSalt();
 
                     user.setSalt(salt);
@@ -213,6 +228,7 @@ public class UserController {
                     );
 
                     writeUsers(users);
+
                     return SUCCESS;
                 }
             }
