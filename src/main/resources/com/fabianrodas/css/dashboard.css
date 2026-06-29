@@ -1,0 +1,74 @@
+.dashboard-root {
+    -fx-background-color: #F8FAFC;
+}
+
+.title-bar {
+    -fx-background-color: #0F172A;
+    -fx-padding: 0 8 0 14;
+}
+
+.window-name {
+    -fx-text-fill: white;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.window-control {
+    -fx-background-color: transparent;
+    -fx-text-fill: white;
+    -fx-font-size: 18px;
+    -fx-cursor: hand;
+    -fx-padding: 2 12 3 12;
+}
+
+.window-control:hover {
+    -fx-background-color: #334155;
+}
+
+.dashboard-content {
+    -fx-padding: 40;
+}
+
+.logo-badge {
+    -fx-background-color: #E0E7FF;
+    -fx-background-radius: 100;
+    -fx-min-height: 160;
+    -fx-min-width: 160;
+    -fx-pref-height: 160;
+    -fx-pref-width: 160;
+}
+
+.welcome-title {
+    -fx-text-fill: #0F172A;
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+}
+
+.dashboard-message {
+    -fx-text-fill: #64748B;
+    -fx-font-size: 14px;
+    -fx-text-alignment: center;
+}
+
+.logout-button {
+    -fx-background-color: #2563EB;
+    -fx-background-radius: 7;
+    -fx-cursor: hand;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-padding: 10 26 10 26;
+    -fx-text-fill: white;
+}
+
+.logout-button:hover {
+    -fx-background-color: #1D4ED8;
+}
+
+.footer {
+    -fx-background-color: #F1F5F9;
+}
+
+.footer-text {
+    -fx-text-fill: #64748B;
+    -fx-font-size: 11px;
+}
