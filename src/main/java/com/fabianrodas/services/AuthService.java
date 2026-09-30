@@ -4,9 +4,11 @@ import com.fabianrodas.models.EncryptedPayload;
 import com.fabianrodas.models.KdfConfig;
 import com.fabianrodas.models.UserLoginResult;
 import com.fabianrodas.models.UserRecord;
+import com.fabianrodas.models.UserManifest;
 import com.fabianrodas.models.UserRegistry;
 import com.fabianrodas.models.UserSessionIdentity;
 import com.fabianrodas.models.VaultContext;
+import com.fabianrodas.repositories.ManifestRepository;
 import com.fabianrodas.repositories.UserRegistryRepository;
 import com.fabianrodas.repositories.VaultStorageException;
 import com.fabianrodas.security.Aad;
@@ -35,11 +37,13 @@ public final class AuthService {
 
     private final VaultContext vault;
     private final UserRegistryRepository registryRepository = new UserRegistryRepository();
+    private final ManifestRepository manifestRepository;
     private final Argon2KeyDeriver keyDeriver = new Argon2KeyDeriver();
     private final AesGcmService aes = new AesGcmService();
 
     public AuthService(VaultContext vault) {
         this.vault = vault;
+        this.manifestRepository = new ManifestRepository(vault);
     }
 
     public UserSessionIdentity register(String fullName, String username, char[] password)
@@ -61,25 +65,36 @@ public final class AuthService {
             throw new AuthException(AuthException.Reason.USERNAME_TAKEN);
         }
 
-        String userId = UUID.randomUUID().toString();
+        UUID userId = UUID.randomUUID();
+        UUID manifestId = UUID.randomUUID();
         byte[] userMasterKey = new byte[CryptoConstants.KEY_BYTES];
         RANDOM.nextBytes(userMasterKey);
 
         try {
             KdfConfig userKdf = keyDeriver.newConfig();
             UserRecord record = new UserRecord(
-                    userId,
+                    userId.toString(),
                     fullName.trim(),
                     username.trim(),
                     normalizedUsername,
                     Instant.now().toString(),
-                    UUID.randomUUID().toString(),
+                    manifestId.toString(),
                     userKdf,
-                    wrap(userMasterKey, password, userKdf, userId)
+                    wrap(userMasterKey, password, userKdf, userId.toString())
             );
 
+            // The manifest is written first so the registry never references
+            // a missing one; it is removed again if the registry write fails.
+            saveManifest(ManifestService.newManifest(userId), manifestId, userMasterKey);
             registry.getUsers().add(record);
-            saveRegistry(registry);
+
+            try {
+                saveRegistry(registry);
+            } catch (AuthException e) {
+                deleteManifest(manifestId);
+                throw e;
+            }
+
             return identity(record);
 
         } finally {
@@ -197,6 +212,23 @@ public final class AuthService {
             registryRepository.save(vault, registry);
         } catch (VaultStorageException e) {
             throw storageFailure(e);
+        }
+    }
+
+    private void saveManifest(UserManifest manifest, UUID manifestId, byte[] userMasterKey)
+            throws AuthException {
+        try {
+            manifestRepository.save(manifest, manifestId, userMasterKey);
+        } catch (VaultStorageException e) {
+            throw storageFailure(e);
+        }
+    }
+
+    private void deleteManifest(UUID manifestId) {
+        try {
+            manifestRepository.delete(manifestId);
+        } catch (VaultStorageException ignored) {
+            // An unreferenced manifest is unreadable ciphertext; leaving it is harmless.
         }
     }
 

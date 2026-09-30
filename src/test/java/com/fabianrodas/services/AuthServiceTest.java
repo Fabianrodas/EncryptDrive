@@ -7,9 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.fabianrodas.models.ManifestEntry;
+import com.fabianrodas.models.ManifestEntryKind;
 import com.fabianrodas.models.UserLoginResult;
+import com.fabianrodas.models.UserManifest;
 import com.fabianrodas.models.UserSessionIdentity;
 import com.fabianrodas.models.VaultContext;
+import com.fabianrodas.repositories.ManifestRepository;
 import com.fabianrodas.security.SensitiveBytes;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -61,6 +65,21 @@ class AuthServiceTest {
 
         assertEquals(32, aliceKey.length);
         assertFalse(Arrays.equals(aliceKey, bobKey));
+    }
+
+    @Test
+    void registrationCreatesAnEncryptedManifestWithARootFolder() throws Exception {
+        UserSessionIdentity user = auth.register("Example User", "ExampleUser", PASSWORD.toCharArray());
+
+        UserManifest manifest = new ManifestRepository(vault).load(
+                user.userId(), user.manifestId(), userMasterKey("ExampleUser", PASSWORD)
+        );
+
+        ManifestEntry root = new ManifestService(manifest).find(manifest.getRootFolderId());
+        assertEquals(ManifestEntryKind.FOLDER, root.getKind());
+        assertEquals("/", root.getName());
+        assertEquals(null, root.getParentId());
+        assertEquals(1, manifest.getEntries().size());
     }
 
     @Test

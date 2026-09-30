@@ -23,6 +23,10 @@ public final class Aad {
         return of("user-key|v1|" + vaultId + "|" + userId);
     }
 
+    public static byte[] manifest(String vaultId, String userId) {
+        return of("manifest|v1|" + vaultId + "|" + userId);
+    }
+
     private static byte[] of(String context) {
         return ("EncryptDrive|" + context).getBytes(StandardCharsets.UTF_8);
     }

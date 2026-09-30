@@ -38,6 +38,10 @@ public final class VaultRepository {
         return metaDir(vaultRoot).resolve(BACKUPS_DIR);
     }
 
+    public static Path manifestsDir(Path vaultRoot) {
+        return metaDir(vaultRoot).resolve(MANIFESTS_DIR);
+    }
+
     public void writeHeader(Path vaultRoot, VaultHeader header)
             throws VaultStorageException {
 

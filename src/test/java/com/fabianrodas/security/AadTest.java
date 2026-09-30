@@ -26,6 +26,11 @@ class AadTest {
         assertEquals("EncryptDrive|user-key|v1|V|U", text(Aad.userKey("V", "U")));
     }
 
+    @Test
+    void manifestContextMatchesSpec() {
+        assertEquals("EncryptDrive|manifest|v1|V|U", text(Aad.manifest("V", "U")));
+    }
+
     private static String text(byte[] aad) {
         return new String(aad, UTF_8);
     }
