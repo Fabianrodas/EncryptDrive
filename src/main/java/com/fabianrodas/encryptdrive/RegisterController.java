@@ -2,6 +2,7 @@ package com.fabianrodas.encryptdrive;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.ResourceBundle;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
@@ -12,8 +13,9 @@ import javafx.scene.control.TextField;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
-import com.fabianrodas.controllers.UserController;
-import com.fabianrodas.models.User;
+import com.fabianrodas.services.AuthException;
+import com.fabianrodas.services.AuthService;
+import com.fabianrodas.services.VaultSessionService;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -67,9 +69,7 @@ public class RegisterController implements Initializable {
 
     private boolean passwordVisible = false;
     private boolean confirmPasswordVisible = false;
-    
-    private final UserController userController = new UserController();
-    
+
     private final WindowDragHandler windowDragHandler
         = new WindowDragHandler();
 
@@ -198,21 +198,27 @@ public class RegisterController implements Initializable {
             return;
         }
 
-        User user = new User(fullName, username, password);
+        if (!VaultSessionService.isOpen()) {
+            showError("Open a vault before creating an account.");
+            return;
+        }
 
-        int result = userController.create(user);
+        char[] passwordChars = password.toCharArray();
+        passwordField.clear();
+        confirmPasswordField.clear();
 
-        if (result == UserController.SUCCESS) {
+        try {
+            new AuthService(VaultSessionService.current())
+                    .register(fullName, username, passwordChars);
             showRegistrationSuccessPopup();
-            return;
-        }
 
-        if (result == UserController.USERNAME_ALREADY_EXISTS) {
-            showError("That username is already in use.");
-            return;
+        } catch (AuthException e) {
+            showError(e.getReason() == AuthException.Reason.USERNAME_TAKEN
+                    ? "That username is already in use."
+                    : "Could not create the account. Please try again.");
+        } finally {
+            Arrays.fill(passwordChars, '\0');
         }
-
-        showError("Could not create the account. Please try again.");
     }
 
     @FXML

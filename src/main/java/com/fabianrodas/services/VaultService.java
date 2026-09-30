@@ -2,9 +2,10 @@ package com.fabianrodas.services;
 
 import com.fabianrodas.models.EncryptedPayload;
 import com.fabianrodas.models.KdfConfig;
+import com.fabianrodas.models.UserRegistry;
 import com.fabianrodas.models.VaultContext;
 import com.fabianrodas.models.VaultHeader;
-import com.fabianrodas.repositories.AtomicFileWriter;
+import com.fabianrodas.repositories.UserRegistryRepository;
 import com.fabianrodas.repositories.VaultRepository;
 import com.fabianrodas.repositories.VaultStorageException;
 import com.fabianrodas.security.Aad;
@@ -13,16 +14,13 @@ import com.fabianrodas.security.Argon2KeyDeriver;
 import com.fabianrodas.security.CryptoConstants;
 import com.fabianrodas.security.CryptoException;
 import com.fabianrodas.security.SensitiveBytes;
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -38,11 +36,10 @@ public final class VaultService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final VaultRepository vaultRepository = new VaultRepository();
+    private final UserRegistryRepository registryRepository = new UserRegistryRepository();
     private final VaultLockService lockService = new VaultLockService();
     private final Argon2KeyDeriver keyDeriver = new Argon2KeyDeriver();
     private final AesGcmService aes = new AesGcmService();
-    private final AtomicFileWriter writer = new AtomicFileWriter();
-    private final Gson gson = new Gson();
 
     public VaultContext createVault(Path root, char[] vaultPassword)
             throws VaultException {
@@ -55,36 +52,38 @@ public final class VaultService {
         VaultLockService.VaultLock lock = lockService.acquire(vaultRoot);
         byte[] registryKey = new byte[CryptoConstants.KEY_BYTES];
         RANDOM.nextBytes(registryKey);
+        String vaultId = UUID.randomUUID().toString();
+        String createdAt = Instant.now().toString();
+        VaultContext context = new VaultContext(
+                vaultRoot,
+                vaultId,
+                VaultRepository.FORMAT_VERSION,
+                createdAt,
+                SensitiveBytes.wrap(registryKey),
+                lock
+        );
         boolean opened = false;
 
         try {
-            String vaultId = UUID.randomUUID().toString();
-            String createdAt = Instant.now().toString();
-
-            writeEmptyRegistry(vaultRoot, vaultId, registryKey);
+            registryRepository.save(
+                    context,
+                    new UserRegistry(UserRegistryRepository.FORMAT_VERSION, new ArrayList<>())
+            );
+            // The header is written last: without it the folder is not a vault.
             vaultRepository.writeHeader(
                     vaultRoot,
                     header(vaultId, createdAt, registryKey, vaultPassword)
             );
 
-            VaultContext context = new VaultContext(
-                    vaultRoot,
-                    vaultId,
-                    VaultRepository.FORMAT_VERSION,
-                    createdAt,
-                    SensitiveBytes.wrap(registryKey),
-                    lock
-            );
             VaultSessionService.open(context);
             opened = true;
             return context;
 
-        } catch (IOException | VaultStorageException e) {
+        } catch (VaultStorageException e) {
             throw new VaultException(VaultException.Reason.STORAGE, e);
         } finally {
             if (!opened) {
-                Arrays.fill(registryKey, (byte) 0);
-                lock.close();
+                context.close();
             }
         }
     }
@@ -101,33 +100,40 @@ public final class VaultService {
         }
 
         VaultLockService.VaultLock lock = lockService.acquire(vaultRoot);
-        byte[] registryKey = null;
+        VaultContext context = null;
         boolean opened = false;
 
         try {
             VaultHeader header = readHeader(vaultRoot);
-            registryKey = unwrapRegistryKey(header, vaultPassword);
-            requireReadableRegistry(vaultRoot, header.getVaultId(), registryKey);
-
-            VaultContext context = new VaultContext(
+            context = new VaultContext(
                     vaultRoot,
                     header.getVaultId(),
                     header.getFormatVersion(),
                     header.getCreatedAt(),
-                    SensitiveBytes.wrap(registryKey),
+                    SensitiveBytes.wrap(unwrapRegistryKey(header, vaultPassword)),
                     lock
             );
+            // Decrypting and parsing the registry proves the vault is intact.
+            registryRepository.load(context);
+
             VaultSessionService.open(context);
             opened = true;
             return context;
 
+        } catch (VaultStorageException e) {
+            throw new VaultException(
+                    e.getReason() == VaultStorageException.Reason.IO
+                            ? VaultException.Reason.STORAGE
+                            : VaultException.Reason.CORRUPTED,
+                    e
+            );
         } finally {
             if (!opened) {
-                if (registryKey != null) {
-                    Arrays.fill(registryKey, (byte) 0);
+                if (context != null) {
+                    context.close();
+                } else {
+                    lock.close();
                 }
-
-                lock.close();
             }
         }
     }
@@ -238,51 +244,6 @@ public final class VaultService {
                 case IO -> VaultException.Reason.STORAGE;
             }, e);
         }
-    }
-
-    private void writeEmptyRegistry(Path vaultRoot, String vaultId, byte[] registryKey)
-            throws IOException {
-
-        byte[] json = "{\"formatVersion\":1,\"users\":[]}"
-                .getBytes(StandardCharsets.UTF_8);
-        EncryptedPayload payload = aes.encrypt(json, registryKey, Aad.users(vaultId));
-
-        writer.write(
-                usersFile(vaultRoot),
-                gson.toJson(payload).getBytes(StandardCharsets.UTF_8)
-        );
-    }
-
-    private void requireReadableRegistry(
-            Path vaultRoot,
-            String vaultId,
-            byte[] registryKey
-    ) throws VaultException {
-
-        try {
-            EncryptedPayload payload = gson.fromJson(
-                    Files.readString(usersFile(vaultRoot), StandardCharsets.UTF_8),
-                    EncryptedPayload.class
-            );
-            byte[] json = aes.decrypt(payload, registryKey, Aad.users(vaultId));
-
-            try {
-                if (gson.fromJson(new String(json, StandardCharsets.UTF_8), JsonObject.class) == null) {
-                    throw new VaultException(VaultException.Reason.CORRUPTED);
-                }
-            } finally {
-                Arrays.fill(json, (byte) 0);
-            }
-
-        } catch (IOException e) {
-            throw new VaultException(VaultException.Reason.STORAGE, e);
-        } catch (CryptoException | JsonParseException e) {
-            throw new VaultException(VaultException.Reason.CORRUPTED, e);
-        }
-    }
-
-    private static Path usersFile(Path vaultRoot) {
-        return VaultRepository.metaDir(vaultRoot).resolve(VaultRepository.USERS_FILE);
     }
 
     private static void requireValidPassword(char[] password) throws VaultException {

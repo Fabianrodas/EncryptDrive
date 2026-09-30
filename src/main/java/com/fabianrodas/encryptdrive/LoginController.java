@@ -1,10 +1,13 @@
 package com.fabianrodas.encryptdrive;
 
-import com.fabianrodas.controllers.UserController;
-import com.fabianrodas.models.User;
+import com.fabianrodas.models.UserLoginResult;
+import com.fabianrodas.services.AuthException;
+import com.fabianrodas.services.AuthService;
 import com.fabianrodas.services.SessionService;
+import com.fabianrodas.services.VaultSessionService;
 import java.io.IOException;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.ResourceBundle;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
@@ -49,8 +52,6 @@ public class LoginController implements Initializable {
     @FXML
     private Label feedbackLabel;
 
-    private final UserController userController = new UserController();
-    
     private final WindowDragHandler windowDragHandler
         = new WindowDragHandler();
     
@@ -125,33 +126,36 @@ public class LoginController implements Initializable {
     @FXML
     private void login() {
         String username = usernameField.getText().trim();
-        String password = passwordField.getText();
 
-        if (username.isEmpty() || password.isBlank()) {
+        if (username.isEmpty() || passwordField.getText().isBlank()) {
             showError("Enter username and password to continue.");
             return;
         }
 
-        User user = userController.authenticate(username, password);
-
-        if (user == null) {
-            if (userController.getLastError().isEmpty()) {
-                showError("Invalid username or password.");
-            } else {
-                showError("Could not access the local user database.");
-            }
-
+        if (!VaultSessionService.isOpen()) {
+            showError("Open a vault before logging in.");
             return;
         }
 
-        try {
-            SessionService.startSession(user);
+        char[] password = passwordField.getText().toCharArray();
+        passwordField.clear();
 
-            passwordField.clear();
+        try {
+            UserLoginResult result = new AuthService(VaultSessionService.current())
+                    .login(username, password);
+
+            result.userMasterKey().close();
+            SessionService.startSession(result.identity());
             App.setRoot("dashboard");
 
+        } catch (AuthException e) {
+            showError(e.getReason() == AuthException.Reason.INVALID_CREDENTIALS
+                    ? "Invalid username or password."
+                    : "Could not read the accounts of this vault.");
         } catch (IOException e) {
             showError("Could not open the dashboard.");
+        } finally {
+            Arrays.fill(password, '\0');
         }
     }
 

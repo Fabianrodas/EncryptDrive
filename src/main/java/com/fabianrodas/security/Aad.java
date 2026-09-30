@@ -19,6 +19,10 @@ public final class Aad {
         return of("users|v1|" + vaultId);
     }
 
+    public static byte[] userKey(String vaultId, String userId) {
+        return of("user-key|v1|" + vaultId + "|" + userId);
+    }
+
     private static byte[] of(String context) {
         return ("EncryptDrive|" + context).getBytes(StandardCharsets.UTF_8);
     }

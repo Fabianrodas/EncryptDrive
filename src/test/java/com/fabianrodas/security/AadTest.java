@@ -21,6 +21,11 @@ class AadTest {
         assertEquals("EncryptDrive|users|v1|V", text(Aad.users("V")));
     }
 
+    @Test
+    void userKeyContextMatchesSpec() {
+        assertEquals("EncryptDrive|user-key|v1|V|U", text(Aad.userKey("V", "U")));
+    }
+
     private static String text(byte[] aad) {
         return new String(aad, UTF_8);
     }

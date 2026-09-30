@@ -1,25 +1,25 @@
 package com.fabianrodas.services;
 
-import com.fabianrodas.models.User;
+import com.fabianrodas.models.UserSessionIdentity;
 
 /**
  * Service class
- * 
+ *
  * @author Fabian Rodas
  */
 
 public final class SessionService {
 
-    private static User currentUser;
+    private static UserSessionIdentity currentUser;
 
     private SessionService() {
     }
 
-    public static void startSession(User user) {
+    public static void startSession(UserSessionIdentity user) {
         currentUser = user;
     }
 
-    public static User getCurrentUser() {
+    public static UserSessionIdentity getCurrentUser() {
         return currentUser;
     }
 

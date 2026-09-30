@@ -30,6 +30,14 @@ public final class VaultRepository {
         return vaultRoot.resolve(META_DIR);
     }
 
+    public static Path usersFile(Path vaultRoot) {
+        return metaDir(vaultRoot).resolve(USERS_FILE);
+    }
+
+    public static Path backupsDir(Path vaultRoot) {
+        return metaDir(vaultRoot).resolve(BACKUPS_DIR);
+    }
+
     public void writeHeader(Path vaultRoot, VaultHeader header)
             throws VaultStorageException {
 

@@ -1,10 +1,13 @@
 package com.fabianrodas.encryptdrive;
 
-import com.fabianrodas.controllers.UserController;
-import com.fabianrodas.models.User;
+import com.fabianrodas.models.UserSessionIdentity;
+import com.fabianrodas.services.AuthException;
+import com.fabianrodas.services.AuthService;
 import com.fabianrodas.services.SessionService;
+import com.fabianrodas.services.VaultSessionService;
 import java.io.IOException;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.ResourceBundle;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
@@ -92,8 +95,6 @@ public class DashboardController implements Initializable {
     @FXML
     private Label passwordFeedbackLabel;
 
-    private final UserController userController = new UserController();
-
     private final WindowDragHandler windowDragHandler
         = new WindowDragHandler();
 
@@ -154,9 +155,9 @@ public class DashboardController implements Initializable {
 
     @FXML
     private void changePassword() {
-        User currentUser = SessionService.getCurrentUser();
+        UserSessionIdentity currentUser = SessionService.getCurrentUser();
 
-        if (currentUser == null) {
+        if (currentUser == null || !VaultSessionService.isOpen()) {
             showPasswordError("Your session has expired. Please log in again.");
             return;
         }
@@ -188,32 +189,25 @@ public class DashboardController implements Initializable {
             return;
         }
 
-        int result = userController.changePassword(
-                currentUser.getId(),
-                currentPassword,
-                newPassword
-        );
+        char[] currentChars = currentPassword.toCharArray();
+        char[] newChars = newPassword.toCharArray();
+        currentPasswordField.clear();
+        newPasswordField.clear();
+        confirmNewPasswordField.clear();
 
-        if (result == UserController.SUCCESS) {
-            currentPasswordField.clear();
-            newPasswordField.clear();
-            confirmNewPasswordField.clear();
-
+        try {
+            new AuthService(VaultSessionService.current())
+                    .changePassword(currentUser.userId(), currentChars, newChars);
             showPasswordSuccess("Password updated successfully.");
-            return;
-        }
 
-        if (result == UserController.INCORRECT_CURRENT_PASSWORD) {
-            showPasswordError("Your current password is incorrect.");
-            return;
+        } catch (AuthException e) {
+            showPasswordError(e.getReason() == AuthException.Reason.INVALID_CREDENTIALS
+                    ? "Your current password is incorrect."
+                    : "Could not update your password. Please try again.");
+        } finally {
+            Arrays.fill(currentChars, '\0');
+            Arrays.fill(newChars, '\0');
         }
-
-        if (result == UserController.USER_NOT_FOUND) {
-            showPasswordError("Your account could not be found.");
-            return;
-        }
-
-        showPasswordError("Could not update your password. Please try again.");
     }
 
     @FXML
@@ -261,15 +255,15 @@ public class DashboardController implements Initializable {
     }
 
     private void loadUserInformation() {
-        User currentUser = SessionService.getCurrentUser();
+        UserSessionIdentity currentUser = SessionService.getCurrentUser();
 
         if (currentUser == null) {
             welcomeLabel.setText("Welcome to EncryptDrive");
             return;
         }
 
-        String fullName = currentUser.getFullName();
-        String username = currentUser.getUsername();
+        String fullName = currentUser.fullName();
+        String username = currentUser.username();
         String initials = getInitials(fullName);
 
         welcomeLabel.setText("Welcome back, " + fullName + "!");
