@@ -2,11 +2,14 @@ package com.fabianrodas.encryptdrive;
 
 import java.net.URL;
 import java.util.ResourceBundle;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 
 public class ConfirmationPopupController implements Initializable {
@@ -22,6 +25,15 @@ public class ConfirmationPopupController implements Initializable {
 
     @FXML
     private Button confirmButton;
+
+    @FXML
+    private StackPane iconBadge;
+
+    @FXML
+    private Label iconLabel;
+
+    @FXML
+    private TextField inputField;
 
     private boolean confirmed = false;
     private double xOffset = 0;
@@ -44,6 +56,24 @@ public class ConfirmationPopupController implements Initializable {
         titleLabel.setText(title);
         messageLabel.setText(message);
         confirmButton.setText(confirmText);
+    }
+
+    /** Shows a text field for the user's answer, pre-filled and focused. */
+    void setPrompt(String initialValue) {
+        iconLabel.setText("+");
+        iconBadge.getStyleClass().add("info");
+        inputField.setText(initialValue);
+        inputField.setVisible(true);
+        inputField.setManaged(true);
+        Platform.runLater(inputField::requestFocus);
+    }
+
+    String getInput() {
+        return inputField.getText();
+    }
+
+    BorderPane root() {
+        return root;
     }
 
     boolean isConfirmed() {

@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane fitToWidth="true"
+            hbarPolicy="NEVER"
+            styleClass="workspace-scroll"
+            stylesheets="@../css/workspace.css"
+            vbarPolicy="AS_NEEDED"
+            xmlns="http://javafx.com/javafx/21"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.fabianrodas.encryptdrive.ProfileController">
+
+    <content>
+        <VBox fillWidth="true" spacing="18.0" styleClass="page-content">
+            <children>
+                <VBox spacing="5.0">
+                    <children>
+                        <Label styleClass="page-title"
+                               text="Personal profile" />
+
+                        <Label styleClass="page-subtitle"
+                               text="Review your account information or update your password." />
+                    </children>
+                </VBox>
+
+                <VBox spacing="18.0" styleClass="profile-summary-card">
+                    <children>
+                        <HBox alignment="CENTER_LEFT" spacing="18.0">
+                            <children>
+                                <StackPane styleClass="profile-avatar">
+                                    <children>
+                                        <Label fx:id="initialsLabel"
+                                               styleClass="profile-avatar-text"
+                                               text="U" />
+                                    </children>
+                                </StackPane>
+
+                                <VBox spacing="4.0">
+                                    <children>
+                                        <Label fx:id="fullNameLabel"
+                                               styleClass="profile-name"
+                                               text="User name" />
+
+                                        <Label fx:id="usernameLabel"
+                                               styleClass="profile-username"
+                                               text="@username" />
+
+                                        <HBox alignment="CENTER_LEFT" spacing="6.0">
+                                            <children>
+                                                <Label styleClass="status-dot" text="●" />
+                                                <Label styleClass="local-account-label"
+                                                       text="Local account" />
+                                            </children>
+                                        </HBox>
+                                    </children>
+                                </VBox>
+                            </children>
+                        </HBox>
+
+                        <HBox spacing="14.0">
+                            <children>
+                                <VBox HBox.hgrow="ALWAYS"
+                                      spacing="6.0"
+                                      styleClass="profile-info-tile">
+                                    <children>
+                                        <Label styleClass="profile-info-label"
+                                               text="FULL NAME" />
+
+                                        <Label fx:id="fullNameDetailLabel"
+                                               styleClass="profile-info-value"
+                                               text="User name" />
+                                    </children>
+                                </VBox>
+
+                                <VBox HBox.hgrow="ALWAYS"
+                                      spacing="6.0"
+                                      styleClass="profile-info-tile">
+                                    <children>
+                                        <Label styleClass="profile-info-label"
+                                               text="USERNAME" />
+
+                                        <Label fx:id="usernameDetailLabel"
+                                               styleClass="profile-info-value"
+                                               text="username" />
+                                    </children>
+                                </VBox>
+                            </children>
+                        </HBox>
+                    </children>
+                </VBox>
+
+                <VBox spacing="14.0" styleClass="change-password-card">
+                    <children>
+                        <VBox spacing="4.0">
+                            <children>
+                                <Label styleClass="section-title"
+                                       text="Change password" />
+
+                                <Label styleClass="section-description"
+                                       text="Confirm your current password before saving a new one. Your files stay encrypted and are not rewritten."
+                                       wrapText="true" />
+                            </children>
+                        </VBox>
+
+                        <VBox spacing="6.0">
+                            <children>
+                                <Label styleClass="field-label"
+                                       text="Current password" />
+
+                                <PasswordField fx:id="currentPasswordField"
+                                               promptText="Enter your current password"
+                                               styleClass="profile-input-field" />
+                            </children>
+                        </VBox>
+
+                        <HBox spacing="14.0">
+                            <children>
+                                <VBox HBox.hgrow="ALWAYS" spacing="6.0">
+                                    <children>
+                                        <Label styleClass="field-label"
+                                               text="New password" />
+
+                                        <PasswordField fx:id="newPasswordField"
+                                                       promptText="At least 8 characters"
+                                                       styleClass="profile-input-field" />
+                                    </children>
+                                </VBox>
+
+                                <VBox HBox.hgrow="ALWAYS" spacing="6.0">
+                                    <children>
+                                        <Label styleClass="field-label"
+                                               text="Confirm new password" />
+
+                                        <PasswordField fx:id="confirmNewPasswordField"
+                                                       promptText="Repeat new password"
+                                                       styleClass="profile-input-field" />
+                                    </children>
+                                </VBox>
+                            </children>
+                        </HBox>
+
+                        <Label fx:id="passwordFeedbackLabel"
+                               minHeight="18.0"
+                               styleClass="profile-feedback"
+                               wrapText="true" />
+
+                        <HBox alignment="CENTER_RIGHT">
+                            <children>
+                                <Button fx:id="updatePasswordButton"
+                                        mnemonicParsing="false"
+                                        onAction="#changePassword"
+                                        prefHeight="42.0"
+                                        styleClass="primary-button"
+                                        text="Update password" />
+                            </children>
+                        </HBox>
+                    </children>
+                </VBox>
+            </children>
+        </VBox>
+    </content>
+</ScrollPane>

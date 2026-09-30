@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane fitToWidth="true"
+            hbarPolicy="NEVER"
+            styleClass="workspace-scroll"
+            stylesheets="@../css/workspace.css"
+            vbarPolicy="AS_NEEDED"
+            xmlns="http://javafx.com/javafx/21"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.fabianrodas.encryptdrive.OverviewController">
+
+    <content>
+        <VBox fillWidth="true" spacing="18.0" styleClass="page-content">
+            <children>
+                <HBox alignment="CENTER_LEFT">
+                    <children>
+                        <VBox spacing="5.0">
+                            <children>
+                                <Label fx:id="welcomeLabel"
+                                       styleClass="page-title"
+                                       text="Welcome!" />
+
+                                <Label styleClass="page-subtitle"
+                                       text="Your protected workspace is ready." />
+                            </children>
+                        </VBox>
+
+                        <Region HBox.hgrow="ALWAYS" />
+
+                        <HBox alignment="CENTER_LEFT"
+                              spacing="7.0"
+                              styleClass="session-pill">
+                            <children>
+                                <Label styleClass="status-dot" text="●" />
+                                <Label styleClass="session-text"
+                                       text="Local session active" />
+                            </children>
+                        </HBox>
+                    </children>
+                </HBox>
+
+                <VBox spacing="8.0" styleClass="vault-card">
+                    <children>
+                        <Label styleClass="vault-label" text="YOUR VAULT" />
+
+                        <Label fx:id="vaultNameLabel"
+                               styleClass="vault-title"
+                               text="Vault" />
+
+                        <Label fx:id="vaultPathLabel"
+                               styleClass="vault-description"
+                               wrapText="true" />
+
+                        <Button mnemonicParsing="false"
+                                onAction="#openFiles"
+                                prefHeight="38.0"
+                                styleClass="vault-button"
+                                text="Open Files" />
+                    </children>
+                </VBox>
+
+                <HBox spacing="14.0">
+                    <children>
+                        <VBox spacing="6.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                            <children>
+                                <Label styleClass="stat-label" text="PROTECTED FILES" />
+                                <Label fx:id="fileCountLabel" styleClass="stat-value" text="—" />
+                                <Label styleClass="stat-description" text="Active files" />
+                            </children>
+                        </VBox>
+
+                        <VBox spacing="6.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                            <children>
+                                <Label styleClass="stat-label" text="PLAINTEXT SIZE" />
+                                <Label fx:id="plainSizeLabel" styleClass="stat-value" text="—" />
+                                <Label styleClass="stat-description" text="Before encryption" />
+                            </children>
+                        </VBox>
+
+                        <VBox spacing="6.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                            <children>
+                                <Label styleClass="stat-label" text="ENCRYPTED STORAGE" />
+                                <Label fx:id="encryptedSizeLabel" styleClass="stat-value" text="—" />
+                                <Label styleClass="stat-description" text="Used in the vault" />
+                            </children>
+                        </VBox>
+
+                        <VBox spacing="6.0" styleClass="stat-card" HBox.hgrow="ALWAYS">
+                            <children>
+                                <Label styleClass="stat-label" text="IN TRASH" />
+                                <Label fx:id="trashCountLabel" styleClass="stat-value" text="—" />
+                                <Label styleClass="stat-description" text="Restorable items" />
+                            </children>
+                        </VBox>
+                    </children>
+                </HBox>
+
+                <Label fx:id="feedbackLabel"
+                       managed="false"
+                       styleClass="feedback-label"
+                       visible="false"
+                       wrapText="true" />
+
+                <VBox fx:id="emptyStateCard"
+                      alignment="CENTER"
+                      managed="false"
+                      minHeight="105.0"
+                      spacing="8.0"
+                      styleClass="empty-files-card"
+                      visible="false">
+                    <children>
+                        <Label styleClass="empty-files-title"
+                               text="No protected files yet" />
+
+                        <Label maxWidth="420.0"
+                               styleClass="empty-files-description"
+                               text="Open Files to import your first file. It is encrypted before it reaches the vault folder."
+                               textAlignment="CENTER"
+                               wrapText="true" />
+                    </children>
+                </VBox>
+            </children>
+        </VBox>
+    </content>
+</ScrollPane>

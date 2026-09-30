@@ -3,6 +3,14 @@ package com.fabianrodas.encryptdrive;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.fabianrodas.models.UserLoginResult;
+import com.fabianrodas.models.VaultContext;
+import com.fabianrodas.services.AuthService;
+import com.fabianrodas.services.FileService;
+import com.fabianrodas.services.SessionService;
+import com.fabianrodas.services.VaultService;
+import com.fabianrodas.services.VaultSessionService;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -15,8 +23,12 @@ import javafx.scene.control.ButtonBase;
 import javafx.scene.control.Labeled;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextInputControl;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /*
  * Loads each screen with its real controller at the minimum window size and
@@ -27,9 +39,37 @@ class UiLayoutTest {
 
     private static final double[][] SIZES = {{1000, 600}, {1920, 1040}};
 
+    @TempDir
+    static Path tempDir;
+
     @BeforeAll
-    static void startJavaFx() {
+    static void startJavaFxWithASignedInUser() throws Exception {
         assumeTrue(FxTestSupport.start(), "JavaFX needs a desktop session");
+
+        VaultContext vault = new VaultService().createVault(
+                tempDir.resolve("vault"), "correct vault password".toCharArray()
+        );
+        AuthService auth = new AuthService(vault);
+        auth.register("Example User", "ExampleUser", "example password".toCharArray());
+        UserLoginResult login = auth.login("ExampleUser", "example password".toCharArray());
+        SessionService.start(login.identity(), login.userMasterKey());
+
+        FileService files = FileService.forCurrentSession();
+        files.createFolder("Documents", files.rootFolderId());
+    }
+
+    @AfterAll
+    static void closeVault() {
+        VaultSessionService.closeVault();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "#overviewNavButton", "#filesNavButton", "#trashNavButton",
+        "#profileNavButton", "#settingsNavButton"
+    })
+    void workspaceViewsFit(String navigationButton) throws Exception {
+        assertFits("dashboard", root -> fire(root, navigationButton));
     }
 
     @Test

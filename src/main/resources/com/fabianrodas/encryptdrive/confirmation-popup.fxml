@@ -2,6 +2,7 @@
 
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
@@ -32,9 +33,9 @@
         <VBox alignment="CENTER" spacing="14.0" styleClass="popup-content">
 
             <children>
-                <StackPane styleClass="warning-icon">
+                <StackPane fx:id="iconBadge" styleClass="popup-icon">
                     <children>
-                        <Label styleClass="warning-icon-text" text="!" />
+                        <Label fx:id="iconLabel" styleClass="popup-icon-text" text="!" />
                     </children>
                 </StackPane>
 
@@ -49,6 +50,13 @@
                        styleClass="popup-message"
                        textAlignment="CENTER"
                        wrapText="true" />
+
+                <TextField fx:id="inputField"
+                           managed="false"
+                           maxWidth="360.0"
+                           onAction="#confirm"
+                           styleClass="popup-input"
+                           visible="false" />
 
                 <HBox alignment="CENTER" spacing="10.0">
                     <children>

@@ -1,6 +1,7 @@
 package com.fabianrodas.encryptdrive;
 
 import java.io.IOException;
+import java.util.Optional;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -20,22 +21,54 @@ final class DialogFactory {
 
     /** Returns true only when the user explicitly confirms. */
     static boolean confirm(Window owner, String title, String message, String confirmText) {
-        FXMLLoader loader = new FXMLLoader(App.class.getResource("confirmation-popup.fxml"));
-        Parent popupRoot;
+        ConfirmationPopupController popup = open(title, message, confirmText);
 
-        try {
-            popupRoot = loader.load();
-        } catch (IOException e) {
+        if (popup == null) {
             return false;
         }
 
-        ConfirmationPopupController controller = loader.getController();
-        controller.setContent(title, message, confirmText);
-        showModal(owner, popupRoot);
-        return controller.isConfirmed();
+        showModal(owner, popup);
+        return popup.isConfirmed();
     }
 
-    private static void showModal(Window owner, Parent popupRoot) {
+    /** Returns the entered text, or empty when the user cancels. */
+    static Optional<String> prompt(
+            Window owner,
+            String title,
+            String message,
+            String initialValue,
+            String confirmText
+    ) {
+        ConfirmationPopupController popup = open(title, message, confirmText);
+
+        if (popup == null) {
+            return Optional.empty();
+        }
+
+        popup.setPrompt(initialValue);
+        showModal(owner, popup);
+        return popup.isConfirmed() ? Optional.of(popup.getInput()) : Optional.empty();
+    }
+
+    private static ConfirmationPopupController open(
+            String title,
+            String message,
+            String confirmText
+    ) {
+        FXMLLoader loader = new FXMLLoader(App.class.getResource("confirmation-popup.fxml"));
+
+        try {
+            loader.load();
+        } catch (IOException e) {
+            return null;
+        }
+
+        ConfirmationPopupController popup = loader.getController();
+        popup.setContent(title, message, confirmText);
+        return popup;
+    }
+
+    private static void showModal(Window owner, ConfirmationPopupController popup) {
         Stage popupStage = new Stage();
 
         if (owner != null) {
@@ -45,7 +78,7 @@ final class DialogFactory {
         popupStage.initModality(Modality.APPLICATION_MODAL);
         popupStage.initStyle(StageStyle.UNDECORATED);
         popupStage.setResizable(false);
-        popupStage.setScene(new Scene(popupRoot));
+        popupStage.setScene(new Scene((Parent) popup.root()));
         popupStage.showAndWait();
     }
 }

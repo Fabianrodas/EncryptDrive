@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox fx:id="root"
+      spacing="12.0"
+      styleClass="page-content"
+      stylesheets="@../css/workspace.css"
+      xmlns="http://javafx.com/javafx/21"
+      xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.fabianrodas.encryptdrive.TrashController">
+
+    <children>
+        <VBox spacing="5.0">
+            <children>
+                <Label styleClass="page-title" text="Trash" />
+
+                <Label styleClass="page-subtitle"
+                       text="Items in the trash stay encrypted until you delete them permanently." />
+            </children>
+        </VBox>
+
+        <HBox alignment="CENTER_LEFT" spacing="8.0">
+            <children>
+                <Region HBox.hgrow="ALWAYS" />
+
+                <Button fx:id="restoreButton"
+                        disable="true"
+                        minWidth="-Infinity"
+                        mnemonicParsing="false"
+                        onAction="#restore"
+                        prefHeight="36.0"
+                        styleClass="secondary-button"
+                        text="Restore" />
+
+                <Button fx:id="deleteButton"
+                        disable="true"
+                        minWidth="-Infinity"
+                        mnemonicParsing="false"
+                        prefHeight="36.0"
+                        styleClass="danger-button"
+                        text="Permanently Delete" />
+            </children>
+        </HBox>
+
+        <Label fx:id="feedbackLabel"
+               minHeight="16.0"
+               styleClass="feedback-label"
+               wrapText="true" />
+
+        <TableView fx:id="table" styleClass="file-table" VBox.vgrow="ALWAYS">
+            <columns>
+                <TableColumn fx:id="nameColumn" prefWidth="320.0" sortable="false" text="NAME" />
+                <TableColumn fx:id="typeColumn" prefWidth="120.0" sortable="false" text="TYPE" />
+                <TableColumn fx:id="deletedColumn" prefWidth="150.0" sortable="false" text="DELETED AT" />
+            </columns>
+
+            <placeholder>
+                <Label text="The trash is empty." />
+            </placeholder>
+        </TableView>
+    </children>
+</VBox>
