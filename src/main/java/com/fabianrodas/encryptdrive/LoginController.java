@@ -144,8 +144,7 @@ public class LoginController implements Initializable {
             UserLoginResult result = new AuthService(VaultSessionService.current())
                     .login(username, password);
 
-            result.userMasterKey().close();
-            SessionService.startSession(result.identity());
+            SessionService.start(result.identity(), result.userMasterKey());
             App.setRoot("dashboard");
 
         } catch (AuthException e) {
@@ -153,6 +152,7 @@ public class LoginController implements Initializable {
                     ? "Invalid username or password."
                     : "Could not read the accounts of this vault.");
         } catch (IOException e) {
+            SessionService.logout();
             showError("Could not open the dashboard.");
         } finally {
             Arrays.fill(password, '\0');

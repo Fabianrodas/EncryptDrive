@@ -155,12 +155,12 @@ public class DashboardController implements Initializable {
 
     @FXML
     private void changePassword() {
-        UserSessionIdentity currentUser = SessionService.getCurrentUser();
-
-        if (currentUser == null || !VaultSessionService.isOpen()) {
+        if (!SessionService.isActive() || !VaultSessionService.isOpen()) {
             showPasswordError("Your session has expired. Please log in again.");
             return;
         }
+
+        UserSessionIdentity currentUser = SessionService.identity();
 
         String currentPassword = currentPasswordField.getText();
         String newPassword = newPasswordField.getText();
@@ -213,7 +213,7 @@ public class DashboardController implements Initializable {
     @FXML
     private void logout() {
         try {
-            SessionService.closeSession();
+            SessionService.logout();
             App.setRoot("login");
 
         } catch (IOException e) {
@@ -255,12 +255,12 @@ public class DashboardController implements Initializable {
     }
 
     private void loadUserInformation() {
-        UserSessionIdentity currentUser = SessionService.getCurrentUser();
-
-        if (currentUser == null) {
+        if (!SessionService.isActive()) {
             welcomeLabel.setText("Welcome to EncryptDrive");
             return;
         }
+
+        UserSessionIdentity currentUser = SessionService.identity();
 
         String fullName = currentUser.fullName();
         String username = currentUser.username();

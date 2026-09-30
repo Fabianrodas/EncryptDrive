@@ -13,8 +13,8 @@ public final class VaultSessionService {
     }
 
     static synchronized void open(VaultContext context) {
-        if (current != null && current != context) {
-            current.close();
+        if (current != context) {
+            closeVault();
         }
 
         current = context;
@@ -32,8 +32,13 @@ public final class VaultSessionService {
         return current;
     }
 
-    /** Destroys the registry key and releases the vault lock. Idempotent. */
+    /**
+     * Logs out, destroys the registry key, and releases the vault lock.
+     * Idempotent.
+     */
     public static synchronized void closeVault() {
+        SessionService.logout();
+
         if (current != null) {
             current.close();
             current = null;

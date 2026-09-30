@@ -1,5 +1,7 @@
 package com.fabianrodas.encryptdrive;
 
+import com.fabianrodas.services.SessionService;
+import com.fabianrodas.services.VaultSessionService;
 import java.io.IOException;
 import java.util.Objects;
 import javafx.application.Application;
@@ -40,9 +42,24 @@ public class App extends Application {
         stage.setMinWidth(DEFAULT_WIDTH);
         stage.setMinHeight(DEFAULT_HEIGHT);
         stage.setResizable(true);
+        stage.setOnCloseRequest(event -> destroySessionKeys());
 
         stage.setScene(scene);
         stage.show();
+    }
+
+    @Override
+    public void stop() {
+        destroySessionKeys();
+    }
+
+    /**
+     * Destroys user and vault key material and releases the vault lock.
+     * Idempotent, so every exit path can call it.
+     */
+    private static void destroySessionKeys() {
+        SessionService.logout();
+        VaultSessionService.closeVault();
     }
 
     static void setRoot(String fxml) throws IOException {
