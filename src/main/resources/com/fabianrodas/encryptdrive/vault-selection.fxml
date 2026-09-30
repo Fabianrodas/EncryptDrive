@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.net.URL?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane fx:id="root"
+            minHeight="600.0"
+            minWidth="1000.0"
+            prefHeight="600.0"
+            prefWidth="1000.0"
+            styleClass="window-root"
+            xmlns="http://javafx.com/javafx/21"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.fabianrodas.encryptdrive.VaultSelectionController">
+
+    <stylesheets>
+        <URL value="@../css/login.css" />
+        <URL value="@../css/vault-selection.css" />
+    </stylesheets>
+
+    <top>
+        <HBox id="titleBar"
+              alignment="CENTER_RIGHT"
+              onMouseDragged="#dragWindow"
+              onMousePressed="#beginDrag"
+              prefHeight="38.0">
+
+            <children>
+                <Label styleClass="window-name" text="EncryptDrive" />
+
+                <Region HBox.hgrow="ALWAYS" />
+
+                <Button id="minimize"
+                        focusTraversable="false"
+                        mnemonicParsing="false"
+                        onAction="#minimize"
+                        styleClass="window-control"
+                        text="−" />
+
+                <Button id="maximize"
+                        focusTraversable="false"
+                        mnemonicParsing="false"
+                        onAction="#toggleMaximize"
+                        styleClass="window-control"
+                        text="□" />
+
+                <Button id="close"
+                        focusTraversable="false"
+                        mnemonicParsing="false"
+                        onAction="#close"
+                        styleClass="window-control"
+                        text="×" />
+            </children>
+        </HBox>
+    </top>
+
+    <center>
+        <GridPane maxHeight="1.7976931348623157E308">
+
+            <columnConstraints>
+                <ColumnConstraints hgrow="ALWAYS" percentWidth="42.0" />
+                <ColumnConstraints hgrow="ALWAYS" percentWidth="58.0" />
+            </columnConstraints>
+
+            <rowConstraints>
+                <RowConstraints vgrow="ALWAYS" />
+            </rowConstraints>
+
+            <children>
+                <StackPane GridPane.columnIndex="0"
+                           maxHeight="1.7976931348623157E308"
+                           styleClass="brand-pane">
+
+                    <children>
+                        <VBox alignment="CENTER"
+                              maxWidth="340.0"
+                              spacing="17.0"
+                              styleClass="brand-content">
+
+                            <children>
+                                <StackPane styleClass="logo-badge">
+                                    <children>
+                                        <ImageView fitHeight="138.0"
+                                                   fitWidth="138.0"
+                                                   preserveRatio="true">
+                                            <image>
+                                                <Image url="@../images/logo.png" />
+                                            </image>
+                                        </ImageView>
+                                    </children>
+                                </StackPane>
+
+                                <Label styleClass="brand-title"
+                                       text="EncryptDrive" />
+
+                                <Label maxWidth="280.0"
+                                       styleClass="brand-description"
+                                       text="Open an encrypted vault on this computer, a USB drive, or a synced folder."
+                                       textAlignment="CENTER"
+                                       wrapText="true" />
+
+                                <Label styleClass="brand-note"
+                                       text="LOCAL • PRIVATE • PORTABLE" />
+                            </children>
+                        </VBox>
+                    </children>
+                </StackPane>
+
+                <StackPane GridPane.columnIndex="1"
+                           maxHeight="1.7976931348623157E308"
+                           styleClass="auth-pane, vault-auth-pane">
+
+                    <children>
+                        <VBox fx:id="formCard"
+                              alignment="TOP_LEFT"
+                              maxHeight="-Infinity"
+                              maxWidth="600.0"
+                              prefWidth="430.0"
+                              spacing="10.0"
+                              styleClass="form-card, vault-form-card"
+                              StackPane.alignment="CENTER">
+
+                            <children>
+                                <HBox spacing="4.0" styleClass="mode-switch">
+                                    <children>
+                                        <ToggleButton fx:id="openModeButton"
+                                                      maxWidth="1.7976931348623157E308"
+                                                      mnemonicParsing="false"
+                                                      onAction="#showOpenMode"
+                                                      styleClass="mode-button"
+                                                      text="Open vault"
+                                                      HBox.hgrow="ALWAYS" />
+
+                                        <ToggleButton fx:id="createModeButton"
+                                                      maxWidth="1.7976931348623157E308"
+                                                      mnemonicParsing="false"
+                                                      onAction="#showCreateMode"
+                                                      styleClass="mode-button"
+                                                      text="Create vault"
+                                                      HBox.hgrow="ALWAYS" />
+                                    </children>
+                                </HBox>
+
+                                <VBox fx:id="openSection" spacing="10.0">
+                                    <children>
+                                        <Label styleClass="headline"
+                                               text="Open your vault" />
+
+                                        <Label styleClass="subheadline"
+                                               text="Select the vault folder and enter its vault password."
+                                               wrapText="true" />
+
+                                        <VBox spacing="6.0">
+                                            <children>
+                                                <Label styleClass="field-label"
+                                                       text="Vault folder" />
+
+                                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                                    <children>
+                                                        <TextField fx:id="openFolderField"
+                                                                   editable="false"
+                                                                   focusTraversable="false"
+                                                                   promptText="No folder selected"
+                                                                   styleClass="input-field"
+                                                                   HBox.hgrow="ALWAYS" />
+
+                                                        <Button mnemonicParsing="false"
+                                                                onAction="#browseOpenFolder"
+                                                                styleClass="ghost-button"
+                                                                text="Browse" />
+                                                    </children>
+                                                </HBox>
+                                            </children>
+                                        </VBox>
+
+                                        <VBox spacing="6.0">
+                                            <children>
+                                                <Label styleClass="field-label"
+                                                       text="Vault password" />
+
+                                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                                    <children>
+                                                        <StackPane HBox.hgrow="ALWAYS">
+                                                            <children>
+                                                                <TextField fx:id="visibleOpenPasswordField"
+                                                                           managed="false"
+                                                                           promptText="Enter the vault password"
+                                                                           styleClass="input-field"
+                                                                           visible="false" />
+
+                                                                <PasswordField fx:id="openPasswordField"
+                                                                               promptText="Enter the vault password"
+                                                                               styleClass="input-field" />
+                                                            </children>
+                                                        </StackPane>
+
+                                                        <Button fx:id="toggleOpenPasswordButton"
+                                                                focusTraversable="false"
+                                                                mnemonicParsing="false"
+                                                                onAction="#togglePasswordVisibility"
+                                                                styleClass="ghost-button"
+                                                                text="View" />
+                                                    </children>
+                                                </HBox>
+                                            </children>
+                                        </VBox>
+                                    </children>
+                                </VBox>
+
+                                <VBox fx:id="createSection"
+                                      managed="false"
+                                      spacing="10.0"
+                                      visible="false">
+                                    <children>
+                                        <Label styleClass="headline"
+                                               text="Create a new vault" />
+
+                                        <VBox spacing="6.0">
+                                            <children>
+                                                <Label styleClass="field-label"
+                                                       text="Vault name" />
+
+                                                <TextField fx:id="createNameField"
+                                                           promptText="EncryptDrive Vault"
+                                                           styleClass="input-field" />
+                                            </children>
+                                        </VBox>
+
+                                        <VBox spacing="6.0">
+                                            <children>
+                                                <Label styleClass="field-label"
+                                                       text="Location" />
+
+                                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                                    <children>
+                                                        <TextField fx:id="createParentField"
+                                                                   editable="false"
+                                                                   focusTraversable="false"
+                                                                   promptText="Choose a disk, USB drive, or folder"
+                                                                   styleClass="input-field"
+                                                                   HBox.hgrow="ALWAYS" />
+
+                                                        <Button mnemonicParsing="false"
+                                                                onAction="#browseCreateParent"
+                                                                styleClass="ghost-button"
+                                                                text="Browse" />
+                                                    </children>
+                                                </HBox>
+                                            </children>
+                                        </VBox>
+
+                                        <HBox spacing="12.0">
+                                            <children>
+                                                <VBox spacing="6.0" HBox.hgrow="ALWAYS">
+                                                    <children>
+                                                        <Label styleClass="field-label"
+                                                               text="Vault password" />
+
+                                                        <PasswordField fx:id="createPasswordField"
+                                                                       promptText="At least 12 characters"
+                                                                       styleClass="input-field" />
+                                                    </children>
+                                                </VBox>
+
+                                                <VBox spacing="6.0" HBox.hgrow="ALWAYS">
+                                                    <children>
+                                                        <Label styleClass="field-label"
+                                                               text="Confirm password" />
+
+                                                        <PasswordField fx:id="createConfirmPasswordField"
+                                                                       promptText="Repeat password"
+                                                                       styleClass="input-field" />
+                                                    </children>
+                                                </VBox>
+                                            </children>
+                                        </HBox>
+
+                                        <Label styleClass="warning-note"
+                                               text="EncryptDrive cannot recover a lost vault password."
+                                               wrapText="true" />
+                                    </children>
+                                </VBox>
+
+                                <Label fx:id="feedbackLabel"
+                                       minHeight="18.0"
+                                       styleClass="feedback-label"
+                                       wrapText="true" />
+
+                                <Button fx:id="submitButton"
+                                        defaultButton="true"
+                                        maxWidth="1.7976931348623157E308"
+                                        mnemonicParsing="false"
+                                        onAction="#submit"
+                                        prefHeight="42.0"
+                                        styleClass="primary-button"
+                                        text="Unlock vault" />
+                            </children>
+                        </VBox>
+                    </children>
+                </StackPane>
+            </children>
+        </GridPane>
+    </center>
+</BorderPane>
