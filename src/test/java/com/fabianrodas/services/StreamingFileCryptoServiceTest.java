@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fabianrodas.models.EncryptedFileDescriptor;
 import com.fabianrodas.models.EncryptedPayload;
@@ -54,6 +55,20 @@ class StreamingFileCryptoServiceTest {
         assertEquals(size + 16L, descriptor.encryptedSize());
         assertEquals(size + 16L, Files.size(dir.resolve("blob")));
         assertEquals(sha256(source), sha256(dir.resolve("export.part")));
+    }
+
+    @Test
+    void encryptReportsProgressUpToTheFileSize() throws Exception {
+        int size = 5 * 64 * 1024 + 123;
+        Path source = deterministicFile("source.bin", size);
+        java.util.List<Long> reported = new java.util.ArrayList<>();
+
+        crypto.encrypt(source, dir.resolve("blob"), fileKey, nonce, AAD, reported::add);
+
+        assertEquals((long) size, reported.get(reported.size() - 1));
+        for (int i = 1; i < reported.size(); i++) {
+            assertTrue(reported.get(i) > reported.get(i - 1), "progress must grow");
+        }
     }
 
     @Test

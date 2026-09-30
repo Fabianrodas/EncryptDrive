@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
+import java.util.function.LongConsumer;
 import org.bouncycastle.crypto.InvalidCipherTextException;
 import org.bouncycastle.crypto.engines.AESEngine;
 import org.bouncycastle.crypto.modes.GCMBlockCipher;
@@ -38,11 +39,23 @@ public class StreamingFileCryptoService {
             byte[] nonce,
             byte[] aad
     ) throws IOException {
+        return encrypt(source, destinationPart, fileKey, nonce, aad, bytes -> { });
+    }
+
+    /** Like {@link #encrypt}, reporting the source bytes consumed so far. */
+    public EncryptedFileDescriptor encrypt(
+            Path source,
+            Path destinationPart,
+            byte[] fileKey,
+            byte[] nonce,
+            byte[] aad,
+            LongConsumer progress
+    ) throws IOException {
 
         GCMModeCipher cipher = cipher(true, fileKey, nonce, aad);
 
         try {
-            long plainSize = stream(cipher, source, destinationPart);
+            long plainSize = stream(cipher, source, destinationPart, progress);
             return new EncryptedFileDescriptor(plainSize, Files.size(destinationPart));
 
         } catch (InvalidCipherTextException e) {
@@ -63,14 +76,18 @@ public class StreamingFileCryptoService {
     ) throws IOException, CryptoException {
 
         try {
-            stream(cipher(false, fileKey, nonce, aad), encryptedBlob, destinationPart);
+            stream(cipher(false, fileKey, nonce, aad), encryptedBlob, destinationPart, bytes -> { });
         } catch (InvalidCipherTextException e) {
             throw new CryptoException();
         }
     }
 
-    private static long stream(GCMModeCipher cipher, Path input, Path outputPart)
-            throws IOException, InvalidCipherTextException {
+    private static long stream(
+            GCMModeCipher cipher,
+            Path input,
+            Path outputPart,
+            LongConsumer progress
+    ) throws IOException, InvalidCipherTextException {
 
         byte[] in = new byte[BUFFER_BYTES];
         byte[] out = new byte[BUFFER_BYTES + 2 * CryptoConstants.GCM_TAG_BITS / 8];
@@ -90,6 +107,7 @@ public class StreamingFileCryptoService {
             while ((read = source.read(in)) != -1) {
                 consumed += read;
                 write(target, out, cipher.processBytes(in, 0, read, out, 0));
+                progress.accept(consumed);
             }
 
             write(target, out, cipher.doFinal(out, 0));

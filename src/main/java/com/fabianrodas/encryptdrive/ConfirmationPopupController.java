@@ -58,6 +58,12 @@ public class ConfirmationPopupController implements Initializable {
         confirmButton.setText(confirmText);
     }
 
+    /** Red icon and confirm button for actions that cannot be undone. */
+    void setDestructive() {
+        iconBadge.getStyleClass().add("danger");
+        confirmButton.getStyleClass().setAll("button", "popup-danger-button");
+    }
+
     /** Shows a text field for the user's answer, pre-filled and focused. */
     void setPrompt(String initialValue) {
         iconLabel.setText("+");

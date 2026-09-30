@@ -2,15 +2,27 @@ package com.fabianrodas.encryptdrive;
 
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.BooleanBinding;
+import javafx.beans.property.SimpleIntegerProperty;
 import javafx.concurrent.Task;
+import javafx.concurrent.WorkerStateEvent;
 
 /**
  * Runs slow work (key derivation, file encryption) off the JavaFX thread and
- * reports back on it.
+ * reports back on it. Call from the JavaFX thread.
  */
 final class Background {
 
+    private static final SimpleIntegerProperty RUNNING = new SimpleIntegerProperty(0);
+    private static final BooleanBinding BUSY = Bindings.greaterThan(RUNNING, 0);
+
     private Background() {
+    }
+
+    /** True while any background task is running, e.g. to lock navigation. */
+    static BooleanBinding busyProperty() {
+        return BUSY;
     }
 
     static <T> void run(
@@ -27,6 +39,18 @@ final class Background {
 
         task.setOnSucceeded(event -> onSuccess.accept(task.getValue()));
         task.setOnFailed(event -> onFailure.accept(task.getException()));
+        start(task);
+    }
+
+    static void start(Task<?> task) {
+        RUNNING.set(RUNNING.get() + 1);
+        task.addEventHandler(WorkerStateEvent.ANY, event -> {
+            if (event.getEventType() == WorkerStateEvent.WORKER_STATE_SUCCEEDED
+                    || event.getEventType() == WorkerStateEvent.WORKER_STATE_FAILED
+                    || event.getEventType() == WorkerStateEvent.WORKER_STATE_CANCELLED) {
+                RUNNING.set(RUNNING.get() - 1);
+            }
+        });
 
         Thread worker = new Thread(task, "EncryptDrive worker");
         worker.setDaemon(true);

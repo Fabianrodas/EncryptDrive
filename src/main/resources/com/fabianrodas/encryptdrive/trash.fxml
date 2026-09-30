@@ -43,6 +43,7 @@
                         disable="true"
                         minWidth="-Infinity"
                         mnemonicParsing="false"
+                        onAction="#permanentlyDelete"
                         prefHeight="36.0"
                         styleClass="danger-button"
                         text="Permanently Delete" />

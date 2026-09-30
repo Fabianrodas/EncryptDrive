@@ -50,6 +50,28 @@
     -fx-text-fill: #2563EB;
 }
 
+.popup-icon.danger {
+    -fx-background-color: #FEE2E2;
+}
+
+.popup-icon.danger .popup-icon-text {
+    -fx-text-fill: #DC2626;
+}
+
+.popup-danger-button {
+    -fx-background-color: #DC2626;
+    -fx-text-fill: white;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 7;
+    -fx-padding: 10 24 10 24;
+    -fx-cursor: hand;
+}
+
+.popup-danger-button:hover {
+    -fx-background-color: #B91C1C;
+}
+
 .popup-input {
     -fx-background-color: #F8FAFC;
     -fx-background-radius: 8;

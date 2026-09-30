@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -156,6 +157,12 @@ public final class FileService {
      */
     public ManifestEntry importFile(Path source, UUID parentFolderId)
             throws FileServiceException {
+        return importFile(source, parentFolderId, bytes -> { });
+    }
+
+    /** Like {@link #importFile(Path, UUID)}, reporting source bytes encrypted so far. */
+    public ManifestEntry importFile(Path source, UUID parentFolderId, LongConsumer progress)
+            throws FileServiceException {
 
         if (!Files.isRegularFile(source) || !Files.isReadable(source)) {
             throw new FileServiceException(FileServiceException.Reason.SOURCE_UNREADABLE);
@@ -173,7 +180,7 @@ public final class FileService {
             byte[] contentNonce = randomBytes(CryptoConstants.GCM_NONCE_BYTES);
 
             try {
-                long plainSize = writeBlob(source, blobId, fileId, fileKey, contentNonce);
+                long plainSize = writeBlob(source, blobId, fileId, fileKey, contentNonce, progress);
 
                 try {
                     return modify(manifest -> {
@@ -223,6 +230,32 @@ public final class FileService {
 
             export(rules, entry, destination.toAbsolutePath().normalize(), key);
             return null;
+        });
+    }
+
+    /**
+     * Where {@link #exportEntry} should write each entry inside
+     * {@code directory}: Windows-safe names, made unique among themselves.
+     */
+    public List<Path> exportTargets(List<UUID> entryIds, Path directory)
+            throws FileServiceException {
+
+        return withUserMasterKey(key -> {
+            ManifestService rules = new ManifestService(load(key));
+            Set<String> usedNames = new HashSet<>();
+            List<Path> targets = new ArrayList<>();
+
+            for (UUID entryId : entryIds) {
+                ManifestEntry entry = rules.find(entryId);
+
+                if (entry == null || entry.getDeletedAt() != null) {
+                    throw new FileServiceException(FileServiceException.Reason.NOT_FOUND);
+                }
+
+                targets.add(directory.resolve(uniqueSafeName(entry, usedNames)));
+            }
+
+            return targets;
         });
     }
 
@@ -370,7 +403,8 @@ public final class FileService {
             UUID blobId,
             UUID fileId,
             byte[] fileKey,
-            byte[] contentNonce
+            byte[] contentNonce,
+            LongConsumer progress
     ) throws FileServiceException {
 
         Path part = null;
@@ -382,7 +416,8 @@ public final class FileService {
                     part,
                     fileKey,
                     contentNonce,
-                    Aad.fileContent(vaultId(), userId(), fileId.toString())
+                    Aad.fileContent(vaultId(), userId(), fileId.toString()),
+                    progress
             ).plainSize();
             blobRepository.commit(vault.root(), blobId);
             return plainSize;
@@ -424,14 +459,7 @@ public final class FileService {
                 .sorted(FOLDERS_THEN_NAME)
                 .toList()) {
 
-            String name = safeFileName(child.getName());
-            boolean folder = child.getKind() == ManifestEntryKind.FOLDER;
-
-            for (int copy = 2; !usedNames.add(name.toLowerCase(Locale.ROOT)); copy++) {
-                name = withCopyNumber(safeFileName(child.getName()), copy, folder);
-            }
-
-            Path childTarget = target.resolve(name).normalize();
+            Path childTarget = target.resolve(uniqueSafeName(child, usedNames)).normalize();
 
             if (!childTarget.getParent().equals(target)) {
                 throw new FileServiceException(FileServiceException.Reason.INVALID_NAME);
@@ -593,6 +621,19 @@ public final class FileService {
         }
 
         return candidate;
+    }
+
+    /** A Windows-safe name for the entry that is not yet in usedNames (case-insensitive). */
+    private static String uniqueSafeName(ManifestEntry entry, Set<String> usedNames) {
+        String safe = safeFileName(entry.getName());
+        boolean folder = entry.getKind() == ManifestEntryKind.FOLDER;
+        String name = safe;
+
+        for (int copy = 2; !usedNames.add(name.toLowerCase(Locale.ROOT)); copy++) {
+            name = withCopyNumber(safe, copy, folder);
+        }
+
+        return name;
     }
 
     /** "report.pdf" becomes "report (2).pdf"; folders get the suffix at the end. */

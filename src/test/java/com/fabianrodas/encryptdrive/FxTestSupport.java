@@ -7,7 +7,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
+import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.control.ButtonBase;
+import javafx.stage.Stage;
+import javafx.stage.Window;
 
 /**
  * Starts the JavaFX toolkit once for UI tests and runs work on its thread.
@@ -45,6 +49,29 @@ final class FxTestSupport {
             appScene.setAccessible(true);
             appScene.set(null, scene);
             return scene;
+        });
+    }
+
+    /**
+     * Fires a button that opens a modal popup and answers the popup by
+     * clicking the button with the given text.
+     */
+    static void fireAndAnswerPopup(Scene scene, String selector, String answer) throws Exception {
+        onFxThread(() -> {
+            Platform.runLater(() -> {
+                for (Window window : Window.getWindows()) {
+                    if (window instanceof Stage stage && stage.getScene() != scene && stage.isShowing()) {
+                        for (Node node : stage.getScene().getRoot().lookupAll(".button")) {
+                            if (node instanceof ButtonBase button && answer.equals(button.getText())) {
+                                button.fire();
+                                return;
+                            }
+                        }
+                    }
+                }
+            });
+            ((ButtonBase) scene.getRoot().lookup(selector)).fire();
+            return null;
         });
     }
 

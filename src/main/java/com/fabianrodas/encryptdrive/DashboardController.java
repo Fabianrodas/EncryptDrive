@@ -70,6 +70,10 @@ public class DashboardController implements Initializable {
     public void initialize(URL url, ResourceBundle rb) {
         configureResponsiveLayout();
         loadUserInformation();
+
+        // No navigation, logout, or vault close while files are being written.
+        sidebar.disableProperty().bind(Background.busyProperty());
+
         showOverview();
     }
 

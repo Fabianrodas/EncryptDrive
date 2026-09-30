@@ -294,6 +294,12 @@
 
 /* Files and trash */
 
+.progress-bar > .bar {
+    -fx-background-color: #2563EB;
+    -fx-background-insets: 2;
+    -fx-background-radius: 4;
+}
+
 .breadcrumb-button {
     -fx-background-color: transparent;
     -fx-cursor: hand;

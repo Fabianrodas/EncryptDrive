@@ -33,6 +33,7 @@ import java.nio.file.StandardOpenOption;
 import java.security.SecureRandom;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
@@ -128,7 +129,7 @@ class FileServiceTest {
         StreamingFileCryptoService failing = new StreamingFileCryptoService() {
             @Override
             public EncryptedFileDescriptor encrypt(
-                    Path source, Path part, byte[] key, byte[] nonce, byte[] aad
+                    Path source, Path part, byte[] key, byte[] nonce, byte[] aad, LongConsumer progress
             ) throws IOException {
                 Files.write(part, new byte[100]);
                 throw new IOException("disk full");
@@ -176,10 +177,10 @@ class FileServiceTest {
         StreamingFileCryptoService deletesSource = new StreamingFileCryptoService() {
             @Override
             public EncryptedFileDescriptor encrypt(
-                    Path source, Path part, byte[] key, byte[] nonce, byte[] aad
+                    Path source, Path part, byte[] key, byte[] nonce, byte[] aad, LongConsumer progress
             ) throws IOException {
                 Files.delete(source);
-                return super.encrypt(source, part, key, nonce, aad);
+                return super.encrypt(source, part, key, nonce, aad, progress);
             }
         };
         FileService files = new FileService(
@@ -258,6 +259,33 @@ class FileServiceTest {
 
         assertEquals("2025_2026_ plans", target.getFileName().toString());
         assertEquals(List.of("_CON", "a_b", "a_b (2)"), names(target));
+    }
+
+    @Test
+    void exportTargetsAreWindowsSafeAndUnique() throws Exception {
+        FileService files = files(alice);
+        ManifestEntry colon = files.createFolder("a:b", files.rootFolderId());
+        ManifestEntry question = files.createFolder("a?b", files.rootFolderId());
+        ManifestEntry report = files.importFile(source("report.pdf", new byte[3]), files.rootFolderId());
+        Path directory = tempDir.resolve("export");
+
+        assertEquals(
+                List.of(directory.resolve("a_b"), directory.resolve("a_b (2)"), directory.resolve("report.pdf")),
+                files.exportTargets(
+                        List.of(colon.getEntryId(), question.getEntryId(), report.getEntryId()),
+                        directory
+                )
+        );
+    }
+
+    @Test
+    void importReportsProgressUpToTheFileSize() throws Exception {
+        FileService files = files(alice);
+        List<Long> reported = new java.util.ArrayList<>();
+
+        files.importFile(source("big.bin", random(300_000)), files.rootFolderId(), reported::add);
+
+        assertEquals(300_000L, reported.get(reported.size() - 1));
     }
 
     @Test

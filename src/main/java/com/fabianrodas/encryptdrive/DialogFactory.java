@@ -31,6 +31,24 @@ final class DialogFactory {
         return popup.isConfirmed();
     }
 
+    /** Like {@link #confirm}, styled for actions that cannot be undone. */
+    static boolean confirmDestructive(
+            Window owner,
+            String title,
+            String message,
+            String confirmText
+    ) {
+        ConfirmationPopupController popup = open(title, message, confirmText);
+
+        if (popup == null) {
+            return false;
+        }
+
+        popup.setDestructive();
+        showModal(owner, popup);
+        return popup.isConfirmed();
+    }
+
     /** Returns the entered text, or empty when the user cancels. */
     static Optional<String> prompt(
             Window owner,

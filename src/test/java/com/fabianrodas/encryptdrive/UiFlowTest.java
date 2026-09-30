@@ -1,20 +1,25 @@
 package com.fabianrodas.encryptdrive;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.models.UserLoginResult;
 import com.fabianrodas.models.VaultContext;
 import com.fabianrodas.security.SensitiveBytes;
 import com.fabianrodas.services.AuthService;
+import com.fabianrodas.services.FileService;
 import com.fabianrodas.services.SessionService;
 import com.fabianrodas.services.VaultService;
 import com.fabianrodas.services.VaultSessionService;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import javafx.scene.Scene;
 import javafx.scene.control.ButtonBase;
+import javafx.scene.control.TableView;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -94,6 +99,32 @@ class UiFlowTest {
         click(scene, "#closeVaultButton");
 
         assertClosedAndBackAtVaultSelection(scene);
+    }
+
+    @Test
+    void permanentDeleteHappensOnlyAfterExplicitConfirmation() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        ManifestEntry old = files.importFile(
+                Files.writeString(tempDir.resolve("old.txt"), "old"), files.rootFolderId()
+        );
+        files.moveToTrash(old.getEntryId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#trashNavButton");
+
+        selectFirstRow(scene);
+        FxTestSupport.fireAndAnswerPopup(scene, "#deleteButton", "Cancel");
+        assertEquals(1, files.listTrash().size());
+
+        selectFirstRow(scene);
+        FxTestSupport.fireAndAnswerPopup(scene, "#deleteButton", "Delete permanently");
+        assertEquals(0, files.listTrash().size());
+    }
+
+    private static void selectFirstRow(Scene scene) throws Exception {
+        FxTestSupport.onFxThread(() -> {
+            ((TableView<?>) scene.getRoot().lookup("#table")).getSelectionModel().select(0);
+            return null;
+        });
     }
 
     private void assertClosedAndBackAtVaultSelection(Scene scene) throws Exception {
