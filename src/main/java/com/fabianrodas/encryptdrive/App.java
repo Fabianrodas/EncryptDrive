@@ -3,6 +3,7 @@ package com.fabianrodas.encryptdrive;
 import com.fabianrodas.services.SessionService;
 import com.fabianrodas.services.VaultSessionService;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Objects;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
@@ -64,6 +65,24 @@ public class App extends Application {
 
     static void setRoot(String fxml) throws IOException {
         scene.setRoot(loadFXML(fxml));
+    }
+
+    /**
+     * Logs out, destroys user and vault key material, releases the vault
+     * lock, and returns to Vault Selection.
+     */
+    static void closeVault() throws IOException {
+        VaultSessionService.closeVault();
+        setRoot("vault-selection");
+    }
+
+    static String openVaultName() {
+        if (!VaultSessionService.isOpen()) {
+            return "No vault open";
+        }
+
+        Path root = VaultSessionService.current().root();
+        return root.getFileName() == null ? root.toString() : root.getFileName().toString();
     }
 
     public static void toggleMaximize(Stage stage) {

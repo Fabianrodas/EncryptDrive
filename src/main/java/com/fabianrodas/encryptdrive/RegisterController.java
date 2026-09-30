@@ -67,6 +67,9 @@ public class RegisterController implements Initializable {
     @FXML
     private Label feedbackLabel;
 
+    @FXML
+    private Label vaultNameLabel;
+
     private boolean passwordVisible = false;
     private boolean confirmPasswordVisible = false;
 
@@ -80,7 +83,8 @@ public class RegisterController implements Initializable {
 
         visibleConfirmPasswordField.textProperty()
                 .bindBidirectional(confirmPasswordField.textProperty());
-        
+
+        vaultNameLabel.setText(App.openVaultName());
         configureResponsiveForm();
     }
 
@@ -206,18 +210,37 @@ public class RegisterController implements Initializable {
         char[] passwordChars = password.toCharArray();
         passwordField.clear();
         confirmPasswordField.clear();
+        AuthService authService = new AuthService(VaultSessionService.current());
+        formCard.setDisable(true);
 
+        Background.run(
+                () -> {
+                    try {
+                        return authService.register(fullName, username, passwordChars);
+                    } finally {
+                        Arrays.fill(passwordChars, '\0');
+                    }
+                },
+                identity -> {
+                    formCard.setDisable(false);
+                    showRegistrationSuccessPopup();
+                },
+                failure -> {
+                    formCard.setDisable(false);
+                    showError(failure instanceof AuthException authError
+                            && authError.getReason() == AuthException.Reason.USERNAME_TAKEN
+                            ? "That username is already in use."
+                            : "Could not create the account. Please try again.");
+                }
+        );
+    }
+
+    @FXML
+    private void closeVault() {
         try {
-            new AuthService(VaultSessionService.current())
-                    .register(fullName, username, passwordChars);
-            showRegistrationSuccessPopup();
-
-        } catch (AuthException e) {
-            showError(e.getReason() == AuthException.Reason.USERNAME_TAKEN
-                    ? "That username is already in use."
-                    : "Could not create the account. Please try again.");
-        } finally {
-            Arrays.fill(passwordChars, '\0');
+            App.closeVault();
+        } catch (IOException e) {
+            showError("Could not return to vault selection.");
         }
     }
 

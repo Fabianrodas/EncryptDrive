@@ -149,12 +149,25 @@
                             </children>
                         </VBox>
 
-                        <Button maxWidth="1.7976931348623157E308"
-                                mnemonicParsing="false"
-                                onAction="#logout"
-                                prefHeight="42.0"
-                                styleClass="logout-button"
-                                text="Log Out" />
+                        <VBox spacing="8.0">
+                            <children>
+                                <Button fx:id="logoutButton"
+                                        maxWidth="1.7976931348623157E308"
+                                        mnemonicParsing="false"
+                                        onAction="#logout"
+                                        prefHeight="42.0"
+                                        styleClass="logout-button"
+                                        text="Log Out" />
+
+                                <Button fx:id="closeVaultButton"
+                                        maxWidth="1.7976931348623157E308"
+                                        mnemonicParsing="false"
+                                        onAction="#closeVault"
+                                        prefHeight="42.0"
+                                        styleClass="close-vault-button"
+                                        text="Close Vault" />
+                            </children>
+                        </VBox>
                     </children>
                 </VBox>
 
@@ -423,7 +436,8 @@
 
                                                 <HBox alignment="CENTER_RIGHT">
                                                     <children>
-                                                        <Button mnemonicParsing="false"
+                                                        <Button fx:id="updatePasswordButton"
+                                                                mnemonicParsing="false"
                                                                 onAction="#changePassword"
                                                                 prefHeight="42.0"
                                                                 styleClass="primary-button"

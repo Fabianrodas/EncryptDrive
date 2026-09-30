@@ -42,6 +42,21 @@ class UiLayoutTest {
         assertFits("vault-selection", root -> fire(root, "#createModeButton"));
     }
 
+    @Test
+    void loginFits() throws Exception {
+        assertFits("login", root -> { });
+    }
+
+    @Test
+    void registerFits() throws Exception {
+        assertFits("register", root -> { });
+    }
+
+    @Test
+    void dashboardFits() throws Exception {
+        assertFits("dashboard", root -> { });
+    }
+
     private static void assertFits(String fxml, Consumer<Parent> prepare) throws Exception {
         for (double[] size : SIZES) {
             List<String> outside = FxTestSupport.onFxThread(() -> {

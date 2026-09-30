@@ -1,6 +1,5 @@
 package com.fabianrodas.encryptdrive;
 
-import com.fabianrodas.models.UserLoginResult;
 import com.fabianrodas.services.AuthException;
 import com.fabianrodas.services.AuthService;
 import com.fabianrodas.services.SessionService;
@@ -52,6 +51,9 @@ public class LoginController implements Initializable {
     @FXML
     private Label feedbackLabel;
 
+    @FXML
+    private Label vaultNameLabel;
+
     private final WindowDragHandler windowDragHandler
         = new WindowDragHandler();
     
@@ -61,7 +63,8 @@ public class LoginController implements Initializable {
     public void initialize(URL url, ResourceBundle rb) {
         visiblePasswordField.textProperty()
                 .bindBidirectional(passwordField.textProperty());
-        
+
+        vaultNameLabel.setText(App.openVaultName());
         configureResponsiveForm();
     }
 
@@ -139,23 +142,44 @@ public class LoginController implements Initializable {
 
         char[] password = passwordField.getText().toCharArray();
         passwordField.clear();
+        AuthService authService = new AuthService(VaultSessionService.current());
+        formCard.setDisable(true);
 
+        Background.run(
+                () -> {
+                    try {
+                        return authService.login(username, password);
+                    } finally {
+                        Arrays.fill(password, '\0');
+                    }
+                },
+                result -> {
+                    SessionService.start(result.identity(), result.userMasterKey());
+
+                    try {
+                        App.setRoot("dashboard");
+                    } catch (IOException e) {
+                        SessionService.logout();
+                        formCard.setDisable(false);
+                        showError("Could not open the dashboard.");
+                    }
+                },
+                failure -> {
+                    formCard.setDisable(false);
+                    showError(failure instanceof AuthException authError
+                            && authError.getReason() == AuthException.Reason.INVALID_CREDENTIALS
+                            ? "Invalid username or password."
+                            : "Could not read the accounts of this vault.");
+                }
+        );
+    }
+
+    @FXML
+    private void closeVault() {
         try {
-            UserLoginResult result = new AuthService(VaultSessionService.current())
-                    .login(username, password);
-
-            SessionService.start(result.identity(), result.userMasterKey());
-            App.setRoot("dashboard");
-
-        } catch (AuthException e) {
-            showError(e.getReason() == AuthException.Reason.INVALID_CREDENTIALS
-                    ? "Invalid username or password."
-                    : "Could not read the accounts of this vault.");
+            App.closeVault();
         } catch (IOException e) {
-            SessionService.logout();
-            showError("Could not open the dashboard.");
-        } finally {
-            Arrays.fill(password, '\0');
+            showError("Could not return to vault selection.");
         }
     }
 

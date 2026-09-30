@@ -1,0 +1,112 @@
+package com.fabianrodas.encryptdrive;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
+
+import com.fabianrodas.models.UserLoginResult;
+import com.fabianrodas.models.VaultContext;
+import com.fabianrodas.security.SensitiveBytes;
+import com.fabianrodas.services.AuthService;
+import com.fabianrodas.services.SessionService;
+import com.fabianrodas.services.VaultService;
+import com.fabianrodas.services.VaultSessionService;
+import java.nio.file.Path;
+import javafx.scene.Scene;
+import javafx.scene.control.ButtonBase;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+/*
+ * Logout and Close Vault must destroy different key material: logout keeps
+ * the vault unlocked, closing the vault destroys everything.
+ */
+class UiFlowTest {
+
+    @TempDir
+    Path tempDir;
+
+    private VaultContext vault;
+    private SensitiveBytes userMasterKey;
+
+    @BeforeAll
+    static void startJavaFx() {
+        assumeTrue(FxTestSupport.start(), "JavaFX needs a desktop session");
+    }
+
+    @BeforeEach
+    void openVaultAndSignIn() throws Exception {
+        vault = new VaultService().createVault(
+                tempDir.resolve("vault"), "correct vault password".toCharArray()
+        );
+        AuthService auth = new AuthService(vault);
+        auth.register("Example User", "ExampleUser", "example password".toCharArray());
+        UserLoginResult login = auth.login("ExampleUser", "example password".toCharArray());
+        userMasterKey = login.userMasterKey();
+        SessionService.start(login.identity(), userMasterKey);
+    }
+
+    @AfterEach
+    void closeVault() {
+        VaultSessionService.closeVault();
+    }
+
+    @Test
+    void logOutKeepsTheVaultUnlockedAndReturnsToLogin() throws Exception {
+        Scene scene = FxTestSupport.showScreen("dashboard");
+
+        click(scene, "#logoutButton");
+
+        assertTrue(userMasterKey.isDestroyed());
+        assertFalse(vault.isClosed());
+        assertTrue(VaultSessionService.isOpen());
+        assertNotNull(FxTestSupport.onFxThread(() -> scene.getRoot().lookup("#usernameField")));
+    }
+
+    @Test
+    void closeVaultFromDashboardDestroysAllKeysAndReturnsToVaultSelection() throws Exception {
+        Scene scene = FxTestSupport.showScreen("dashboard");
+
+        click(scene, "#closeVaultButton");
+
+        assertClosedAndBackAtVaultSelection(scene);
+    }
+
+    @Test
+    void closeVaultFromLoginReturnsToVaultSelection() throws Exception {
+        SessionService.logout();
+        Scene scene = FxTestSupport.showScreen("login");
+
+        click(scene, "#closeVaultButton");
+
+        assertClosedAndBackAtVaultSelection(scene);
+    }
+
+    @Test
+    void closeVaultFromRegisterReturnsToVaultSelection() throws Exception {
+        SessionService.logout();
+        Scene scene = FxTestSupport.showScreen("register");
+
+        click(scene, "#closeVaultButton");
+
+        assertClosedAndBackAtVaultSelection(scene);
+    }
+
+    private void assertClosedAndBackAtVaultSelection(Scene scene) throws Exception {
+        assertTrue(userMasterKey.isDestroyed());
+        assertTrue(vault.isClosed());
+        assertFalse(VaultSessionService.isOpen());
+        assertNotNull(FxTestSupport.onFxThread(() -> scene.getRoot().lookup("#openModeButton")));
+    }
+
+    private static void click(Scene scene, String selector) throws Exception {
+        FxTestSupport.onFxThread(() -> {
+            ((ButtonBase) scene.getRoot().lookup(selector)).fire();
+            return null;
+        });
+    }
+}

@@ -95,6 +95,9 @@ public class DashboardController implements Initializable {
     @FXML
     private Label passwordFeedbackLabel;
 
+    @FXML
+    private Button updatePasswordButton;
+
     private final WindowDragHandler windowDragHandler
         = new WindowDragHandler();
 
@@ -194,19 +197,39 @@ public class DashboardController implements Initializable {
         currentPasswordField.clear();
         newPasswordField.clear();
         confirmNewPasswordField.clear();
+        AuthService authService = new AuthService(VaultSessionService.current());
+        updatePasswordButton.setDisable(true);
 
+        Background.run(
+                () -> {
+                    try {
+                        authService.changePassword(currentUser.userId(), currentChars, newChars);
+                        return null;
+                    } finally {
+                        Arrays.fill(currentChars, '\0');
+                        Arrays.fill(newChars, '\0');
+                    }
+                },
+                done -> {
+                    updatePasswordButton.setDisable(false);
+                    showPasswordSuccess("Password updated successfully.");
+                },
+                failure -> {
+                    updatePasswordButton.setDisable(false);
+                    showPasswordError(failure instanceof AuthException authError
+                            && authError.getReason() == AuthException.Reason.INVALID_CREDENTIALS
+                            ? "Your current password is incorrect."
+                            : "Could not update your password. Please try again.");
+                }
+        );
+    }
+
+    @FXML
+    private void closeVault() {
         try {
-            new AuthService(VaultSessionService.current())
-                    .changePassword(currentUser.userId(), currentChars, newChars);
-            showPasswordSuccess("Password updated successfully.");
-
-        } catch (AuthException e) {
-            showPasswordError(e.getReason() == AuthException.Reason.INVALID_CREDENTIALS
-                    ? "Your current password is incorrect."
-                    : "Could not update your password. Please try again.");
-        } finally {
-            Arrays.fill(currentChars, '\0');
-            Arrays.fill(newChars, '\0');
+            App.closeVault();
+        } catch (IOException e) {
+            System.err.println("Could not return to vault selection.");
         }
     }
 

@@ -1,10 +1,13 @@
 package com.fabianrodas.encryptdrive;
 
+import java.lang.reflect.Field;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import javafx.application.Platform;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Scene;
 
 /**
  * Starts the JavaFX toolkit once for UI tests and runs work on its thread.
@@ -32,6 +35,29 @@ final class FxTestSupport {
         }
 
         return started;
+    }
+
+    /** Loads a screen into a new scene and makes it the scene App.setRoot navigates. */
+    static Scene showScreen(String fxml) throws Exception {
+        return onFxThread(() -> {
+            Scene scene = new Scene(FXMLLoader.load(App.class.getResource(fxml + ".fxml")), 1000, 600);
+            Field appScene = App.class.getDeclaredField("scene");
+            appScene.setAccessible(true);
+            appScene.set(null, scene);
+            return scene;
+        });
+    }
+
+    static void waitUntil(Callable<Boolean> condition) throws Exception {
+        long deadline = System.currentTimeMillis() + 20_000;
+
+        while (!onFxThread(condition)) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new AssertionError("Timed out waiting for the UI");
+            }
+
+            Thread.sleep(50);
+        }
     }
 
     static <T> T onFxThread(Callable<T> action) throws Exception {

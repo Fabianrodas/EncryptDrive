@@ -173,6 +173,24 @@
     -fx-text-fill: white;
 }
 
+.close-vault-button {
+    -fx-alignment: center-left;
+    -fx-background-color: transparent;
+    -fx-background-radius: 10;
+    -fx-border-color: #334155;
+    -fx-border-radius: 10;
+    -fx-cursor: hand;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 13 0 13;
+    -fx-text-fill: #CBD5E1;
+}
+
+.close-vault-button:hover {
+    -fx-background-color: #1E293B;
+    -fx-text-fill: white;
+}
+
 /* Workspace */
 
 .workspace-scroll {
