@@ -415,12 +415,10 @@ The application is also intended to remain local-first. A future cloud synchroni
 
 ## Development Notes
 
-The local `users.json` file should not contain real production credentials in a public repository.
-
-For development purposes, the file may be ignored through `.gitignore`:
+The local `data/` directory is ignored through `.gitignore` and must never be committed: `users.json` contains usernames, password hashes, and salts.
 
 ```gitignore
-data/users.json
+data/
 ```
 
 The application can recreate an empty JSON file automatically when necessary.

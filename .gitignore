@@ -88,3 +88,17 @@ nb-configuration.xml
 ## Miscellaneous
 ##############################
 *.log
+
+##############################
+## EncryptDrive local data
+##############################
+data/
+*.edv.part
+*.enc.part
+*.tmp
+
+##############################
+## Packaging output
+##############################
+target/
+dist/
