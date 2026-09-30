@@ -2,6 +2,7 @@ package com.fabianrodas.encryptdrive;
 
 import com.fabianrodas.services.AuthException;
 import com.fabianrodas.services.AuthService;
+import com.fabianrodas.services.RecoveryService;
 import com.fabianrodas.services.SessionService;
 import com.fabianrodas.services.VaultSessionService;
 import java.io.IOException;
@@ -66,6 +67,11 @@ public class LoginController implements Initializable {
 
         vaultNameLabel.setText(App.openVaultName());
         configureResponsiveForm();
+
+        if (RecoveryService.takeRecoveryNotice()) {
+            feedbackLabel.setText(Formats.RECOVERY_NOTICE);
+            feedbackLabel.getStyleClass().add("notice");
+        }
     }
 
     @FXML
@@ -206,7 +212,7 @@ public class LoginController implements Initializable {
 
     private void showError(String message) {
         feedbackLabel.setText(message);
-        feedbackLabel.getStyleClass().remove("success");
+        feedbackLabel.getStyleClass().removeAll("success", "notice");
     }
 
     private Stage getStage() {

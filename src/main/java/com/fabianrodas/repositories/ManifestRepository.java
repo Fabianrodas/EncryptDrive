@@ -38,13 +38,39 @@ public class ManifestRepository {
         this.vault = vault;
     }
 
+    /**
+     * Decrypts the user's manifest. If it fails authentication, the newest
+     * authentic backup is restored and returned instead.
+     */
     public UserManifest load(UUID userId, UUID manifestId, byte[] userMasterKey)
+            throws VaultStorageException {
+
+        Path manifestFile = manifestFile(manifestId);
+
+        try {
+            return read(userId, manifestFile, userMasterKey);
+
+        } catch (VaultStorageException damaged) {
+            if (damaged.getReason() != VaultStorageException.Reason.CORRUPTED) {
+                throw damaged;
+            }
+
+            return rotator.recover(
+                    manifestFile,
+                    manifestBackupsDir(),
+                    BACKUP_GENERATIONS,
+                    file -> read(userId, file, userMasterKey)
+            ).orElseThrow(() -> damaged);
+        }
+    }
+
+    private UserManifest read(UUID userId, Path file, byte[] userMasterKey)
             throws VaultStorageException {
 
         String json;
 
         try {
-            json = Files.readString(manifestFile(manifestId), StandardCharsets.UTF_8);
+            json = Files.readString(file, StandardCharsets.UTF_8);
         } catch (NoSuchFileException e) {
             throw new VaultStorageException(VaultStorageException.Reason.CORRUPTED, e);
         } catch (IOException e) {
@@ -99,11 +125,7 @@ public class ManifestRepository {
             );
             Path manifestFile = manifestFile(manifestId);
 
-            rotator.rotate(
-                    manifestFile,
-                    VaultRepository.backupsDir(vault.root()).resolve(VaultRepository.MANIFESTS_DIR),
-                    BACKUP_GENERATIONS
-            );
+            rotator.rotate(manifestFile, manifestBackupsDir(), BACKUP_GENERATIONS);
             writer.write(manifestFile, gson.toJson(payload).getBytes(StandardCharsets.UTF_8));
 
         } catch (IOException e) {
@@ -124,5 +146,9 @@ public class ManifestRepository {
 
     private Path manifestFile(UUID manifestId) {
         return VaultRepository.manifestsDir(vault.root()).resolve(manifestId + ".enc");
+    }
+
+    private Path manifestBackupsDir() {
+        return VaultRepository.backupsDir(vault.root()).resolve(VaultRepository.MANIFESTS_DIR);
     }
 }

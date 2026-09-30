@@ -4,6 +4,7 @@ import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.models.ManifestEntryKind;
 import com.fabianrodas.services.FileService;
 import com.fabianrodas.services.FileServiceException;
+import com.fabianrodas.services.RecoveryService;
 import com.fabianrodas.services.SessionService;
 import java.io.File;
 import java.io.IOException;
@@ -403,6 +404,12 @@ public class FilesController implements Initializable {
             showError(describe(e));
         }
 
+        if (RecoveryService.takeRecoveryNotice()) {
+            feedbackLabel.getStyleClass().remove("success");
+            feedbackLabel.getStyleClass().add("notice");
+            feedbackLabel.setText(Formats.RECOVERY_NOTICE);
+        }
+
         updateActions();
     }
 
@@ -441,11 +448,13 @@ public class FilesController implements Initializable {
     }
 
     private void showError(String message) {
-        feedbackLabel.getStyleClass().remove("success");
+        feedbackLabel.getStyleClass().removeAll("success", "notice");
         feedbackLabel.setText(message);
     }
 
     private void showSuccess(String message) {
+        feedbackLabel.getStyleClass().remove("notice");
+
         if (!feedbackLabel.getStyleClass().contains("success")) {
             feedbackLabel.getStyleClass().add("success");
         }

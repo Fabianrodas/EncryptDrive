@@ -32,11 +32,35 @@ public final class UserRegistryRepository {
     private final BackupRotator rotator = new BackupRotator();
     private final Gson gson = new Gson();
 
+    /**
+     * Decrypts {@code users.enc}. If it fails authentication, the newest
+     * authentic backup is restored and returned instead.
+     */
     public UserRegistry load(VaultContext vault) throws VaultStorageException {
+        Path usersFile = VaultRepository.usersFile(vault.root());
+
+        try {
+            return read(vault, usersFile);
+
+        } catch (VaultStorageException damaged) {
+            if (damaged.getReason() != VaultStorageException.Reason.CORRUPTED) {
+                throw damaged;
+            }
+
+            return rotator.recover(
+                    usersFile,
+                    VaultRepository.backupsDir(vault.root()),
+                    BACKUP_GENERATIONS,
+                    file -> read(vault, file)
+            ).orElseThrow(() -> damaged);
+        }
+    }
+
+    private UserRegistry read(VaultContext vault, Path file) throws VaultStorageException {
         String json;
 
         try {
-            json = Files.readString(VaultRepository.usersFile(vault.root()), StandardCharsets.UTF_8);
+            json = Files.readString(file, StandardCharsets.UTF_8);
         } catch (NoSuchFileException e) {
             throw new VaultStorageException(VaultStorageException.Reason.CORRUPTED, e);
         } catch (IOException e) {

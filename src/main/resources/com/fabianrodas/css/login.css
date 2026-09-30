@@ -205,6 +205,10 @@
     -fx-text-fill: #DC2626;
 }
 
+.feedback-label.notice {
+    -fx-text-fill: #B45309;
+}
+
 .muted-label {
     -fx-font-size: 12px;
     -fx-text-fill: #64748B;

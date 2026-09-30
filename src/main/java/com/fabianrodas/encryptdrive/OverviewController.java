@@ -4,6 +4,7 @@ import com.fabianrodas.models.VaultContext;
 import com.fabianrodas.models.WorkspaceStats;
 import com.fabianrodas.services.FileService;
 import com.fabianrodas.services.FileServiceException;
+import com.fabianrodas.services.RecoveryService;
 import com.fabianrodas.services.SessionService;
 import com.fabianrodas.services.VaultSessionService;
 import java.net.URL;
@@ -69,6 +70,12 @@ public class OverviewController implements Initializable {
             encryptedSizeLabel.setText(Formats.bytes(stats.encryptedBytes()));
             trashCountLabel.setText(String.valueOf(stats.trashCount()));
             show(emptyStateCard, stats.activeFileCount() == 0);
+
+            if (RecoveryService.takeRecoveryNotice()) {
+                feedbackLabel.setText(Formats.RECOVERY_NOTICE);
+                feedbackLabel.getStyleClass().add("notice");
+                show(feedbackLabel, true);
+            }
 
         } catch (FileServiceException e) {
             feedbackLabel.setText("Your encrypted file list could not be read.");

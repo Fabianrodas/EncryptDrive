@@ -113,11 +113,13 @@ public final class VaultService {
                     SensitiveBytes.wrap(unwrapRegistryKey(header, vaultPassword)),
                     lock
             );
-            // Decrypting and parsing the registry proves the vault is intact.
+            // Decrypting and parsing the registry proves the vault is intact;
+            // a damaged registry is restored from an authentic backup here.
             registryRepository.load(context);
 
             VaultSessionService.open(context);
             opened = true;
+            removeStalePartials(vaultRoot);
             return context;
 
         } catch (VaultStorageException e) {
@@ -243,6 +245,14 @@ public final class VaultService {
                 case UNSUPPORTED_VERSION -> VaultException.Reason.UNSUPPORTED_VERSION;
                 case IO -> VaultException.Reason.STORAGE;
             }, e);
+        }
+    }
+
+    private static void removeStalePartials(Path vaultRoot) {
+        try {
+            new RecoveryService().cleanStalePartials(vaultRoot, Instant.now());
+        } catch (IOException ignored) {
+            // Housekeeping only; stale partial files are retried at the next open.
         }
     }
 

@@ -3,6 +3,7 @@ package com.fabianrodas.encryptdrive;
 import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.services.FileService;
 import com.fabianrodas.services.FileServiceException;
+import com.fabianrodas.services.RecoveryService;
 import com.fabianrodas.services.SessionService;
 import java.net.URL;
 import java.util.List;
@@ -151,6 +152,12 @@ public class TrashController implements Initializable {
             showError(FilesController.describe(e));
         }
 
+        if (RecoveryService.takeRecoveryNotice()) {
+            feedbackLabel.getStyleClass().remove("success");
+            feedbackLabel.getStyleClass().add("notice");
+            feedbackLabel.setText(Formats.RECOVERY_NOTICE);
+        }
+
         updateActions();
     }
 
@@ -163,11 +170,13 @@ public class TrashController implements Initializable {
     }
 
     private void showError(String message) {
-        feedbackLabel.getStyleClass().remove("success");
+        feedbackLabel.getStyleClass().removeAll("success", "notice");
         feedbackLabel.setText(message);
     }
 
     private void showSuccess(String message) {
+        feedbackLabel.getStyleClass().remove("notice");
+
         if (!feedbackLabel.getStyleClass().contains("success")) {
             feedbackLabel.getStyleClass().add("success");
         }

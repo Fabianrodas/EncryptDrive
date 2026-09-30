@@ -223,6 +223,10 @@
     -fx-text-fill: #16A34A;
 }
 
+.feedback-label.notice {
+    -fx-text-fill: #B45309;
+}
+
 /* Vault settings */
 
 .sync-note {

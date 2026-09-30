@@ -18,6 +18,10 @@ final class Formats {
 
     private static final String[] UNITS = {"KB", "MB", "GB", "TB"};
 
+    /** Shown once after damaged metadata was restored from an automatic backup. */
+    static final String RECOVERY_NOTICE = "Damaged vault data was restored from an automatic "
+            + "backup. Your most recent change may be missing.";
+
     private Formats() {
     }
 
