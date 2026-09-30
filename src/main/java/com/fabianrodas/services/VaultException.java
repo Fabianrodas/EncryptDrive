@@ -4,7 +4,14 @@ public final class VaultException extends Exception {
 
     public enum Reason {
         BUSY,
-        STORAGE
+        STORAGE,
+        NOT_A_VAULT,
+        CORRUPTED,
+        UNSUPPORTED_VERSION,
+        UNLOCK_FAILED,
+        ALREADY_EXISTS,
+        INVALID_PASSWORD,
+        NOT_OPEN
     }
 
     private final Reason reason;

@@ -1,13 +1,71 @@
 package com.fabianrodas.security;
 
+import com.fabianrodas.models.KdfConfig;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.Base64;
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
 import org.bouncycastle.crypto.params.Argon2Parameters;
 
 public final class Argon2KeyDeriver {
+
+    public static final String ALGORITHM = "Argon2id";
+
+    private static final int MAX_MEMORY_KIB = 1_048_576;
+    private static final int MAX_ITERATIONS = 10;
+    private static final int MAX_PARALLELISM = 8;
+
+    private static final SecureRandom RANDOM = new SecureRandom();
+
+    /** Production parameters with a fresh random salt. */
+    public KdfConfig newConfig() {
+        byte[] salt = new byte[CryptoConstants.SALT_BYTES];
+        RANDOM.nextBytes(salt);
+
+        return new KdfConfig(
+                ALGORITHM,
+                CryptoConstants.ARGON_MEMORY_KIB,
+                CryptoConstants.ARGON_ITERATIONS,
+                CryptoConstants.ARGON_PARALLELISM,
+                Base64.getEncoder().encodeToString(salt)
+        );
+    }
+
+    /**
+     * Derives from stored parameters. Stored configs may come from untrusted
+     * plaintext, so anything outside the supported bounds is rejected before
+     * memory is allocated.
+     */
+    public byte[] derive(char[] password, KdfConfig kdf) {
+        if (kdf == null
+                || !ALGORITHM.equals(kdf.getAlgorithm())
+                || kdf.getParallelism() < 1
+                || kdf.getParallelism() > MAX_PARALLELISM
+                || kdf.getMemoryKiB() < 8 * kdf.getParallelism()
+                || kdf.getMemoryKiB() > MAX_MEMORY_KIB
+                || kdf.getIterations() < 1
+                || kdf.getIterations() > MAX_ITERATIONS
+                || kdf.getSalt() == null) {
+            throw new IllegalArgumentException("Unsupported key derivation parameters.");
+        }
+
+        byte[] salt = Base64.getDecoder().decode(kdf.getSalt());
+
+        if (salt.length != CryptoConstants.SALT_BYTES) {
+            throw new IllegalArgumentException("Unsupported key derivation parameters.");
+        }
+
+        return derive(
+                password,
+                salt,
+                kdf.getMemoryKiB(),
+                kdf.getIterations(),
+                kdf.getParallelism()
+        );
+    }
 
     public byte[] derive(
             char[] password,
