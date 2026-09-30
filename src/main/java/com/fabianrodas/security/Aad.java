@@ -27,6 +27,14 @@ public final class Aad {
         return of("manifest|v1|" + vaultId + "|" + userId);
     }
 
+    public static byte[] fileKey(String vaultId, String userId, String fileId) {
+        return of("file-key|v1|" + vaultId + "|" + userId + "|" + fileId);
+    }
+
+    public static byte[] fileContent(String vaultId, String userId, String fileId) {
+        return of("file|v1|" + vaultId + "|" + userId + "|" + fileId);
+    }
+
     private static byte[] of(String context) {
         return ("EncryptDrive|" + context).getBytes(StandardCharsets.UTF_8);
     }

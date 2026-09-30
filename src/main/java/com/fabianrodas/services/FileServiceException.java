@@ -6,7 +6,13 @@ public final class FileServiceException extends Exception {
         INVALID_NAME,
         DUPLICATE_NAME,
         NOT_FOUND,
-        NOT_A_FOLDER
+        NOT_A_FOLDER,
+        PROTECTED,
+        NOT_IN_TRASH,
+        SOURCE_UNREADABLE,
+        INTEGRITY,
+        CORRUPTED,
+        STORAGE
     }
 
     private final Reason reason;

@@ -31,6 +31,16 @@ class AadTest {
         assertEquals("EncryptDrive|manifest|v1|V|U", text(Aad.manifest("V", "U")));
     }
 
+    @Test
+    void fileKeyContextMatchesSpec() {
+        assertEquals("EncryptDrive|file-key|v1|V|U|F", text(Aad.fileKey("V", "U", "F")));
+    }
+
+    @Test
+    void fileContentContextMatchesSpec() {
+        assertEquals("EncryptDrive|file|v1|V|U|F", text(Aad.fileContent("V", "U", "F")));
+    }
+
     private static String text(byte[] aad) {
         return new String(aad, UTF_8);
     }

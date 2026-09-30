@@ -90,4 +90,28 @@ public final class ManifestEntry {
     public void setDeletedAt(String deletedAt) {
         this.deletedAt = deletedAt;
     }
+
+    public void setParentId(UUID parentId) {
+        this.parentId = parentId;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setOriginalParentId(UUID originalParentId) {
+        this.originalParentId = originalParentId;
+    }
+
+    public void setContent(
+            long plainSize,
+            UUID blobId,
+            EncryptedPayload wrappedFileKey,
+            String contentNonce
+    ) {
+        this.plainSize = plainSize;
+        this.blobId = blobId;
+        this.wrappedFileKey = wrappedFileKey;
+        this.contentNonce = contentNonce;
+    }
 }

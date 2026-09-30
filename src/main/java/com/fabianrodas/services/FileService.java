@@ -1,0 +1,646 @@
+package com.fabianrodas.services;
+
+import com.fabianrodas.models.ManifestEntry;
+import com.fabianrodas.models.ManifestEntryKind;
+import com.fabianrodas.models.UserManifest;
+import com.fabianrodas.models.UserSessionIdentity;
+import com.fabianrodas.models.VaultContext;
+import com.fabianrodas.models.WorkspaceStats;
+import com.fabianrodas.repositories.BlobRepository;
+import com.fabianrodas.repositories.ManifestRepository;
+import com.fabianrodas.repositories.VaultStorageException;
+import com.fabianrodas.security.Aad;
+import com.fabianrodas.security.AesGcmService;
+import com.fabianrodas.security.CryptoConstants;
+import com.fabianrodas.security.CryptoException;
+import com.fabianrodas.security.SensitiveBytes;
+import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Supplier;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+/**
+ * Files and folders of the signed-in user. Every file has its own random key
+ * (FDEK), wrapped under the user master key (UMK) and stored only in the
+ * user's encrypted manifest. A manifest entry is committed only after its
+ * blob is complete, so the manifest never references a missing blob.
+ *
+ * The UMK is never held here: each operation takes a fresh copy from the
+ * supplier and wipes it, so logging out ends access.
+ */
+public final class FileService {
+
+    private static final Object MANIFEST_LOCK = new Object();
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final int MAX_FOLDER_DEPTH = 10_000;
+
+    private static final Pattern UNSAFE_CHARACTERS
+            = Pattern.compile("[<>:\"/\\\\|?*\\x00-\\x1F]");
+
+    private static final Pattern RESERVED_NAMES
+            = Pattern.compile("(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?");
+
+    private static final Comparator<ManifestEntry> FOLDERS_THEN_NAME = Comparator
+            .comparing((ManifestEntry entry) -> entry.getKind() != ManifestEntryKind.FOLDER)
+            .thenComparing(ManifestEntry::getName, String.CASE_INSENSITIVE_ORDER);
+
+    private final VaultContext vault;
+    private final UserSessionIdentity identity;
+    private final Supplier<SensitiveBytes> userMasterKey;
+    private final ManifestRepository manifestRepository;
+    private final BlobRepository blobRepository;
+    private final StreamingFileCryptoService crypto;
+    private final AesGcmService aes = new AesGcmService();
+
+    public FileService(
+            VaultContext vault,
+            UserSessionIdentity identity,
+            Supplier<SensitiveBytes> userMasterKey
+    ) {
+        this(
+                vault,
+                identity,
+                userMasterKey,
+                new ManifestRepository(vault),
+                new BlobRepository(),
+                new StreamingFileCryptoService()
+        );
+    }
+
+    FileService(
+            VaultContext vault,
+            UserSessionIdentity identity,
+            Supplier<SensitiveBytes> userMasterKey,
+            ManifestRepository manifestRepository,
+            BlobRepository blobRepository,
+            StreamingFileCryptoService crypto
+    ) {
+        this.vault = vault;
+        this.identity = identity;
+        this.userMasterKey = userMasterKey;
+        this.manifestRepository = manifestRepository;
+        this.blobRepository = blobRepository;
+        this.crypto = crypto;
+    }
+
+    /** Files of the user signed in to the open vault. */
+    public static FileService forCurrentSession() {
+        return new FileService(
+                VaultSessionService.current(),
+                SessionService.identity(),
+                SessionService::copyUserMasterKey
+        );
+    }
+
+    public UUID rootFolderId() throws FileServiceException {
+        return withUserMasterKey(key -> load(key).getRootFolderId());
+    }
+
+    /** Active children, folders first, then by name. */
+    public List<ManifestEntry> listChildren(UUID folderId) throws FileServiceException {
+        return withUserMasterKey(key -> new ManifestService(load(key))
+                .listChildren(folderId, false).stream()
+                .sorted(FOLDERS_THEN_NAME)
+                .toList());
+    }
+
+    /** Folders from the root down to {@code folderId}, for breadcrumbs. */
+    public List<ManifestEntry> pathTo(UUID folderId) throws FileServiceException {
+        return withUserMasterKey(key -> {
+            ManifestService rules = new ManifestService(load(key));
+            LinkedList<ManifestEntry> path = new LinkedList<>();
+
+            for (ManifestEntry entry = rules.find(folderId);
+                    entry != null && path.size() <= MAX_FOLDER_DEPTH;
+                    entry = entry.getParentId() == null ? null : rules.find(entry.getParentId())) {
+                path.addFirst(entry);
+            }
+
+            return path;
+        });
+    }
+
+    /** Entries the user moved to the trash, newest first. */
+    public List<ManifestEntry> listTrash() throws FileServiceException {
+        return withUserMasterKey(key -> load(key).getEntries().stream()
+                .filter(FileService::isTrashRoot)
+                .sorted(Comparator.comparing(ManifestEntry::getDeletedAt).reversed())
+                .toList());
+    }
+
+    public ManifestEntry createFolder(String name, UUID parentFolderId)
+            throws FileServiceException {
+
+        return modify(manifest -> new ManifestService(manifest).createFolder(parentFolderId, name));
+    }
+
+    /**
+     * Encrypts a copy of {@code source} into the vault. The source file is
+     * never modified or deleted.
+     */
+    public ManifestEntry importFile(Path source, UUID parentFolderId)
+            throws FileServiceException {
+
+        if (!Files.isRegularFile(source) || !Files.isReadable(source)) {
+            throw new FileServiceException(FileServiceException.Reason.SOURCE_UNREADABLE);
+        }
+
+        String name = source.getFileName().toString();
+
+        return withUserMasterKey(key -> {
+            // Fail before encrypting; the name is checked again at commit time.
+            new ManifestService(load(key)).requireAvailableName(parentFolderId, name);
+
+            UUID fileId = UUID.randomUUID();
+            UUID blobId = UUID.randomUUID();
+            byte[] fileKey = randomBytes(CryptoConstants.KEY_BYTES);
+            byte[] contentNonce = randomBytes(CryptoConstants.GCM_NONCE_BYTES);
+
+            try {
+                long plainSize = writeBlob(source, blobId, fileId, fileKey, contentNonce);
+
+                try {
+                    return modify(manifest -> {
+                        ManifestEntry entry = new ManifestEntry(
+                                fileId,
+                                ManifestEntryKind.FILE,
+                                parentFolderId,
+                                new ManifestService(manifest).requireAvailableName(parentFolderId, name),
+                                Instant.now().toString()
+                        );
+                        entry.setContent(
+                                plainSize,
+                                blobId,
+                                aes.wrapKey(fileKey, key, Aad.fileKey(vaultId(), userId(), fileId.toString())),
+                                Base64.getEncoder().encodeToString(contentNonce)
+                        );
+                        manifest.getEntries().add(entry);
+                        return entry;
+                    });
+
+                } catch (FileServiceException | RuntimeException e) {
+                    deleteBlobQuietly(blobId);
+                    throw e;
+                }
+
+            } finally {
+                Arrays.fill(fileKey, (byte) 0);
+            }
+        });
+    }
+
+    /**
+     * Writes plaintext to {@code destination}: the file itself, or for a
+     * folder a directory holding its active descendants. Existing files at the
+     * destination are replaced, so callers confirm overwrites first. Each file
+     * is decrypted to a partial file that is renamed only after the GCM tag
+     * verifies.
+     */
+    public void exportEntry(UUID entryId, Path destination) throws FileServiceException {
+        withUserMasterKey(key -> {
+            ManifestService rules = new ManifestService(load(key));
+            ManifestEntry entry = rules.find(entryId);
+
+            if (entry == null || entry.getDeletedAt() != null) {
+                throw new FileServiceException(FileServiceException.Reason.NOT_FOUND);
+            }
+
+            export(rules, entry, destination.toAbsolutePath().normalize(), key);
+            return null;
+        });
+    }
+
+    /** Soft delete: only the encrypted manifest changes. */
+    public void moveToTrash(UUID entryId) throws FileServiceException {
+        modify(manifest -> {
+            ManifestService rules = new ManifestService(manifest);
+            ManifestEntry entry = rules.find(entryId);
+
+            if (entryId.equals(manifest.getRootFolderId())) {
+                throw new FileServiceException(FileServiceException.Reason.PROTECTED);
+            }
+
+            if (entry == null || entry.getDeletedAt() != null) {
+                throw new FileServiceException(FileServiceException.Reason.NOT_FOUND);
+            }
+
+            String deletedAt = Instant.now().toString();
+            entry.setOriginalParentId(entry.getParentId());
+
+            for (ManifestEntry item : subtree(rules, entry)) {
+                if (item.getDeletedAt() == null) {
+                    item.setDeletedAt(deletedAt);
+                }
+            }
+
+            return null;
+        });
+    }
+
+    /**
+     * Restores a trashed entry and everything trashed with it into its
+     * original folder, or into the root when that folder is gone. The entry is
+     * renamed if its name has been taken meanwhile.
+     */
+    public void restore(UUID entryId) throws FileServiceException {
+        modify(manifest -> {
+            ManifestService rules = new ManifestService(manifest);
+            ManifestEntry entry = rules.find(entryId);
+
+            if (entry == null || !isTrashRoot(entry)) {
+                throw new FileServiceException(FileServiceException.Reason.NOT_FOUND);
+            }
+
+            ManifestEntry original = rules.find(entry.getOriginalParentId());
+            UUID target = original != null
+                    && original.getKind() == ManifestEntryKind.FOLDER
+                    && original.getDeletedAt() == null
+                    ? original.getEntryId()
+                    : manifest.getRootFolderId();
+            String deletedAt = entry.getDeletedAt();
+
+            for (ManifestEntry item : subtree(rules, entry)) {
+                if (deletedAt.equals(item.getDeletedAt())) {
+                    item.setDeletedAt(null);
+                }
+            }
+
+            entry.setOriginalParentId(null);
+            entry.setParentId(target);
+            entry.setName(availableName(rules, target, entry));
+            return null;
+        });
+    }
+
+    /**
+     * Removes a trashed entry and its descendants. Blobs are deleted first, so
+     * a failure leaves the entries in the trash to retry.
+     */
+    public void permanentlyDelete(UUID entryId) throws FileServiceException {
+        modify(manifest -> {
+            ManifestService rules = new ManifestService(manifest);
+            ManifestEntry entry = rules.find(entryId);
+
+            if (entry == null) {
+                throw new FileServiceException(FileServiceException.Reason.NOT_FOUND);
+            }
+
+            if (entry.getDeletedAt() == null) {
+                throw new FileServiceException(FileServiceException.Reason.NOT_IN_TRASH);
+            }
+
+            List<ManifestEntry> doomed = subtree(rules, entry);
+
+            for (ManifestEntry item : doomed) {
+                if (item.getKind() == ManifestEntryKind.FILE) {
+                    try {
+                        blobRepository.delete(vault.root(), item.getBlobId());
+                    } catch (IOException e) {
+                        throw new FileServiceException(FileServiceException.Reason.STORAGE, e);
+                    }
+                }
+            }
+
+            manifest.getEntries().removeAll(doomed);
+            return null;
+        });
+    }
+
+    public WorkspaceStats stats() throws FileServiceException {
+        return withUserMasterKey(key -> {
+            int activeFiles = 0;
+            long activeBytes = 0;
+            long encryptedBytes = 0;
+            int trash = 0;
+
+            for (ManifestEntry entry : load(key).getEntries()) {
+                if (isTrashRoot(entry)) {
+                    trash++;
+                }
+
+                if (entry.getKind() == ManifestEntryKind.FILE) {
+                    encryptedBytes += blobSize(entry.getBlobId());
+
+                    if (entry.getDeletedAt() == null) {
+                        activeFiles++;
+                        activeBytes += entry.getPlainSize();
+                    }
+                }
+            }
+
+            return new WorkspaceStats(activeFiles, activeBytes, encryptedBytes, trash);
+        });
+    }
+
+    /**
+     * A file or folder name Windows accepts: reserved characters and control
+     * characters become {@code _}, trailing dots and spaces are dropped, and
+     * device names such as {@code CON} get a {@code _} prefix.
+     */
+    public static String safeFileName(String name) {
+        String safe = UNSAFE_CHARACTERS.matcher(name).replaceAll("_").replaceAll("[. ]+$", "");
+
+        if (safe.isEmpty()) {
+            return "_";
+        }
+
+        return RESERVED_NAMES.matcher(safe).matches() ? "_" + safe : safe;
+    }
+
+    // ---------------------------------------------------------------- import
+
+    private long writeBlob(
+            Path source,
+            UUID blobId,
+            UUID fileId,
+            byte[] fileKey,
+            byte[] contentNonce
+    ) throws FileServiceException {
+
+        Path part = null;
+
+        try {
+            part = blobRepository.newPart(vault.root(), blobId);
+            long plainSize = crypto.encrypt(
+                    source,
+                    part,
+                    fileKey,
+                    contentNonce,
+                    Aad.fileContent(vaultId(), userId(), fileId.toString())
+            ).plainSize();
+            blobRepository.commit(vault.root(), blobId);
+            return plainSize;
+
+        } catch (IOException e) {
+            deleteQuietly(part);
+            throw new FileServiceException(
+                    Files.isReadable(source)
+                            ? FileServiceException.Reason.STORAGE
+                            : FileServiceException.Reason.SOURCE_UNREADABLE,
+                    e
+            );
+        }
+    }
+
+    // ---------------------------------------------------------------- export
+
+    private void export(
+            ManifestService rules,
+            ManifestEntry entry,
+            Path target,
+            byte[] key
+    ) throws FileServiceException {
+
+        if (entry.getKind() == ManifestEntryKind.FILE) {
+            exportFile(entry, target, key);
+            return;
+        }
+
+        try {
+            Files.createDirectories(target);
+        } catch (IOException e) {
+            throw new FileServiceException(FileServiceException.Reason.STORAGE, e);
+        }
+
+        Set<String> usedNames = new HashSet<>();
+
+        for (ManifestEntry child : rules.listChildren(entry.getEntryId(), false).stream()
+                .sorted(FOLDERS_THEN_NAME)
+                .toList()) {
+
+            String name = safeFileName(child.getName());
+            boolean folder = child.getKind() == ManifestEntryKind.FOLDER;
+
+            for (int copy = 2; !usedNames.add(name.toLowerCase(Locale.ROOT)); copy++) {
+                name = withCopyNumber(safeFileName(child.getName()), copy, folder);
+            }
+
+            Path childTarget = target.resolve(name).normalize();
+
+            if (!childTarget.getParent().equals(target)) {
+                throw new FileServiceException(FileServiceException.Reason.INVALID_NAME);
+            }
+
+            export(rules, child, childTarget, key);
+        }
+    }
+
+    private void exportFile(ManifestEntry entry, Path destination, byte[] key)
+            throws FileServiceException {
+
+        Path blob = blobRepository.blobPath(vault.root(), entry.getBlobId());
+        byte[] fileKey = null;
+        Path part = null;
+
+        try {
+            if (!Files.isRegularFile(blob)) {
+                throw new FileServiceException(FileServiceException.Reason.INTEGRITY);
+            }
+
+            fileKey = aes.unwrapKey(
+                    entry.getWrappedFileKey(),
+                    key,
+                    Aad.fileKey(vaultId(), userId(), entry.getEntryId().toString())
+            );
+            byte[] contentNonce = Base64.getDecoder().decode(entry.getContentNonce());
+
+            Files.createDirectories(destination.getParent());
+            part = Files.createTempFile(
+                    destination.getParent(),
+                    destination.getFileName() + ".",
+                    ".part"
+            );
+            crypto.decrypt(
+                    blob,
+                    part,
+                    fileKey,
+                    contentNonce,
+                    Aad.fileContent(vaultId(), userId(), entry.getEntryId().toString())
+            );
+            moveIntoPlace(part, destination);
+
+        } catch (CryptoException | IllegalArgumentException e) {
+            throw new FileServiceException(FileServiceException.Reason.INTEGRITY, e);
+        } catch (IOException e) {
+            throw new FileServiceException(FileServiceException.Reason.STORAGE, e);
+        } finally {
+            if (fileKey != null) {
+                Arrays.fill(fileKey, (byte) 0);
+            }
+
+            deleteQuietly(part);
+        }
+    }
+
+    private static void moveIntoPlace(Path part, Path destination) throws IOException {
+        try {
+            Files.move(
+                    part,
+                    destination,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+            );
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(part, destination, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    // --------------------------------------------------------------- helpers
+
+    @FunctionalInterface
+    private interface KeyedWork<T> {
+        T run(byte[] userMasterKey) throws FileServiceException;
+    }
+
+    @FunctionalInterface
+    private interface ManifestChange<T> {
+        T apply(UserManifest manifest) throws FileServiceException;
+    }
+
+    private <T> T withUserMasterKey(KeyedWork<T> work) throws FileServiceException {
+        try (SensitiveBytes holder = userMasterKey.get()) {
+            byte[] key = holder.copy();
+
+            try {
+                return work.run(key);
+            } finally {
+                Arrays.fill(key, (byte) 0);
+            }
+        }
+    }
+
+    /** Load, change, and save the manifest as one step for this process. */
+    private <T> T modify(ManifestChange<T> change) throws FileServiceException {
+        synchronized (MANIFEST_LOCK) {
+            return withUserMasterKey(key -> {
+                UserManifest manifest = load(key);
+                T result = change.apply(manifest);
+                save(manifest, key);
+                return result;
+            });
+        }
+    }
+
+    private UserManifest load(byte[] key) throws FileServiceException {
+        try {
+            return manifestRepository.load(identity.userId(), identity.manifestId(), key);
+        } catch (VaultStorageException e) {
+            throw new FileServiceException(
+                    e.getReason() == VaultStorageException.Reason.IO
+                            ? FileServiceException.Reason.STORAGE
+                            : FileServiceException.Reason.CORRUPTED,
+                    e
+            );
+        }
+    }
+
+    private void save(UserManifest manifest, byte[] key) throws FileServiceException {
+        try {
+            manifestRepository.save(manifest, identity.manifestId(), key);
+        } catch (VaultStorageException e) {
+            throw new FileServiceException(FileServiceException.Reason.STORAGE, e);
+        }
+    }
+
+    /** The entry and all of its descendants, trashed or not. */
+    private static List<ManifestEntry> subtree(ManifestService rules, ManifestEntry top) {
+        List<ManifestEntry> result = new ArrayList<>();
+        Set<UUID> visited = new HashSet<>();
+        LinkedList<ManifestEntry> pending = new LinkedList<>(List.of(top));
+
+        while (!pending.isEmpty()) {
+            ManifestEntry entry = pending.removeFirst();
+
+            if (visited.add(entry.getEntryId())) {
+                result.add(entry);
+                pending.addAll(rules.listChildren(entry.getEntryId(), true));
+            }
+        }
+
+        return result;
+    }
+
+    private static boolean isTrashRoot(ManifestEntry entry) {
+        return entry.getDeletedAt() != null && entry.getOriginalParentId() != null;
+    }
+
+    private static String availableName(ManifestService rules, UUID folderId, ManifestEntry entry) {
+        Set<String> taken = rules.listChildren(folderId, false).stream()
+                .filter(sibling -> sibling != entry)
+                .map(sibling -> sibling.getName().toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        boolean folder = entry.getKind() == ManifestEntryKind.FOLDER;
+        String candidate = entry.getName();
+
+        for (int copy = 2; taken.contains(candidate.toLowerCase(Locale.ROOT)); copy++) {
+            candidate = withCopyNumber(entry.getName(), copy, folder);
+        }
+
+        return candidate;
+    }
+
+    /** "report.pdf" becomes "report (2).pdf"; folders get the suffix at the end. */
+    private static String withCopyNumber(String name, int copy, boolean folder) {
+        int dot = name.lastIndexOf('.');
+
+        return folder || dot <= 0
+                ? name + " (" + copy + ")"
+                : name.substring(0, dot) + " (" + copy + ")" + name.substring(dot);
+    }
+
+    private long blobSize(UUID blobId) throws FileServiceException {
+        try {
+            return blobRepository.size(vault.root(), blobId);
+        } catch (IOException e) {
+            throw new FileServiceException(FileServiceException.Reason.STORAGE, e);
+        }
+    }
+
+    private void deleteBlobQuietly(UUID blobId) {
+        try {
+            blobRepository.delete(vault.root(), blobId);
+        } catch (IOException ignored) {
+            // An unreferenced blob is unreadable ciphertext; leaving it is harmless.
+        }
+    }
+
+    private static void deleteQuietly(Path path) {
+        if (path != null) {
+            try {
+                Files.deleteIfExists(path);
+            } catch (IOException ignored) {
+                // Best effort; stale partial files are cleaned up on vault open.
+            }
+        }
+    }
+
+    private String vaultId() {
+        return vault.vaultId();
+    }
+
+    private String userId() {
+        return identity.userId().toString();
+    }
+
+    private static byte[] randomBytes(int length) {
+        byte[] bytes = new byte[length];
+        RANDOM.nextBytes(bytes);
+        return bytes;
+    }
+}

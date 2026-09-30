@@ -22,7 +22,7 @@ import java.util.UUID;
  * {@code manifests/<manifestId>.enc}: one user's logical filesystem,
  * encrypted under that user's master key and bound to the user by AAD.
  */
-public final class ManifestRepository {
+public class ManifestRepository {
 
     public static final int FORMAT_VERSION = 1;
 

@@ -1,6 +1,7 @@
 package com.fabianrodas.encryptdrive;
 
 import com.fabianrodas.models.VaultContext;
+import com.fabianrodas.services.FileService;
 import com.fabianrodas.services.VaultException;
 import com.fabianrodas.services.VaultService;
 import com.fabianrodas.utils.WindowDragHandler;
@@ -11,7 +12,6 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.ResourceBundle;
 import java.util.concurrent.Callable;
-import java.util.regex.Pattern;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.DoubleBinding;
 import javafx.fxml.FXML;
@@ -35,12 +35,6 @@ import javafx.stage.Stage;
  */
 
 public class VaultSelectionController implements Initializable {
-
-    private static final Pattern INVALID_NAME_CHARACTERS
-            = Pattern.compile("[<>:\"/\\\\|?*\\x00-\\x1F]");
-
-    private static final Pattern RESERVED_NAMES
-            = Pattern.compile("(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?");
 
     @FXML
     private BorderPane root;
@@ -202,11 +196,7 @@ public class VaultSelectionController implements Initializable {
             return "Enter a name for the vault folder.";
         }
 
-        if (name.equals(".")
-                || name.equals("..")
-                || name.endsWith(".")
-                || INVALID_NAME_CHARACTERS.matcher(name).find()
-                || RESERVED_NAMES.matcher(name).matches()) {
+        if (!FileService.safeFileName(name).equals(name)) {
             return "Use a folder name without \\ / : * ? \" < > | or a trailing dot.";
         }
 

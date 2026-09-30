@@ -27,7 +27,7 @@ import org.bouncycastle.crypto.params.KeyParameter;
  * Both methods write only to the given part file, which the caller owns and
  * renames on success; on any failure the part file is deleted.
  */
-public final class StreamingFileCryptoService {
+public class StreamingFileCryptoService {
 
     private static final int BUFFER_BYTES = 64 * 1024;
 
