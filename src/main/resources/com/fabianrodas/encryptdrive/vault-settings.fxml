@@ -111,7 +111,6 @@
                                                text="New vault password" />
 
                                         <PasswordField fx:id="newPasswordField"
-                                                       promptText="At least 12 characters"
                                                        styleClass="profile-input-field" />
                                     </children>
                                 </VBox>

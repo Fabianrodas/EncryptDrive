@@ -31,7 +31,7 @@ import java.util.UUID;
 public final class AuthService {
 
     public static final int MIN_USERNAME_LENGTH = 3;
-    public static final int MIN_PASSWORD_LENGTH = 8;
+    public static final int MIN_PASSWORD_LENGTH = 12;
 
     private static final SecureRandom RANDOM = new SecureRandom();
 

@@ -57,6 +57,7 @@ public class VaultSettingsController implements Initializable {
     @Override
     public void initialize(URL url, ResourceBundle rb) {
         appVersionLabel.setText(App.version());
+        newPasswordField.setPromptText("At least " + VaultService.MIN_PASSWORD_LENGTH + " characters");
 
         if (!VaultSessionService.isOpen()) {
             return;
@@ -82,7 +83,8 @@ public class VaultSettingsController implements Initializable {
         }
 
         if (newPassword.length() < VaultService.MIN_PASSWORD_LENGTH) {
-            showError("The new vault password must contain at least 12 characters.");
+            showError("The new vault password must contain at least "
+                    + VaultService.MIN_PASSWORD_LENGTH + " characters.");
             return;
         }
 

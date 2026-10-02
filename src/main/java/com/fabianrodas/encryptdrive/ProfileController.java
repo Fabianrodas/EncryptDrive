@@ -54,6 +54,8 @@ public class ProfileController implements Initializable {
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
+        newPasswordField.setPromptText("At least " + AuthService.MIN_PASSWORD_LENGTH + " characters");
+
         if (!SessionService.isActive()) {
             return;
         }
@@ -85,7 +87,7 @@ public class ProfileController implements Initializable {
         }
 
         if (newPassword.length() < AuthService.MIN_PASSWORD_LENGTH) {
-            showError("Your new password must contain at least 8 characters.");
+            showError("Your new password must contain at least " + AuthService.MIN_PASSWORD_LENGTH + " characters.");
             return;
         }
 

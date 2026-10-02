@@ -84,6 +84,10 @@ public class RegisterController implements Initializable {
         visibleConfirmPasswordField.textProperty()
                 .bindBidirectional(confirmPasswordField.textProperty());
 
+        String hint = "At least " + AuthService.MIN_PASSWORD_LENGTH + " characters";
+        passwordField.setPromptText(hint);
+        visiblePasswordField.setPromptText(hint);
+
         vaultNameLabel.setText(App.openVaultName());
         configureResponsiveForm();
     }
@@ -187,13 +191,13 @@ public class RegisterController implements Initializable {
             return;
         }
 
-        if (username.length() < 3) {
-            showError("Username must contain at least 3 characters.");
+        if (username.length() < AuthService.MIN_USERNAME_LENGTH) {
+            showError("Username must contain at least " + AuthService.MIN_USERNAME_LENGTH + " characters.");
             return;
         }
 
-        if (password.length() < 8) {
-            showError("Password must contain at least 8 characters.");
+        if (password.length() < AuthService.MIN_PASSWORD_LENGTH) {
+            showError("Password must contain at least " + AuthService.MIN_PASSWORD_LENGTH + " characters.");
             return;
         }
 
@@ -258,14 +262,6 @@ public class RegisterController implements Initializable {
         feedbackLabel.getStyleClass().remove("success");
     }
 
-    private void showSuccess(String message) {
-        feedbackLabel.setText(message);
-
-        if (!feedbackLabel.getStyleClass().contains("success")) {
-            feedbackLabel.getStyleClass().add("success");
-        }
-    }
-    
     private void showRegistrationSuccessPopup() {
         try {
             FXMLLoader loader = new FXMLLoader(

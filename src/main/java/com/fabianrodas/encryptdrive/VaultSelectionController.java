@@ -98,6 +98,8 @@ public class VaultSelectionController implements Initializable {
         visibleOpenPasswordField.textProperty()
                 .bindBidirectional(openPasswordField.textProperty());
 
+        createPasswordField.setPromptText("At least " + VaultService.MIN_PASSWORD_LENGTH + " characters");
+
         ToggleGroup modes = new ToggleGroup();
         openModeButton.setToggleGroup(modes);
         createModeButton.setToggleGroup(modes);
@@ -243,7 +245,7 @@ public class VaultSelectionController implements Initializable {
         String password = createPasswordField.getText();
 
         if (password.length() < VaultService.MIN_PASSWORD_LENGTH) {
-            showError("The vault password must contain at least 12 characters.");
+            showError("The vault password must contain at least " + VaultService.MIN_PASSWORD_LENGTH + " characters.");
             return;
         }
 
@@ -319,7 +321,8 @@ public class VaultSelectionController implements Initializable {
             case CORRUPTED -> "The vault data is damaged and could not be opened.";
             case UNSUPPORTED_VERSION -> "This vault was created by a newer version of EncryptDrive.";
             case ALREADY_EXISTS -> "A folder with that name already exists there and is not empty.";
-            case INVALID_PASSWORD -> "The vault password must contain at least 12 characters.";
+            case INVALID_PASSWORD -> "The vault password must contain at least "
+                    + VaultService.MIN_PASSWORD_LENGTH + " characters.";
             case STORAGE, NOT_OPEN -> "The vault folder could not be accessed.";
         };
     }

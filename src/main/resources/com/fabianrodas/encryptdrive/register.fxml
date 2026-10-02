@@ -199,12 +199,10 @@
                                                     <children>
                                                         <TextField fx:id="visiblePasswordField"
                                                                    managed="false"
-                                                                   promptText="At least 8 characters"
                                                                    styleClass="input-field"
                                                                    visible="false" />
 
                                                         <PasswordField fx:id="passwordField"
-                                                                       promptText="At least 8 characters"
                                                                        styleClass="input-field" />
                                                     </children>
                                                 </StackPane>

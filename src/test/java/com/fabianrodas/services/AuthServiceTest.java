@@ -7,18 +7,30 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.fabianrodas.models.EncryptedPayload;
+import com.fabianrodas.models.KdfConfig;
 import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.models.ManifestEntryKind;
 import com.fabianrodas.models.UserLoginResult;
 import com.fabianrodas.models.UserManifest;
+import com.fabianrodas.models.UserRecord;
+import com.fabianrodas.models.UserRegistry;
 import com.fabianrodas.models.UserSessionIdentity;
 import com.fabianrodas.models.VaultContext;
 import com.fabianrodas.repositories.ManifestRepository;
+import com.fabianrodas.repositories.UserRegistryRepository;
+import com.fabianrodas.security.Aad;
+import com.fabianrodas.security.AesGcmService;
+import com.fabianrodas.security.Argon2KeyDeriver;
 import com.fabianrodas.security.SensitiveBytes;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -207,6 +219,76 @@ class AuthServiceTest {
                 }
             }
         }
+    }
+
+    @Test
+    void newAccountsNeedTwelveCharacterPasswords() throws Exception {
+        assertReason(
+                AuthException.Reason.INVALID_INPUT,
+                () -> auth.register("Short Pass", "shortpass", "elevenchars".toCharArray())
+        );
+
+        UserSessionIdentity user = auth.register("Long Pass", "longpass", "twelve chars".toCharArray());
+
+        assertEquals(user, auth.login("longpass", "twelve chars".toCharArray()).identity());
+    }
+
+    @Test
+    void passwordsAreNotTrimmed() throws Exception {
+        auth.register("Space User", "spaceuser", "elevenchars ".toCharArray());
+
+        assertReason(
+                AuthException.Reason.INVALID_CREDENTIALS,
+                () -> auth.login("spaceuser", "elevenchars".toCharArray())
+        );
+        auth.login("spaceuser", "elevenchars ".toCharArray()).userMasterKey().close();
+    }
+
+    @Test
+    void changedPasswordsNeedTwelveCharacters() throws Exception {
+        UserSessionIdentity user = auth.register("Example User", "ExampleUser", PASSWORD.toCharArray());
+
+        assertReason(
+                AuthException.Reason.INVALID_INPUT,
+                () -> auth.changePassword(user.userId(), PASSWORD.toCharArray(), "elevenchars".toCharArray())
+        );
+        auth.login("ExampleUser", PASSWORD.toCharArray()).userMasterKey().close();
+    }
+
+    @Test
+    void preReleaseShortPasswordStillLogsIn() throws Exception {
+        UserSessionIdentity legacy = addPreReleaseAccount("legacy", "short123");
+
+        assertEquals(legacy, auth.login("legacy", "short123".toCharArray()).identity());
+        assertReason(
+                AuthException.Reason.INVALID_INPUT,
+                () -> auth.changePassword(legacy.userId(), "short123".toCharArray(), "short456".toCharArray())
+        );
+        auth.changePassword(legacy.userId(), "short123".toCharArray(), "a much longer one".toCharArray());
+        assertEquals(legacy, auth.login("legacy", "a much longer one".toCharArray()).identity());
+    }
+
+    /** An account as an 8-character-minimum development build created it. */
+    private UserSessionIdentity addPreReleaseAccount(String username, String password) throws Exception {
+        Argon2KeyDeriver deriver = new Argon2KeyDeriver();
+        KdfConfig kdf = deriver.newConfig();
+        UUID userId = UUID.randomUUID();
+        UUID manifestId = UUID.randomUUID();
+        byte[] userMasterKey = new byte[32];
+        new SecureRandom().nextBytes(userMasterKey);
+        byte[] keyEncryptionKey = deriver.derive(password.toCharArray(), kdf);
+        EncryptedPayload wrapped = new AesGcmService().wrapKey(
+                userMasterKey, keyEncryptionKey, Aad.userKey(vault.vaultId(), userId.toString())
+        );
+        new ManifestRepository(vault).save(ManifestService.newManifest(userId), manifestId, userMasterKey);
+        UserRegistryRepository registries = new UserRegistryRepository();
+        UserRegistry registry = registries.load(vault);
+        registry.getUsers().add(new UserRecord(
+                userId.toString(), "Legacy User", username, username.toLowerCase(Locale.ROOT),
+                Instant.now().toString(), manifestId.toString(), kdf, wrapped
+        ));
+        registries.save(vault, registry);
+        return new UserSessionIdentity(userId, "Legacy User", username, manifestId);
     }
 
     private byte[] userMasterKey(String username, String password) throws AuthException {
