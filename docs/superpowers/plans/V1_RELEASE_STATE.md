@@ -8,11 +8,11 @@ Updated after every task. Git history and test output are the record; this is th
 |---|---|
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
-| current phase | 01-foundation done; next 02-storage-security |
-| current task | T11 done (next: T12) |
-| last completed commit | `0c87f0e fix: route every exit path through one busy-aware close guard` |
-| tests last run | `mvn -B clean verify` (2026-10-02, T11 fix round 1, 5 min 09 s) |
-| test result | BUILD SUCCESS — 265 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| current phase | 02-storage-security done; next 03-file-manager |
+| current task | phase 02 complete (next: T12) |
+| last completed commit | `7625b60 fix: clear the busy state even when a task callback throws` |
+| tests last run | `mvn -B clean verify` (2026-10-02, phase 02 boundary-review fixes, 3 min 07 s) |
+| test result | BUILD SUCCESS — 269 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 

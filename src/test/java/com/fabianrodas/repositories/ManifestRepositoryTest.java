@@ -12,8 +12,11 @@ import com.fabianrodas.models.ManifestEntryKind;
 import com.fabianrodas.models.PendingDeletion;
 import com.fabianrodas.models.UserManifest;
 import com.fabianrodas.models.VaultContext;
+import com.fabianrodas.security.Aad;
+import com.fabianrodas.security.AesGcmService;
 import com.fabianrodas.security.SensitiveBytes;
 import com.fabianrodas.services.ManifestService;
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.nio.file.Files;
@@ -21,8 +24,11 @@ import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -192,7 +198,7 @@ class ManifestRepositoryTest {
             UUID freshId = UUID.randomUUID();   // no backups exist for this id, so nothing can be recovered
             UserManifest manifest = manifestWithNames();
             damages.get(i).accept(manifest);
-            repository.save(manifest, freshId, userMasterKey);
+            writeWithoutValidation(manifest, freshId);
             int damage = i;
 
             VaultStorageException error = assertThrows(
@@ -230,7 +236,7 @@ class ManifestRepositoryTest {
     void journalEntryWithoutABlobIdIsCorrupted() throws Exception {
         UserManifest manifest = ManifestService.newManifest(userId);
         manifest.getPendingDeletions().add(new PendingDeletion(null, "2026-10-01T10:00:00Z"));
-        repository.save(manifest, manifestId, userMasterKey);
+        writeWithoutValidation(manifest, manifestId);
 
         assertCorrupted(() -> repository.load(userId, manifestId, userMasterKey));
     }
@@ -248,6 +254,82 @@ class ManifestRepositoryTest {
             assertArrayEquals(current, Files.readAllBytes(root.resolve(
                     ".encryptdrive/backups/manifests/" + manifestId + ".enc." + generation)));
         }
+    }
+
+    @Test
+    void saveRefusesAnOrphanEntryAndTouchesNothing() throws Exception {
+        saveFourDistinctManifests();
+        Map<String, byte[]> before = diskState();
+
+        VaultStorageException error = assertThrows(
+                VaultStorageException.class, () -> repository.save(withOrphan(), manifestId, userMasterKey)
+        );
+
+        assertEquals(VaultStorageException.Reason.INVALID, error.getReason());
+        assertSameDiskState(before);
+    }
+
+    @Test
+    void saveCheckpointRefusesAnOrphanEntryAndTouchesNothing() throws Exception {
+        saveFourDistinctManifests();
+        Map<String, byte[]> before = diskState();
+
+        VaultStorageException error = assertThrows(
+                VaultStorageException.class,
+                () -> repository.saveCheckpoint(withOrphan(), manifestId, userMasterKey)
+        );
+
+        assertEquals(VaultStorageException.Reason.INVALID, error.getReason());
+        assertSameDiskState(before);
+    }
+
+    private void saveFourDistinctManifests() throws Exception {
+        for (int save = 0; save < 4; save++) {
+            repository.save(manifestWithNames(), manifestId, userMasterKey);
+        }
+    }
+
+    private UserManifest withOrphan() throws Exception {
+        UserManifest manifest = manifestWithNames();
+        folder(manifest).setParentId(UUID.randomUUID());
+        return manifest;
+    }
+
+    /** Every file under the vault with its bytes: the manifest and all backup generations. */
+    private Map<String, byte[]> diskState() throws Exception {
+        Map<String, byte[]> state = new TreeMap<>();
+
+        try (Stream<Path> files = Files.walk(root)) {
+            for (Path file : files.filter(Files::isRegularFile).toList()) {
+                state.put(root.relativize(file).toString(), Files.readAllBytes(file));
+            }
+        }
+
+        return state;
+    }
+
+    private void assertSameDiskState(Map<String, byte[]> before) throws Exception {
+        Map<String, byte[]> after = diskState();
+
+        assertEquals(before.keySet(), after.keySet());
+        assertEquals(4, before.size());   // the manifest and three backups, so nothing was skipped
+        before.forEach((file, bytes) -> assertArrayEquals(bytes, after.get(file), file));
+    }
+
+    /**
+     * Puts authentic but damaged content on disk the way an older or buggy writer could have, so the
+     * read-side validation can still be tested now that save() refuses to write it.
+     */
+    private void writeWithoutValidation(UserManifest manifest, UUID id) throws Exception {
+        Gson gson = new Gson();
+        byte[] plaintext = gson.toJson(manifest).getBytes(UTF_8);
+        EncryptedPayload sealed = new AesGcmService().encrypt(
+                plaintext, userMasterKey, Aad.manifest(VAULT_ID, manifest.getUserId().toString())
+        );
+        Files.writeString(
+                root.resolve(".encryptdrive").resolve("manifests").resolve(id + ".enc"),
+                gson.toJson(sealed), UTF_8
+        );
     }
 
     private UserManifest manifestWithNames() throws Exception {

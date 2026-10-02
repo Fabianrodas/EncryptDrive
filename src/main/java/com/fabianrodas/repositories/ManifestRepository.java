@@ -128,6 +128,7 @@ public class ManifestRepository {
      */
     private static boolean isWellFormed(UserManifest manifest, UUID userId) {
         if (manifest == null
+                || userId == null
                 || manifest.getFormatVersion() != FORMAT_VERSION
                 || !userId.equals(manifest.getUserId())
                 || manifest.getRootFolderId() == null
@@ -241,8 +242,16 @@ public class ManifestRepository {
         }
     }
 
-    /** The manifest encrypted under the UMK, as the JSON envelope written to disk. */
+    /**
+     * The manifest encrypted under the UMK, as the JSON envelope written to disk. Content the read path
+     * would reject is refused here, before any file is touched: a write that load() then treats as
+     * damaged would replace the live manifest with an older backup.
+     */
     private byte[] seal(UserManifest manifest, byte[] userMasterKey) throws VaultStorageException {
+        if (manifest == null || !isWellFormed(manifest, manifest.getUserId())) {
+            throw new VaultStorageException(VaultStorageException.Reason.INVALID);
+        }
+
         byte[] plaintext = gson.toJson(manifest).getBytes(StandardCharsets.UTF_8);
 
         try {

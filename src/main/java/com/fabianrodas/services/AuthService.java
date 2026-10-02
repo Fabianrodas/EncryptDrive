@@ -252,6 +252,7 @@ public final class AuthService {
         return new AuthException(
                 e.getReason() == VaultStorageException.Reason.IO
                         || e.getReason() == VaultStorageException.Reason.TOO_LARGE
+                        || e.getReason() == VaultStorageException.Reason.INVALID
                         ? AuthException.Reason.STORAGE
                         : AuthException.Reason.CORRUPTED,
                 e

@@ -200,19 +200,33 @@ public final class UserRegistryRepository {
         }
     }
 
-    /** The registry encrypted under the RMK, as the JSON envelope written to disk. */
+    /**
+     * The registry encrypted under the RMK, as the JSON envelope written to disk. Content the read path
+     * would reject is refused here, before any file is touched.
+     */
     private byte[] seal(VaultContext vault, UserRegistry registry) throws VaultStorageException {
-        byte[] registryKey = vault.copyRegistryKey();
-        byte[] plaintext = gson.toJson(registry).getBytes(StandardCharsets.UTF_8);
+        if (!isWellFormed(registry)) {
+            throw new VaultStorageException(VaultStorageException.Reason.INVALID);
+        }
+
+        byte[] registryKey = null;
+        byte[] plaintext = null;
 
         try {
+            registryKey = vault.copyRegistryKey();
+            plaintext = gson.toJson(registry).getBytes(StandardCharsets.UTF_8);
             byte[] envelope = gson.toJson(aes.encrypt(plaintext, registryKey, Aad.users(vault.vaultId())))
                     .getBytes(StandardCharsets.UTF_8);
             BoundedFiles.requireWithin(envelope, MAX_REGISTRY_BYTES);
             return envelope;
         } finally {
-            Arrays.fill(registryKey, (byte) 0);
-            Arrays.fill(plaintext, (byte) 0);
+            if (registryKey != null) {
+                Arrays.fill(registryKey, (byte) 0);
+            }
+
+            if (plaintext != null) {
+                Arrays.fill(plaintext, (byte) 0);
+            }
         }
     }
 }

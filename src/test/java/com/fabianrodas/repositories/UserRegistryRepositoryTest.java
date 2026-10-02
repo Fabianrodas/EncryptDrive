@@ -27,7 +27,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -340,11 +342,9 @@ class UserRegistryRepositoryTest {
                 List.of(valid, withIds("9a1b2c3d-4e5f-4061-8273-a4b5c6d7e8f9",
                         "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f0", "exampleuser"))
         );
-        Path backups = root.resolve(".encryptdrive").resolve("backups");
 
         for (List<UserRecord> users : registries) {
-            repository.save(vault, new UserRegistry(1, new ArrayList<>(users)));
-            deleteBackups(backups);
+            writeWithoutValidation(new UserRegistry(1, new ArrayList<>(users)));   // no backups exist to recover from
 
             VaultStorageException error = assertThrows(
                     VaultStorageException.class, () -> repository.load(vault), users.toString()
@@ -359,14 +359,76 @@ class UserRegistryRepositoryTest {
                 valid.getCreatedAt(), manifestId, valid.getUserKdf(), valid.getWrappedUserMasterKey());
     }
 
-    private static void deleteBackups(Path backups) throws IOException {
-        if (Files.isDirectory(backups)) {
-            try (Stream<Path> files = Files.list(backups)) {
-                for (Path file : files.filter(Files::isRegularFile).toList()) {
-                    Files.delete(file);
-                }
+    @Test
+    void saveRefusesADuplicateUsernameAndTouchesNothing() throws Exception {
+        saveFourDistinctRegistries();
+        Map<String, byte[]> before = diskState();
+
+        VaultStorageException error = assertThrows(
+                VaultStorageException.class, () -> repository.save(vault, withDuplicateUsername())
+        );
+
+        assertEquals(VaultStorageException.Reason.INVALID, error.getReason());
+        assertSameDiskState(before);
+    }
+
+    @Test
+    void saveCheckpointRefusesADuplicateUsernameAndTouchesNothing() throws Exception {
+        saveFourDistinctRegistries();
+        Map<String, byte[]> before = diskState();
+
+        VaultStorageException error = assertThrows(
+                VaultStorageException.class, () -> repository.saveCheckpoint(vault, withDuplicateUsername())
+        );
+
+        assertEquals(VaultStorageException.Reason.INVALID, error.getReason());
+        assertSameDiskState(before);
+    }
+
+    private void saveFourDistinctRegistries() throws Exception {
+        for (int save = 0; save < 4; save++) {
+            repository.save(vault, registryWith(record()));
+        }
+    }
+
+    private static UserRegistry withDuplicateUsername() {
+        return new UserRegistry(1, new ArrayList<>(List.of(
+                record(),
+                withIds("9a1b2c3d-4e5f-4061-8273-a4b5c6d7e8f9", "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f0", "exampleuser")
+        )));
+    }
+
+    /** Every file under the vault with its bytes: users.enc and all backup generations. */
+    private Map<String, byte[]> diskState() throws IOException {
+        Map<String, byte[]> state = new TreeMap<>();
+
+        try (Stream<Path> files = Files.walk(root)) {
+            for (Path file : files.filter(Files::isRegularFile).toList()) {
+                state.put(root.relativize(file).toString(), Files.readAllBytes(file));
             }
         }
+
+        return state;
+    }
+
+    private void assertSameDiskState(Map<String, byte[]> before) throws IOException {
+        Map<String, byte[]> after = diskState();
+
+        assertEquals(before.keySet(), after.keySet());
+        assertEquals(4, before.size());   // users.enc and three backups, so nothing was skipped
+        before.forEach((file, bytes) -> assertArrayEquals(bytes, after.get(file), file));
+    }
+
+    /**
+     * Puts authentic but damaged content in users.enc the way an older or buggy writer could have, so the
+     * read-side validation can still be tested now that save() refuses to write it.
+     */
+    private void writeWithoutValidation(UserRegistry registry) throws IOException {
+        Gson gson = new Gson();
+        EncryptedPayload sealed = new AesGcmService().encrypt(
+                gson.toJson(registry).getBytes(UTF_8), registryKey, Aad.users(VAULT_ID)
+        );
+        Files.writeString(usersFile(), gson.toJson(sealed), UTF_8);
     }
 
     private VaultContext context(byte[] key) {

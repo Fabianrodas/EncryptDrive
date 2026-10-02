@@ -7,7 +7,9 @@ public final class VaultStorageException extends Exception {
         CORRUPTED,
         UNSUPPORTED_VERSION,
         IO,
-        TOO_LARGE
+        TOO_LARGE,
+        /** A write was refused because the content would be rejected when read back. */
+        INVALID
     }
 
     private final Reason reason;

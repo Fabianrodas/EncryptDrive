@@ -15,6 +15,7 @@ import com.fabianrodas.security.CryptoConstants;
 import com.fabianrodas.security.CryptoException;
 import com.fabianrodas.security.SensitiveBytes;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -161,9 +162,13 @@ public class VaultService {
     private static void deleteStaging(Path staging) {
         try (Stream<Path> paths = Files.walk(staging)) {
             for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(path);
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException ignored) {
+                    // Best effort: keep removing the rest.
+                }
             }
-        } catch (IOException ignored) {
+        } catch (IOException | UncheckedIOException ignored) {
             // A leftover ".<name>.creating-<id>" folder holds only unreadable ciphertext.
         }
     }
@@ -323,7 +328,7 @@ public class VaultService {
                 case NOT_FOUND -> VaultException.Reason.NOT_A_VAULT;
                 case CORRUPTED -> VaultException.Reason.CORRUPTED;
                 case UNSUPPORTED_VERSION -> VaultException.Reason.UNSUPPORTED_VERSION;
-                case IO, TOO_LARGE -> VaultException.Reason.STORAGE;
+                case IO, TOO_LARGE, INVALID -> VaultException.Reason.STORAGE;
             }, e);
         }
     }
