@@ -10,9 +10,9 @@ Updated after every task. Git history and test output are the record; this is th
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 01-foundation done; next 02-storage-security |
 | current task | T8 done (next: T9) |
-| last completed commit | `dc679c0 feat: require 12-character account passwords` |
-| tests last run | `mvn -B clean verify` (2026-10-02, T8, 1 min 50 s) |
-| test result | BUILD SUCCESS — 223 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| last completed commit | `c8e74a2 fix: purge old-password key envelopes from registry backups` |
+| tests last run | `mvn -B clean verify` (2026-10-02, T8 fix round 1, 1 min 32 s) |
+| test result | BUILD SUCCESS — 228 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 

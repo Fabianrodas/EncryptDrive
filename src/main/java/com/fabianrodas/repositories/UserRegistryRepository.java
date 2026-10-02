@@ -61,12 +61,31 @@ public final class UserRegistryRepository {
                 throw damaged;
             }
 
-            return rotator.recover(
+            UserRegistry recovered = rotator.recover(
                     usersFile,
                     VaultRepository.backupsDir(vault.root()),
                     BACKUP_GENERATIONS,
                     file -> read(vault, file)
             ).orElseThrow(() -> damaged);
+            reseedBackupsFromRestored(vault);
+            return recovered;
+        }
+    }
+
+    /**
+     * After a recovery, makes every backup the restored registry, so a
+     * generation the recovery skipped cannot still hold an older credential
+     * envelope (e.g. after an interrupted password change).
+     */
+    private void reseedBackupsFromRestored(VaultContext vault) {
+        try {
+            byte[] restored = BoundedFiles.readBytes(
+                    VaultRepository.usersFile(vault.root()), MAX_REGISTRY_BYTES
+            );
+            rotator.reseed(VaultRepository.USERS_FILE, restored,
+                    VaultRepository.backupsDir(vault.root()), BACKUP_GENERATIONS);
+        } catch (IOException | VaultStorageException e) {
+            // Best effort: the registry is already recovered, and a failure here must not stop the vault opening.
         }
     }
 

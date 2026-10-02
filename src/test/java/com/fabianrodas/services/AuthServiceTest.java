@@ -333,6 +333,60 @@ class AuthServiceTest {
         auth.login("otheruser", "other password".toCharArray()).userMasterKey().close();
     }
 
+    /*
+     * Recovery from a partially reseeded state must not leave the old password
+     * behind in the backups it did not restore: backup 1 (new) is restored, and
+     * backups 2-3, still wrapped under the old password, are replaced with it.
+     */
+    @ParameterizedTest
+    @ValueSource(ints = {2, 3})
+    void recoveryFromAPartiallyReseededStateLeavesNoOldPasswordInAnyBackup(int failingWrite) throws Exception {
+        FailingWriter writer = new FailingWriter();
+        AuthService failing = new AuthService(vault, new UserRegistryRepository(writer));
+        UserSessionIdentity user = auth.register("Example User", "ExampleUser", PASSWORD.toCharArray());
+        // Three more registrations so every backup generation holds the account with the old password.
+        auth.register("Other User", "otheruser", "other password".toCharArray());
+        auth.register("Third User", "thirduser", "third password".toCharArray());
+        auth.register("Fourth User", "fourthuser", "fourth password".toCharArray());
+        writer.failBeforeWrite(failingWrite);
+
+        assertReason(AuthException.Reason.STORAGE,
+                () -> failing.changePassword(user.userId(), PASSWORD.toCharArray(), NEW_PASSWORD.toCharArray()));
+        RecoveryService.takeRecoveryNotice();
+        Files.writeString(usersFile(), "{}");                 // users.enc damaged afterwards
+
+        assertEquals(user, auth.login("ExampleUser", NEW_PASSWORD.toCharArray()).identity());
+        assertTrue(RecoveryService.takeRecoveryNotice());
+
+        vaultService.closeVault();
+        Path meta = tempDir.resolve("vault").resolve(".encryptdrive");
+        byte[] current = Files.readAllBytes(usersFile());
+
+        try {
+            for (int generation = 1; generation <= 3; generation++) {
+                Path backup = meta.resolve("backups").resolve("users.enc." + generation);
+                Files.copy(backup, usersFile(), StandardCopyOption.REPLACE_EXISTING);
+
+                VaultContext reopened = vaultService.unlockVault(
+                        tempDir.resolve("vault"), "correct vault password".toCharArray()
+                );
+                AuthService restored = new AuthService(reopened);
+                int g = generation;
+
+                assertReason(AuthException.Reason.INVALID_CREDENTIALS,
+                        () -> restored.login("ExampleUser", PASSWORD.toCharArray()));
+                assertEquals(user, restored.login("ExampleUser", NEW_PASSWORD.toCharArray()).identity(),
+                        "generation " + g);
+                restored.login("otheruser", "other password".toCharArray()).userMasterKey().close();
+                vaultService.closeVault();
+            }
+        } finally {
+            vaultService.closeVault();
+            Files.write(usersFile(), current);
+            vault = vaultService.unlockVault(tempDir.resolve("vault"), "correct vault password".toCharArray());
+        }
+    }
+
     @Test
     void registrationRejectsInvalidInput() {
         assertReason(

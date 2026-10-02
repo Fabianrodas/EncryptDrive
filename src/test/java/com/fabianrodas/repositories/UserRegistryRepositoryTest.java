@@ -21,6 +21,7 @@ import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -176,6 +177,65 @@ class UserRegistryRepositoryTest {
     }
 
     @Test
+    void recoveringARegistryReseedsEveryBackupWithTheRestoredState() throws Exception {
+        for (int save = 0; save < 4; save++) {
+            repository.save(vault, registryWith(record()));
+        }
+        Files.writeString(usersFile(), "{}", UTF_8);
+
+        assertEquals(USER_ID, repository.load(vault).getUsers().get(0).getUserId());
+
+        byte[] restored = Files.readAllBytes(usersFile());
+        for (int generation = 1; generation <= 3; generation++) {
+            assertArrayEquals(restored, Files.readAllBytes(backup(generation)), "backup " + generation);
+        }
+        BackupRotator.takeRecoveryNotice();
+    }
+
+    @Test
+    void anIntactRegistryLoadsWithoutWritingAnything() throws Exception {
+        for (int save = 0; save < 4; save++) {
+            repository.save(vault, registryWith(record()));
+        }
+        FileTime longAgo = FileTime.fromMillis(1_000_000_000_000L);
+        List<Path> files = List.of(usersFile(), backup(1), backup(2), backup(3));
+        List<byte[]> before = new ArrayList<>();
+        for (Path file : files) {
+            Files.setLastModifiedTime(file, longAgo);
+            before.add(Files.readAllBytes(file));
+        }
+
+        repository.load(vault);
+
+        for (int i = 0; i < files.size(); i++) {
+            assertArrayEquals(before.get(i), Files.readAllBytes(files.get(i)), files.get(i).toString());
+            assertEquals(longAgo, Files.getLastModifiedTime(files.get(i)), files.get(i).toString());
+        }
+        assertEquals(List.of("backups", "users.enc"), names(usersFile().getParent()));
+        assertEquals(List.of("users.enc.1", "users.enc.2", "users.enc.3"), names(backup(1).getParent()));
+    }
+
+    @Test
+    void aFailedReseedAfterRecoveryStillReturnsTheRecoveredRegistry() throws Exception {
+        FailingWriter writer = new FailingWriter();
+        UserRegistryRepository failing = new UserRegistryRepository(writer);
+        for (int save = 0; save < 4; save++) {
+            failing.save(vault, registryWith(record()));
+        }
+        Files.writeString(usersFile(), "{}", UTF_8);
+        BackupRotator.takeRecoveryNotice();
+        writer.failBeforeWrite(1);              // the reseed's first write; recovery's own copy is not a write()
+
+        UserRegistry recovered = failing.load(vault);
+
+        assertEquals(USER_ID, recovered.getUsers().get(0).getUserId());
+        assertTrue(BackupRotator.takeRecoveryNotice());
+        assertArrayEquals(Files.readAllBytes(backup(1)), Files.readAllBytes(usersFile()));
+        // The armed failure was used up by the reseed attempt, so this write goes through.
+        writer.write(root.resolve("probe"), new byte[]{1});
+    }
+
+    @Test
     void registryEncryptedUnderAnotherKeyIsRejected() throws Exception {
         repository.save(vault, registryWith(record()));
         byte[] otherKey = new byte[32];
@@ -321,6 +381,12 @@ class UserRegistryRepositoryTest {
 
     private Path backup(int generation) {
         return root.resolve(".encryptdrive/backups/users.enc." + generation);
+    }
+
+    private static List<String> names(Path directory) throws IOException {
+        try (Stream<Path> files = Files.list(directory)) {
+            return files.map(path -> path.getFileName().toString()).sorted().toList();
+        }
     }
 
     private static UserRegistry registryWith(UserRecord record) {

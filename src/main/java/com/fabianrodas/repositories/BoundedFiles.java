@@ -18,6 +18,10 @@ final class BoundedFiles {
     }
 
     static String readUtf8(Path file, long maxBytes) throws IOException, VaultStorageException {
+        return new String(readBytes(file, maxBytes), StandardCharsets.UTF_8);
+    }
+
+    static byte[] readBytes(Path file, long maxBytes) throws IOException, VaultStorageException {
         if (Files.size(file) > maxBytes) {
             throw new VaultStorageException(VaultStorageException.Reason.CORRUPTED);
         }
@@ -30,7 +34,7 @@ final class BoundedFiles {
                 throw new VaultStorageException(VaultStorageException.Reason.CORRUPTED);
             }
 
-            return new String(bytes, StandardCharsets.UTF_8);
+            return bytes;
         }
     }
 
