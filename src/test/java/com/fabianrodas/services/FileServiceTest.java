@@ -357,7 +357,7 @@ class FileServiceTest {
         ManifestEntry kept = files.importFile(source("keep.txt", "k".getBytes(UTF_8)), files.rootFolderId());
         files.moveToTrash(docs.getEntryId());
 
-        files.permanentlyDelete(docs.getEntryId());
+        files.permanentlyDelete(List.of(docs.getEntryId()));
 
         assertEquals(List.of(), files.listTrash());
         assertEquals(List.of(kept.getEntryId()), ids(files.listChildren(files.rootFolderId())));
@@ -372,7 +372,7 @@ class FileServiceTest {
 
         assertReason(
                 FileServiceException.Reason.NOT_IN_TRASH,
-                () -> files.permanentlyDelete(file.getEntryId())
+                () -> files.permanentlyDelete(List.of(file.getEntryId()))
         );
         assertEquals(1, blobFiles().size());
     }

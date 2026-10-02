@@ -13,7 +13,7 @@ import java.util.UUID;
  * where the shard is the first two hex characters of the blob id. Blobs are
  * written as {@code .part} files and only renamed once complete.
  */
-public final class BlobRepository {
+public class BlobRepository {
 
     public static final String BLOB_EXTENSION = ".edv";
     public static final String PART_SUFFIX = ".part";

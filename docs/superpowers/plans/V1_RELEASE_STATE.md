@@ -9,10 +9,10 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 01-foundation done; next 02-storage-security |
-| current task | T9 done (next: T10) |
-| last completed commit | `44daaae fix: reseed registry backups after recovering from one` |
-| tests last run | `mvn -B clean verify` (2026-10-02, T9, 1 min 28 s) |
-| test result | BUILD SUCCESS — 232 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| current task | T10 done (next: T11) |
+| last completed commit | `c412f5a feat: add an encrypted pending-deletion journal to manifests` |
+| tests last run | `mvn -B clean verify` (2026-10-02, T10, 1 min 45 s) |
+| test result | BUILD SUCCESS — 246 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 

@@ -114,14 +114,15 @@ public class TrashController implements Initializable {
         }
 
         try {
-            for (ManifestEntry entry : selected) {
-                files.permanentlyDelete(entry.getEntryId());
-            }
+            int pending = files.permanentlyDelete(
+                    selected.stream().map(ManifestEntry::getEntryId).toList()
+            );
 
             refresh();
-            showSuccess(selected.size() == 1
+            showSuccess((selected.size() == 1
                     ? "\"" + selected.get(0).getName() + "\" was deleted permanently."
-                    : selected.size() + " items were deleted permanently.");
+                    : selected.size() + " items were deleted permanently.")
+                    + (pending > 0 ? " " + Formats.CLEANUP_PENDING : ""));
 
         } catch (FileServiceException e) {
             refresh();

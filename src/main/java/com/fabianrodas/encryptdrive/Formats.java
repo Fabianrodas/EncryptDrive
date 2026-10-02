@@ -22,6 +22,10 @@ final class Formats {
     static final String RECOVERY_NOTICE = "Damaged vault data was restored from an automatic "
             + "backup. Your most recent change may be missing.";
 
+    /** Shown when some deleted files' encrypted data is still queued for removal. */
+    static final String CLEANUP_PENDING = "Some encrypted data could not be removed yet; "
+            + "EncryptDrive will retry automatically.";
+
     private Formats() {
     }
 

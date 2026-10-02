@@ -2,6 +2,7 @@ package com.fabianrodas.services;
 
 import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.models.ManifestEntryKind;
+import com.fabianrodas.models.PendingDeletion;
 import com.fabianrodas.models.UserManifest;
 import com.fabianrodas.models.UserSessionIdentity;
 import com.fabianrodas.models.VaultContext;
@@ -24,11 +25,14 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.LongConsumer;
@@ -40,7 +44,9 @@ import java.util.stream.Collectors;
  * Files and folders of the signed-in user. Every file has its own random key
  * (FDEK), wrapped under the user master key (UMK) and stored only in the
  * user's encrypted manifest. A manifest entry is committed only after its
- * blob is complete, so the manifest never references a missing blob.
+ * blob is complete, and permanent deletion removes entries from the manifest
+ * and every backup before it removes their blobs, so neither the manifest nor
+ * a recovered backup references a blob that was deleted.
  *
  * The UMK is never held here: each operation takes a fresh copy from the
  * supplier and wipes it, so logging out ends access.
@@ -322,12 +328,47 @@ public final class FileService {
     }
 
     /**
-     * Removes a trashed entry and its descendants. Blobs are deleted first, so
-     * a failure leaves the entries in the trash to retry.
+     * Permanently deletes trashed entries and everything below them. The
+     * entries leave the manifest and every backup generation before any blob
+     * is touched; their blobs are queued in the encrypted manifest and removed
+     * afterwards. A crash can orphan ciphertext but never leaves metadata that
+     * references deleted ciphertext. Returns how many blobs are still queued
+     * because they could not be removed yet.
      */
-    public void permanentlyDelete(UUID entryId) throws FileServiceException {
-        modify(manifest -> {
-            ManifestService rules = new ManifestService(manifest);
+    public int permanentlyDelete(List<UUID> entryIds) throws FileServiceException {
+        synchronized (MANIFEST_LOCK) {
+            return withUserMasterKey(key -> deletePermanently(load(key), entryIds, key));
+        }
+    }
+
+    /**
+     * Removes blobs left queued by an interrupted or partly failed permanent
+     * delete. Blobs that still cannot be removed stay queued; returns how many.
+     */
+    public int resumePendingDeletions() throws FileServiceException {
+        synchronized (MANIFEST_LOCK) {
+            return withUserMasterKey(key -> {
+                UserManifest manifest = load(key);
+
+                if (manifest.getPendingDeletions().isEmpty()) {
+                    return 0;
+                }
+
+                // The delete may have stopped before every backup was reseeded.
+                checkpoint(manifest, key);
+                return purge(manifest, key);
+            });
+        }
+    }
+
+    /** Spec 9.2: steps 1-5 here, steps 6-9 in {@link #purge}. */
+    private int deletePermanently(UserManifest manifest, Collection<UUID> entryIds, byte[] key)
+            throws FileServiceException {
+
+        ManifestService rules = new ManifestService(manifest);
+        Set<ManifestEntry> doomed = new LinkedHashSet<>();
+
+        for (UUID entryId : entryIds) {
             ManifestEntry entry = rules.find(entryId);
 
             if (entry == null) {
@@ -338,21 +379,85 @@ public final class FileService {
                 throw new FileServiceException(FileServiceException.Reason.NOT_IN_TRASH);
             }
 
-            List<ManifestEntry> doomed = subtree(rules, entry);
+            doomed.addAll(subtree(rules, entry));
+        }
 
-            for (ManifestEntry item : doomed) {
-                if (item.getKind() == ManifestEntryKind.FILE) {
-                    try {
-                        blobRepository.delete(vault.root(), item.getBlobId());
-                    } catch (IOException e) {
-                        throw new FileServiceException(FileServiceException.Reason.STORAGE, e);
-                    }
-                }
+        queueBlobs(manifest, doomed);
+        manifest.getEntries().removeAll(doomed);
+        checkpoint(manifest, key);
+        return purge(manifest, key);
+    }
+
+    /**
+     * Deletes queued blobs one by one, then checkpoints the shorter queue.
+     * Call only right after a successful {@link #checkpoint} of this manifest:
+     * that is what guarantees no backup still lists the blobs. Storage
+     * failures are reported through the return value, never thrown.
+     */
+    private int purge(UserManifest manifest, byte[] key) {
+        List<PendingDeletion> pending = manifest.getPendingDeletions();
+        Set<UUID> inUse = manifest.getEntries().stream()
+                .map(ManifestEntry::getBlobId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        List<PendingDeletion> remaining = new ArrayList<>();
+
+        for (PendingDeletion deletion : pending) {
+            // A blob a live entry still uses is dropped from the queue, never deleted.
+            if (!inUse.contains(deletion.blobId()) && !deleteBlob(deletion.blobId())) {
+                remaining.add(deletion);
             }
+        }
 
-            manifest.getEntries().removeAll(doomed);
-            return null;
-        });
+        if (remaining.size() == pending.size()) {
+            return remaining.size();
+        }
+
+        int recorded = pending.size();
+        pending.retainAll(remaining);
+
+        try {
+            checkpoint(manifest, key);
+            return remaining.size();
+        } catch (FileServiceException e) {
+            // Deleted blobs stay listed on disk; the next retry finds them missing.
+            return recorded;
+        }
+    }
+
+    private static void queueBlobs(UserManifest manifest, Collection<ManifestEntry> doomed) {
+        Set<UUID> queued = new HashSet<>();
+
+        for (PendingDeletion deletion : manifest.getPendingDeletions()) {
+            queued.add(deletion.blobId());
+        }
+
+        String queuedAt = Instant.now().toString();
+
+        for (ManifestEntry entry : doomed) {
+            if (entry.getKind() == ManifestEntryKind.FILE && queued.add(entry.getBlobId())) {
+                manifest.getPendingDeletions().add(new PendingDeletion(entry.getBlobId(), queuedAt));
+            }
+        }
+    }
+
+    /** Missing blobs count as deleted (BlobRepository.delete is deleteIfExists). */
+    private boolean deleteBlob(UUID blobId) {
+        try {
+            blobRepository.delete(vault.root(), blobId);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /** Spec 9.2 steps 4-5 (and 8-9): the manifest, then every backup generation. */
+    private void checkpoint(UserManifest manifest, byte[] key) throws FileServiceException {
+        try {
+            manifestRepository.saveCheckpoint(manifest, identity.manifestId(), key);
+        } catch (VaultStorageException e) {
+            throw storageFailure(e);
+        }
     }
 
     public WorkspaceStats stats() throws FileServiceException {
