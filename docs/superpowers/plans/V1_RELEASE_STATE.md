@@ -10,9 +10,9 @@ Updated after every task. Git history and test output are the record; this is th
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 01-foundation done; next 02-storage-security |
 | current task | T5 done (next: T6) |
-| last completed commit | `b09e657 fix: bound vault metadata reads and writes to the spec limits` |
-| tests last run | `mvn -B clean verify` (2026-10-02, T5, 3 min 24 s) |
-| test result | BUILD SUCCESS — 186 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| last completed commit | `fc2b4f6 fix: parse unauthenticated vault metadata strictly` |
+| tests last run | `mvn -B clean verify` (2026-10-02, T5 fix round 1, 3 min 52 s) |
+| test result | BUILD SUCCESS — 192 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 

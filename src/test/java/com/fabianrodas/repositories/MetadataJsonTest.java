@@ -42,4 +42,68 @@ class MetadataJsonTest {
             assertEquals(VaultStorageException.Reason.CORRUPTED, error.getReason(), json);
         }
     }
+
+    @Test
+    void extraMembersAreCorrupted() {
+        for (String member : new String[]{
+            "\"junk\":[1,2,3]",
+            "\"junk\":{}",
+            "\"junk\":{\"nested\":true}",
+            "\"junk\":null",
+            "\"junk\":\"text\"",
+            "\"junk\":7"
+        }) {
+            assertCorrupted(VALID.substring(0, VALID.length() - 1) + "," + member + "}");
+        }
+    }
+
+    @Test
+    void duplicateMembersAreCorrupted() {
+        assertCorrupted(VALID.replace("{", "{\"version\":1,"));
+        assertCorrupted(VALID.replace("{", "{\"nonce\":\"bm9uY2Vub25jZW5v\","));
+        assertCorrupted(VALID.substring(0, VALID.length() - 1) + ",\"ciphertext\":\"AA==\"}");
+    }
+
+    @Test
+    void lenientSyntaxIsCorrupted() {
+        for (String json : new String[]{
+            "// comment\n" + VALID,
+            "/* comment */" + VALID,
+            VALID.replace("\"version\"", "version"),
+            VALID.replace('"', '\''),
+            VALID.replace("\"version\":1,", "\"version\":1;"),
+            VALID + "{}",
+            VALID + " x",
+            VALID.substring(0, VALID.length() - 1) + ",}"
+        }) {
+            assertCorrupted(json);
+        }
+    }
+
+    @Test
+    void anEnvelopeWithAHugeExtraMemberIsRejected() {
+        String junk = "1,".repeat(4 * 1024 * 1024);
+
+        assertCorrupted(VALID.substring(0, VALID.length() - 1) + ",\"junk\":[" + junk + "1]}");
+    }
+
+    @Test
+    void aLargeCiphertextStillParses() throws Exception {
+        String ciphertext = "A".repeat(8 * 1024 * 1024);
+
+        EncryptedPayload payload = MetadataJson.envelope(
+                VALID.replace("Y2lwaGVydGV4dA==", ciphertext)
+        );
+
+        assertEquals(ciphertext.length(), payload.getCiphertext().length());
+    }
+
+    private static void assertCorrupted(String json) {
+        VaultStorageException error = assertThrows(
+                VaultStorageException.class,
+                () -> MetadataJson.envelope(json),
+                json.length() > 200 ? json.substring(0, 200) : json
+        );
+        assertEquals(VaultStorageException.Reason.CORRUPTED, error.getReason());
+    }
 }

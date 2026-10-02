@@ -139,6 +139,20 @@ class UserRegistryRepositoryTest {
     }
 
     @Test
+    void registryWithATypeConfusedEnvelopeFallsBackToAnAuthenticBackup() throws Exception {
+        repository.save(vault, registryWith(record()));
+        repository.save(vault, registryWith(record()));
+        JsonObject envelope = JsonParser.parseString(
+                Files.readString(usersFile(), UTF_8)
+        ).getAsJsonObject();
+        envelope.addProperty("nonce", 5);
+        Files.writeString(usersFile(), envelope.toString(), UTF_8);
+
+        assertEquals(USER_ID, repository.load(vault).getUsers().get(0).getUserId());
+        BackupRotator.takeRecoveryNotice();
+    }
+
+    @Test
     void oversizedRegistryFallsBackToAnAuthenticBackup() throws Exception {
         repository.save(vault, registryWith(record()));
         repository.save(vault, new UserRegistry(1, new ArrayList<>(List.of(record()))));

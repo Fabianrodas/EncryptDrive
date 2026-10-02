@@ -7,6 +7,11 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.Strictness;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import java.io.IOException;
+import java.io.StringReader;
 import java.math.BigDecimal;
 
 /**
@@ -14,6 +19,10 @@ import java.math.BigDecimal;
  * vault.json and the outer encrypted envelopes. Every member must exist with
  * its exact JSON type. Gson's reflective binding would accept "65536" for a
  * number and silently default missing members.
+ *
+ * <p>The outer envelopes of users.enc and manifests can be tens of MiB, so
+ * they are read as a stream and never as a tree: nothing is allocated for a
+ * tampered member, which is rejected the moment it is seen.
  */
 final class MetadataJson {
 
@@ -28,8 +37,74 @@ final class MetadataJson {
         }
     }
 
+    /**
+     * Reads an envelope that must be exactly one object with the four members
+     * version, algorithm, nonce and ciphertext, each once and of its exact
+     * type. Any other member, nested value, null, duplicate or trailing data
+     * is rejected without being read.
+     */
     static EncryptedPayload envelope(String json) throws VaultStorageException {
-        return envelope(object(json));
+        Integer version = null;
+        String algorithm = null;
+        String nonce = null;
+        String ciphertext = null;
+
+        try (JsonReader reader = new JsonReader(new StringReader(json))) {
+            reader.setStrictness(Strictness.STRICT);
+            reader.beginObject();
+
+            while (reader.hasNext()) {
+                switch (reader.nextName()) {
+                    case "version" -> {
+                        requireAbsent(version);
+                        requireNext(reader, JsonToken.NUMBER);
+                        version = exactInt(reader.nextString());
+                    }
+                    case "algorithm" -> {
+                        requireAbsent(algorithm);
+                        requireNext(reader, JsonToken.STRING);
+                        algorithm = reader.nextString();
+                    }
+                    case "nonce" -> {
+                        requireAbsent(nonce);
+                        requireNext(reader, JsonToken.STRING);
+                        nonce = reader.nextString();
+                    }
+                    case "ciphertext" -> {
+                        requireAbsent(ciphertext);
+                        requireNext(reader, JsonToken.STRING);
+                        ciphertext = reader.nextString();
+                    }
+                    default -> throw corrupted(null);
+                }
+            }
+
+            reader.endObject();
+            requireNext(reader, JsonToken.END_DOCUMENT);
+
+        } catch (IOException | IllegalStateException | ArithmeticException | NumberFormatException e) {
+            throw corrupted(e);
+        }
+
+        if (version == null || algorithm == null || nonce == null || ciphertext == null) {
+            throw corrupted(null);
+        }
+
+        return new EncryptedPayload(version, algorithm, nonce, ciphertext);
+    }
+
+    private static void requireAbsent(Object seen) throws VaultStorageException {
+        if (seen != null) {
+            throw corrupted(null);
+        }
+    }
+
+    private static void requireNext(JsonReader reader, JsonToken expected)
+            throws IOException, VaultStorageException {
+
+        if (reader.peek() != expected) {
+            throw corrupted(null);
+        }
     }
 
     static EncryptedPayload envelope(JsonObject parent, String member) throws VaultStorageException {
@@ -66,10 +141,14 @@ final class MetadataJson {
         }
 
         try {
-            return new BigDecimal(value.getAsString()).intValueExact();
+            return exactInt(value.getAsString());
         } catch (ArithmeticException | NumberFormatException e) {
             throw corrupted(e);
         }
+    }
+
+    private static int exactInt(String number) {
+        return new BigDecimal(number).intValueExact();
     }
 
     private static EncryptedPayload envelope(JsonObject envelope) throws VaultStorageException {
