@@ -59,6 +59,15 @@
                         styleClass="secondary-button"
                         text="Export" />
 
+                <Button fx:id="renameButton"
+                        disable="true"
+                        minWidth="-Infinity"
+                        mnemonicParsing="false"
+                        onAction="#rename"
+                        prefHeight="36.0"
+                        styleClass="secondary-button"
+                        text="Rename" />
+
                 <Button fx:id="trashButton"
                         disable="true"
                         minWidth="-Infinity"

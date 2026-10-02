@@ -63,6 +63,9 @@ public class FilesController implements Initializable {
     private Button exportButton;
 
     @FXML
+    private Button renameButton;
+
+    @FXML
     private Button trashButton;
 
     @FXML
@@ -289,6 +292,27 @@ public class FilesController implements Initializable {
     }
 
     @FXML
+    private void rename() {
+        List<ManifestEntry> selected = table.getSelectionModel().getSelectedItems();
+
+        if (selected.size() != 1) {
+            return;
+        }
+
+        ManifestEntry entry = selected.get(0);
+        Optional<String> name = DialogFactory.prompt(
+                window(), "Rename", "Enter a new name for \"" + entry.getName() + "\".", entry.getName(), "Rename"
+        );
+
+        if (name.isPresent() && !name.get().equals(entry.getName())) {
+            change(() -> {
+                files.rename(entry.getEntryId(), name.get());
+                return null;
+            }, done -> showSuccess("Renamed to \"" + name.get().strip() + "\"."));
+        }
+    }
+
+    @FXML
     private void moveToTrash() {
         List<ManifestEntry> selected = List.copyOf(table.getSelectionModel().getSelectedItems());
 
@@ -462,6 +486,7 @@ public class FilesController implements Initializable {
         newFolderButton.setDisable(unavailable);
         importButton.setDisable(unavailable);
         exportButton.setDisable(unavailable || nothingSelected);
+        renameButton.setDisable(unavailable || table.getSelectionModel().getSelectedItems().size() != 1);
         trashButton.setDisable(unavailable || nothingSelected);
     }
 

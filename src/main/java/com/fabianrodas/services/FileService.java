@@ -292,20 +292,19 @@ public final class FileService {
         });
     }
 
+    /** Renames an active file or folder; metadata only, the blob is untouched. */
+    public void rename(UUID entryId, String newName) throws FileServiceException {
+        modify(manifest -> {
+            new ManifestService(manifest).rename(entryId, newName);
+            return null;
+        });
+    }
+
     /** Soft delete: only the encrypted manifest changes. */
     public void moveToTrash(UUID entryId) throws FileServiceException {
         modify(manifest -> {
             ManifestService rules = new ManifestService(manifest);
-            ManifestEntry entry = rules.find(entryId);
-
-            if (entryId.equals(manifest.getRootFolderId())) {
-                throw new FileServiceException(FileServiceException.Reason.PROTECTED);
-            }
-
-            if (entry == null || entry.getDeletedAt() != null) {
-                throw new FileServiceException(FileServiceException.Reason.NOT_FOUND);
-            }
-
+            ManifestEntry entry = rules.requireMovable(entryId);
             String deletedAt = Instant.now().toString();
             entry.setOriginalParentId(entry.getParentId());
 

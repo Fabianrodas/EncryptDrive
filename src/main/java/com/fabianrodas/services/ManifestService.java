@@ -79,6 +79,16 @@ public final class ManifestService {
      * them for the target filesystem.
      */
     public String requireAvailableName(UUID parentId, String name) throws FileServiceException {
+        return requireAvailableName(parentId, name, null);
+    }
+
+    /**
+     * Like the two-argument form, not counting {@code ignored} — the entry
+     * being renamed, so a case-only rename is allowed.
+     */
+    public String requireAvailableName(UUID parentId, String name, ManifestEntry ignored)
+            throws FileServiceException {
+
         ManifestEntry parent = find(parentId);
 
         if (parent == null || parent.getDeletedAt() != null) {
@@ -100,11 +110,32 @@ public final class ManifestService {
         }
 
         for (ManifestEntry sibling : listChildren(parentId, false)) {
-            if (sibling.getName().equalsIgnoreCase(candidate)) {
+            if (sibling != ignored && sibling.getName().equalsIgnoreCase(candidate)) {
                 throw new FileServiceException(FileServiceException.Reason.DUPLICATE_NAME);
             }
         }
 
         return candidate;
+    }
+
+    /** The entry, if it is active and not the root (which is never renamed, moved or trashed). */
+    public ManifestEntry requireMovable(UUID entryId) throws FileServiceException {
+        if (entryId.equals(manifest.getRootFolderId())) {
+            throw new FileServiceException(FileServiceException.Reason.PROTECTED);
+        }
+
+        ManifestEntry entry = find(entryId);
+
+        if (entry == null || entry.getDeletedAt() != null) {
+            throw new FileServiceException(FileServiceException.Reason.NOT_FOUND);
+        }
+
+        return entry;
+    }
+
+    /** Renames an active entry in place. Only the name changes; file content is never touched. */
+    public void rename(UUID entryId, String newName) throws FileServiceException {
+        ManifestEntry entry = requireMovable(entryId);
+        entry.setName(requireAvailableName(entry.getParentId(), newName, entry));
     }
 }

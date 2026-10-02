@@ -34,6 +34,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.ButtonBase;
 import javafx.scene.control.Labeled;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -136,6 +137,23 @@ class UiFlowTest {
         selectFirstRow(scene);
         FxTestSupport.fireAndAnswerPopup(scene, "#deleteButton", "Delete permanently");
         FxTestSupport.waitUntil(() -> files.listTrash().isEmpty());
+    }
+
+    @Test
+    void renameThroughThePrompt() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        files.importFile(Files.writeString(tempDir.resolve("old.txt"), "x"), files.rootFolderId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#filesNavButton");
+        waitForRows(scene);
+        selectFirstRow(scene);
+
+        FxTestSupport.fireAndAnswer(scene, "#renameButton", popup -> {
+            ((TextField) popup.getScene().getRoot().lookup(".popup-input")).setText("new.txt");
+            FxTestSupport.clickButton(popup, "Rename");
+        });
+
+        FxTestSupport.waitUntil(() -> files.listChildren(files.rootFolderId()).get(0).getName().equals("new.txt"));
     }
 
     @Test
