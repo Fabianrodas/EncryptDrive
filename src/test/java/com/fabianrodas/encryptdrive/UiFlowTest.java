@@ -17,12 +17,19 @@ import com.fabianrodas.repositories.ManifestRepository;
 import com.fabianrodas.security.SensitiveBytes;
 import com.fabianrodas.services.AuthService;
 import com.fabianrodas.services.FileService;
+import com.fabianrodas.services.ManifestLockProbe;
+import com.fabianrodas.services.RecoveryService;
 import com.fabianrodas.services.SessionService;
 import com.fabianrodas.services.VaultService;
 import com.fabianrodas.services.VaultSessionService;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Base64;
+import java.util.List;
+import java.util.UUID;
 import javafx.scene.Scene;
 import javafx.scene.control.ButtonBase;
 import javafx.scene.control.Labeled;
@@ -133,16 +140,7 @@ class UiFlowTest {
 
     @Test
     void overviewRetriesDeletionsInterruptedEarlier() throws Exception {
-        FileService files = FileService.forCurrentSession();
-        ManifestEntry orphan = files.importFile(Files.writeString(tempDir.resolve("orphan.txt"), "x"), files.rootFolderId());
-        UserSessionIdentity identity = SessionService.identity();
-        byte[] key = userMasterKey.copy();
-        ManifestRepository manifests = new ManifestRepository(vault);
-        // As if a permanent delete stopped after its manifest commit: entry gone, blob queued.
-        UserManifest manifest = manifests.load(identity.userId(), identity.manifestId(), key);
-        manifest.getEntries().removeIf(entry -> entry.getEntryId().equals(orphan.getEntryId()));
-        manifest.getPendingDeletions().add(new PendingDeletion(orphan.getBlobId(), Instant.now().toString()));
-        manifests.save(manifest, identity.manifestId(), key);
+        ManifestEntry orphan = queueAsInterruptedDelete("orphan.txt");
         Path blob = new BlobRepository().blobPath(vault.root(), orphan.getBlobId());
 
         FxTestSupport.showScreen("dashboard");
@@ -150,7 +148,56 @@ class UiFlowTest {
         FxTestSupport.waitUntil(() -> !Files.exists(blob));
         // The blob goes first; the shorter journal is saved just after.
         FxTestSupport.waitUntil(() -> !Background.isBusy());
-        assertTrue(manifests.load(identity.userId(), identity.manifestId(), key).getPendingDeletions().isEmpty());
+        assertTrue(pendingBlobIds().isEmpty());
+    }
+
+    @Test
+    void overviewRetriesAnUndeletableBlobOnceAndLeavesItQueued() throws Exception {
+        ManifestEntry stuck = queueAsInterruptedDelete("stuck.txt");
+        // A non-empty directory where the blob was: it cannot be deleted.
+        Path blob = new BlobRepository().blobPath(vault.root(), stuck.getBlobId());
+        Files.delete(blob);
+        Files.createDirectories(blob);
+        Files.writeString(blob.resolve("in-use"), "x");
+
+        Scene scene = FxTestSupport.showScreen("dashboard");
+
+        FxTestSupport.waitUntil(() -> Formats.CLEANUP_PENDING.equals(text(scene, "#feedbackLabel")));
+        FxTestSupport.waitUntil(() -> !Background.isBusy());
+
+        for (int sample = 0; sample < 40; sample++) {
+            Thread.sleep(25);
+            assertFalse(FxTestSupport.onFxThread(Background::isBusy), "the deletion was retried again");
+        }
+
+        assertEquals(List.of(stuck.getBlobId()), pendingBlobIds());
+    }
+
+    @Test
+    void recoveryNoticeIsLeftForTheViewThatIsShowing() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        files.importFile(Files.writeString(tempDir.resolve("kept.txt"), "k"), files.rootFolderId());
+        files.createFolder("Newest", files.rootFolderId());
+        RecoveryService.takeRecoveryNotice();
+        damageManifest();
+        Scene scene;
+        Labeled staleOverviewCount;
+
+        try (ManifestLockProbe blocked = new ManifestLockProbe()) {
+            scene = FxTestSupport.showScreen("dashboard");   // its statistics read waits for the lock
+            staleOverviewCount = FxTestSupport.onFxThread(() -> {
+                scene.getRoot().applyCss();
+                return (Labeled) scene.getRoot().lookup("#fileCountLabel");
+            });
+            click(scene, "#profileNavButton");                // leave the Overview before that read runs
+        }
+
+        // The Overview's read recovers the manifest from a backup and reaches a detached view.
+        FxTestSupport.waitUntil(() -> "1".equals(staleOverviewCount.getText()));
+        click(scene, "#filesNavButton");
+        waitForRows(scene);
+
+        assertEquals(Formats.RECOVERY_NOTICE, FxTestSupport.onFxThread(() -> text(scene, "#feedbackLabel")));
     }
 
     @Test
@@ -164,6 +211,45 @@ class UiFlowTest {
             scene.getRoot().applyCss();
             return ((Labeled) scene.getRoot().lookup("#appVersionLabel")).getText();
         }));
+    }
+
+    /** As if a permanent delete stopped after its manifest commit: entry gone, blob queued. */
+    private ManifestEntry queueAsInterruptedDelete(String name) throws Exception {
+        FileService files = FileService.forCurrentSession();
+        ManifestEntry orphan = files.importFile(Files.writeString(tempDir.resolve(name), "x"), files.rootFolderId());
+        UserSessionIdentity identity = SessionService.identity();
+        byte[] key = userMasterKey.copy();
+        ManifestRepository manifests = new ManifestRepository(vault);
+        UserManifest manifest = manifests.load(identity.userId(), identity.manifestId(), key);
+        manifest.getEntries().removeIf(entry -> entry.getEntryId().equals(orphan.getEntryId()));
+        manifest.getPendingDeletions().add(new PendingDeletion(orphan.getBlobId(), Instant.now().toString()));
+        manifests.save(manifest, identity.manifestId(), key);
+        return orphan;
+    }
+
+    private List<UUID> pendingBlobIds() throws Exception {
+        UserSessionIdentity identity = SessionService.identity();
+
+        return new ManifestRepository(vault)
+                .load(identity.userId(), identity.manifestId(), userMasterKey.copy())
+                .getPendingDeletions().stream().map(PendingDeletion::blobId).toList();
+    }
+
+    /** Flips one ciphertext bit of the live manifest, so the next load restores a backup. */
+    private void damageManifest() throws Exception {
+        Path manifest = vault.root().resolve(".encryptdrive").resolve("manifests")
+                .resolve(SessionService.identity().manifestId() + ".enc");
+        JsonObject envelope = JsonParser.parseString(Files.readString(manifest)).getAsJsonObject();
+        byte[] ciphertext = Base64.getDecoder().decode(envelope.get("ciphertext").getAsString());
+        ciphertext[ciphertext.length / 2] ^= 0x01;
+        envelope.addProperty("ciphertext", Base64.getEncoder().encodeToString(ciphertext));
+        Files.writeString(manifest, envelope.toString());
+    }
+
+    /** Text of a node inside the workspace; call on the JavaFX thread. */
+    private static String text(Scene scene, String selector) {
+        scene.getRoot().applyCss();
+        return ((Labeled) scene.getRoot().lookup(selector)).getText();
     }
 
     private static void waitForRows(Scene scene) throws Exception {

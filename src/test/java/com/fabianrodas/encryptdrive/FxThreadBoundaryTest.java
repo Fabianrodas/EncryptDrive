@@ -19,7 +19,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import javafx.application.Platform;
 import javafx.scene.Scene;
+import javafx.scene.Node;
 import javafx.scene.control.ButtonBase;
+import javafx.scene.control.Labeled;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import org.junit.jupiter.api.AfterEach;
@@ -68,11 +70,37 @@ class FxThreadBoundaryTest {
     @ParameterizedTest
     @ValueSource(strings = {"#overviewNavButton", "#filesNavButton", "#trashNavButton"})
     void openingAViewNeverLoadsTheManifestOnTheFxThread(String navigation) throws Exception {
+        ManifestEntry old = files.createFolder("Old", files.rootFolderId());
+        files.moveToTrash(old.getEntryId());   // every view has something to show
+        Scene scene;
+        Labeled firstOverviewCount;
+
         try (ManifestLockProbe blocked = new ManifestLockProbe()) {
-            Scene scene = FxTestSupport.showScreen("dashboard");   // Overview loads its statistics
+            scene = FxTestSupport.showScreen("dashboard");   // Overview loads its statistics
+            firstOverviewCount = fileCount(scene);
             fire(scene, navigation);
             assertFxThreadResponsive();
         }
+
+        // Both reads finish before the vault is closed and its directory deleted.
+        FxTestSupport.waitUntil(() -> "1".equals(firstOverviewCount.getText()) && viewShowsData(scene));
+    }
+
+    private static Labeled fileCount(Scene scene) throws Exception {
+        return FxTestSupport.onFxThread(() -> {
+            scene.getRoot().applyCss();
+            return (Labeled) scene.getRoot().lookup("#fileCountLabel");
+        });
+    }
+
+    /** Call on the JavaFX thread. */
+    private static boolean viewShowsData(Scene scene) {
+        scene.getRoot().applyCss();
+        Node table = scene.getRoot().lookup("#table");
+
+        return table != null
+                ? !((TableView<?>) table).getItems().isEmpty()
+                : "1".equals(((Labeled) scene.getRoot().lookup("#fileCountLabel")).getText());
     }
 
     @Test

@@ -62,10 +62,11 @@ public class OverviewController implements Initializable {
         vaultPathLabel.setText(vault.root().toString());
 
         files = FileService.forCurrentSession();
-        loadStats();
+        loadStats(true);
     }
 
-    private void loadStats() {
+    /** Spec 9.4: pending deletions are retried at most once per Overview load. */
+    private void loadStats(boolean retryPendingDeletions) {
         Background.read(files::stats, stats -> {
             fileCountLabel.setText(String.valueOf(stats.activeFileCount()));
             plainSizeLabel.setText(Formats.bytes(stats.activePlainBytes()));
@@ -73,24 +74,25 @@ public class OverviewController implements Initializable {
             trashCountLabel.setText(String.valueOf(stats.trashCount()));
             show(emptyStateCard, stats.activeFileCount() == 0);
 
-            if (RecoveryService.takeRecoveryNotice()) {
+            // A view the user already left must leave the one-shot notice for the visible one.
+            if (feedbackLabel.getScene() != null && RecoveryService.takeRecoveryNotice()) {
                 showFeedback(Formats.RECOVERY_NOTICE);
             }
 
-            if (stats.pendingDeletions() > 0) {
+            if (retryPendingDeletions && stats.pendingDeletions() > 0) {
                 resumePendingDeletions();
             }
         }, failure -> showFeedback("Your encrypted file list could not be read."));
     }
 
-    /** Spec 9.4: deletions that stopped earlier are retried after login; never blocks it. */
+    /** Deletions that stopped earlier are retried after login; failures only warn. */
     private void resumePendingDeletions() {
         Background.run(files::resumePendingDeletions, remaining -> {
             if (remaining > 0) {
                 showFeedback(Formats.CLEANUP_PENDING);
             }
 
-            loadStats();
+            loadStats(false);
         }, failure -> showFeedback(Formats.CLEANUP_PENDING));
     }
 

@@ -708,6 +708,11 @@ public final class FileService {
     private UserManifest load(byte[] key) throws FileServiceException {
         // Never read while this process is replacing the manifest.
         synchronized (MANIFEST_LOCK) {
+            // A read that waited for the lock must not recover files of a vault closed meanwhile.
+            if (vault.isClosed()) {
+                throw new FileServiceException(FileServiceException.Reason.STORAGE);
+            }
+
             try {
                 return manifestRepository.load(identity.userId(), identity.manifestId(), key);
             } catch (VaultStorageException e) {

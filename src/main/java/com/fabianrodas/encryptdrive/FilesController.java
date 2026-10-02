@@ -164,11 +164,11 @@ public class FilesController implements Initializable {
     /** Encrypts copies of the sources into the current folder; sources are left untouched. */
     void importFiles(List<Path> sources) {
         UUID target = currentFolderId;
-        long total = Math.max(1, sources.stream().mapToLong(FilesController::sizeOf).sum());
 
         Task<List<String>> task = new Task<>() {
             @Override
             protected List<String> call() {
+                long total = Math.max(1, sources.stream().mapToLong(FilesController::sizeOf).sum());
                 List<String> failures = new ArrayList<>();
                 long done = 0;
 
@@ -420,7 +420,8 @@ public class FilesController implements Initializable {
         table.getItems().setAll(view.children());
         renderBreadcrumbs(view.path());
 
-        if (RecoveryService.takeRecoveryNotice()) {
+        // A view the user already left must leave the one-shot notice for the visible one.
+        if (root.getScene() != null && RecoveryService.takeRecoveryNotice()) {
             feedbackLabel.getStyleClass().remove("success");
             feedbackLabel.getStyleClass().add("notice");
             feedbackLabel.setText(Formats.RECOVERY_NOTICE);

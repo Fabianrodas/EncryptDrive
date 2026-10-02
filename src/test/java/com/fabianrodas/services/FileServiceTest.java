@@ -25,12 +25,15 @@ import com.fabianrodas.security.Aad;
 import com.fabianrodas.security.AesGcmService;
 import com.fabianrodas.security.CryptoException;
 import com.fabianrodas.security.SensitiveBytes;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.LongConsumer;
@@ -68,6 +71,30 @@ class FileServiceTest {
     @AfterEach
     void closeVault() {
         vaultService.closeVault();
+    }
+
+    // ------------------------------------------------------------- session
+
+    @Test
+    void closedVaultRefusesManifestLoadsWithoutRecovering() throws Exception {
+        FileService files = files(alice);
+        files.createFolder("One", files.rootFolderId());
+        files.createFolder("Two", files.rootFolderId());
+        Path manifest = vault.root().resolve(".encryptdrive").resolve("manifests")
+                .resolve(alice.identity().manifestId() + ".enc");
+        JsonObject envelope = JsonParser.parseString(Files.readString(manifest)).getAsJsonObject();
+        byte[] ciphertext = Base64.getDecoder().decode(envelope.get("ciphertext").getAsString());
+        ciphertext[ciphertext.length / 2] ^= 0x01;   // a load would restore a backup over it
+        envelope.addProperty("ciphertext", Base64.getEncoder().encodeToString(ciphertext));
+        Files.writeString(manifest, envelope.toString());
+        byte[] damaged = Files.readAllBytes(manifest);
+        RecoveryService.takeRecoveryNotice();
+
+        vault.close();
+
+        assertReason(FileServiceException.Reason.STORAGE, files::listTrash);
+        assertArrayEquals(damaged, Files.readAllBytes(manifest));
+        assertFalse(RecoveryService.takeRecoveryNotice());
     }
 
     // ------------------------------------------------------------- import

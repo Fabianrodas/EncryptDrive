@@ -154,7 +154,8 @@ public class TrashController implements Initializable {
         Background.read(files::listTrash, items -> {
             table.getItems().setAll(items);
 
-            if (RecoveryService.takeRecoveryNotice()) {
+            // A view the user already left must leave the one-shot notice for the visible one.
+            if (root.getScene() != null && RecoveryService.takeRecoveryNotice()) {
                 feedbackLabel.getStyleClass().remove("success");
                 feedbackLabel.getStyleClass().add("notice");
                 feedbackLabel.setText(Formats.RECOVERY_NOTICE);
