@@ -26,6 +26,9 @@ public class ManifestRepository {
 
     public static final int FORMAT_VERSION = 1;
 
+    /** Spec limit for one manifest and each backup; checked before reading and before writing. */
+    public static final long MAX_MANIFEST_BYTES = 64L * 1024 * 1024;
+
     private static final int BACKUP_GENERATIONS = 3;
 
     private final VaultContext vault;
@@ -70,7 +73,7 @@ public class ManifestRepository {
         String json;
 
         try {
-            json = Files.readString(file, StandardCharsets.UTF_8);
+            json = BoundedFiles.readUtf8(file, MAX_MANIFEST_BYTES);
         } catch (NoSuchFileException e) {
             throw new VaultStorageException(VaultStorageException.Reason.CORRUPTED, e);
         } catch (IOException e) {
@@ -115,21 +118,29 @@ public class ManifestRepository {
     public void save(UserManifest manifest, UUID manifestId, byte[] userMasterKey)
             throws VaultStorageException {
 
+        byte[] envelope = seal(manifest, userMasterKey);
+        Path manifestFile = manifestFile(manifestId);
+
+        try {
+            rotator.rotate(manifestFile, manifestBackupsDir(), BACKUP_GENERATIONS);
+            writer.write(manifestFile, envelope);
+        } catch (IOException e) {
+            throw new VaultStorageException(VaultStorageException.Reason.IO, e);
+        }
+    }
+
+    /** The manifest encrypted under the UMK, as the JSON envelope written to disk. */
+    private byte[] seal(UserManifest manifest, byte[] userMasterKey) throws VaultStorageException {
         byte[] plaintext = gson.toJson(manifest).getBytes(StandardCharsets.UTF_8);
 
         try {
-            EncryptedPayload payload = aes.encrypt(
+            byte[] envelope = gson.toJson(aes.encrypt(
                     plaintext,
                     userMasterKey,
                     Aad.manifest(vault.vaultId(), manifest.getUserId().toString())
-            );
-            Path manifestFile = manifestFile(manifestId);
-
-            rotator.rotate(manifestFile, manifestBackupsDir(), BACKUP_GENERATIONS);
-            writer.write(manifestFile, gson.toJson(payload).getBytes(StandardCharsets.UTF_8));
-
-        } catch (IOException e) {
-            throw new VaultStorageException(VaultStorageException.Reason.IO, e);
+            )).getBytes(StandardCharsets.UTF_8);
+            BoundedFiles.requireWithin(envelope, MAX_MANIFEST_BYTES);
+            return envelope;
         } finally {
             Arrays.fill(plaintext, (byte) 0);
         }

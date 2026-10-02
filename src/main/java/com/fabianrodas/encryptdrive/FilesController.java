@@ -339,6 +339,7 @@ public class FilesController implements Initializable {
             case INTEGRITY -> "The encrypted data failed verification, so nothing was exported.";
             case CORRUPTED -> "Your encrypted file list could not be read.";
             case STORAGE -> "The vault or destination folder could not be written.";
+            case LIMIT -> "Your encrypted file list has reached EncryptDrive's size limit. Empty the trash or remove files first.";
         };
     }
 

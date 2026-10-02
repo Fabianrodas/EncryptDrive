@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fabianrodas.models.EncryptedPayload;
 import com.fabianrodas.models.KdfConfig;
@@ -135,6 +136,50 @@ class UserRegistryRepositoryTest {
         );
 
         assertEquals(VaultStorageException.Reason.CORRUPTED, error.getReason());
+    }
+
+    @Test
+    void oversizedRegistryFallsBackToAnAuthenticBackup() throws Exception {
+        repository.save(vault, registryWith(record()));
+        repository.save(vault, new UserRegistry(1, new ArrayList<>(List.of(record()))));
+        Files.delete(usersFile());
+        BoundedFilesTest.sparseFile(usersFile(), 3L << 30);
+
+        assertEquals(USER_ID, repository.load(vault).getUsers().get(0).getUserId());
+        assertTrue(Files.size(usersFile()) < UserRegistryRepository.MAX_REGISTRY_BYTES);
+        BackupRotator.takeRecoveryNotice();
+    }
+
+    @Test
+    void oversizedRegistryBackupIsSkipped() throws Exception {
+        repository.save(vault, registryWith(record()));
+        repository.save(vault, registryWith(record()));
+        repository.save(vault, registryWith(record()));
+        Path backups = root.resolve(".encryptdrive").resolve("backups");
+        Files.delete(backups.resolve("users.enc.1"));
+        BoundedFilesTest.sparseFile(backups.resolve("users.enc.1"), 3L << 30);
+        Files.writeString(usersFile(), "{}", UTF_8);
+
+        assertEquals(USER_ID, repository.load(vault).getUsers().get(0).getUserId());
+        BackupRotator.takeRecoveryNotice();
+    }
+
+    @Test
+    void saveRefusesRegistryOverTheLimit() throws Exception {
+        repository.save(vault, registryWith(record()));
+        byte[] before = Files.readAllBytes(usersFile());
+        UserRecord huge = new UserRecord(
+                USER_ID, "x".repeat(17 * 1024 * 1024), "ExampleUser", "exampleuser",
+                "2026-09-30T17:05:00Z", "7c8d9e0f-1a2b-4c3d-8e4f-5a6b7c8d9e0f",
+                record().getUserKdf(), record().getWrappedUserMasterKey()
+        );
+
+        VaultStorageException error = assertThrows(
+                VaultStorageException.class, () -> repository.save(vault, registryWith(huge))
+        );
+
+        assertEquals(VaultStorageException.Reason.TOO_LARGE, error.getReason());
+        assertArrayEquals(before, Files.readAllBytes(usersFile()));
     }
 
     private VaultContext context(byte[] key) {

@@ -63,7 +63,7 @@ public final class BackupRotator {
             }
 
             try {
-                writer.write(currentFile, Files.readAllBytes(backup));
+                writer.copy(backup, currentFile);
             } catch (IOException e) {
                 throw new VaultStorageException(VaultStorageException.Reason.IO, e);
             }
@@ -97,9 +97,6 @@ public final class BackupRotator {
             }
         }
 
-        writer.write(
-                backupDirectory.resolve(name + ".1"),
-                Files.readAllBytes(encryptedFile)
-        );
+        writer.copy(encryptedFile, backupDirectory.resolve(name + ".1"));
     }
 }

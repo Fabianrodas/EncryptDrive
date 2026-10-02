@@ -12,7 +12,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -24,6 +23,9 @@ import java.util.Arrays;
 public final class UserRegistryRepository {
 
     public static final int FORMAT_VERSION = 1;
+
+    /** Spec limit for users.enc and each backup; checked before reading and before writing. */
+    public static final long MAX_REGISTRY_BYTES = 16L * 1024 * 1024;
 
     private static final int BACKUP_GENERATIONS = 3;
 
@@ -60,7 +62,7 @@ public final class UserRegistryRepository {
         String json;
 
         try {
-            json = Files.readString(file, StandardCharsets.UTF_8);
+            json = BoundedFiles.readUtf8(file, MAX_REGISTRY_BYTES);
         } catch (NoSuchFileException e) {
             throw new VaultStorageException(VaultStorageException.Reason.CORRUPTED, e);
         } catch (IOException e) {
@@ -106,26 +108,27 @@ public final class UserRegistryRepository {
     public void save(VaultContext vault, UserRegistry registry)
             throws VaultStorageException {
 
+        byte[] envelope = seal(vault, registry);
+        Path usersFile = VaultRepository.usersFile(vault.root());
+
+        try {
+            rotator.rotate(usersFile, VaultRepository.backupsDir(vault.root()), BACKUP_GENERATIONS);
+            writer.write(usersFile, envelope);
+        } catch (IOException e) {
+            throw new VaultStorageException(VaultStorageException.Reason.IO, e);
+        }
+    }
+
+    /** The registry encrypted under the RMK, as the JSON envelope written to disk. */
+    private byte[] seal(VaultContext vault, UserRegistry registry) throws VaultStorageException {
         byte[] registryKey = vault.copyRegistryKey();
         byte[] plaintext = gson.toJson(registry).getBytes(StandardCharsets.UTF_8);
 
         try {
-            EncryptedPayload payload = aes.encrypt(
-                    plaintext,
-                    registryKey,
-                    Aad.users(vault.vaultId())
-            );
-            Path usersFile = VaultRepository.usersFile(vault.root());
-
-            rotator.rotate(
-                    usersFile,
-                    VaultRepository.backupsDir(vault.root()),
-                    BACKUP_GENERATIONS
-            );
-            writer.write(usersFile, gson.toJson(payload).getBytes(StandardCharsets.UTF_8));
-
-        } catch (IOException e) {
-            throw new VaultStorageException(VaultStorageException.Reason.IO, e);
+            byte[] envelope = gson.toJson(aes.encrypt(plaintext, registryKey, Aad.users(vault.vaultId())))
+                    .getBytes(StandardCharsets.UTF_8);
+            BoundedFiles.requireWithin(envelope, MAX_REGISTRY_BYTES);
+            return envelope;
         } finally {
             Arrays.fill(registryKey, (byte) 0);
             Arrays.fill(plaintext, (byte) 0);

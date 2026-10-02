@@ -582,8 +582,17 @@ public final class FileService {
         try {
             manifestRepository.save(manifest, identity.manifestId(), key);
         } catch (VaultStorageException e) {
-            throw new FileServiceException(FileServiceException.Reason.STORAGE, e);
+            throw storageFailure(e);
         }
+    }
+
+    private static FileServiceException storageFailure(VaultStorageException e) {
+        return new FileServiceException(
+                e.getReason() == VaultStorageException.Reason.TOO_LARGE
+                        ? FileServiceException.Reason.LIMIT
+                        : FileServiceException.Reason.STORAGE,
+                e
+        );
     }
 
     /** The entry and all of its descendants, trashed or not. */

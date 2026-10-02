@@ -12,6 +12,7 @@ import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -103,6 +104,35 @@ class VaultRepositoryTest {
         );
 
         assertEquals(VaultStorageException.Reason.UNSUPPORTED_VERSION, error.getReason());
+    }
+
+    @Test
+    void oversizedHeaderIsRejectedBeforeParsing(@TempDir Path tempDir) throws Exception {
+        Files.createDirectories(tempDir.resolve(".encryptdrive"));
+        BoundedFilesTest.sparseFile(tempDir.resolve(".encryptdrive").resolve("vault.json"), 3L << 30);
+
+        VaultStorageException error = assertThrows(
+                VaultStorageException.class, () -> repository.readHeader(tempDir)
+        );
+
+        assertEquals(VaultStorageException.Reason.CORRUPTED, error.getReason());
+    }
+
+    @Test
+    void headerOfExactlyTheLimitStillReads(@TempDir Path tempDir) throws Exception {
+        repository.writeHeader(tempDir, header(1));
+        Path file = tempDir.resolve(".encryptdrive").resolve("vault.json");
+        String json = Files.readString(file, UTF_8);
+        Files.writeString(file, json + " ".repeat((int) VaultRepository.MAX_HEADER_BYTES - json.length()), UTF_8);
+
+        assertEquals(VaultRepository.MAX_HEADER_BYTES, Files.size(file));
+        assertEquals(VAULT_ID, repository.readHeader(tempDir).getVaultId());
+
+        Files.writeString(file, " ", UTF_8, StandardOpenOption.APPEND);
+        assertEquals(
+                VaultStorageException.Reason.CORRUPTED,
+                assertThrows(VaultStorageException.class, () -> repository.readHeader(tempDir)).getReason()
+        );
     }
 
     private static VaultHeader header(int formatVersion) {

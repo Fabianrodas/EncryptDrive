@@ -243,7 +243,7 @@ public final class VaultService {
                 case NOT_FOUND -> VaultException.Reason.NOT_A_VAULT;
                 case CORRUPTED -> VaultException.Reason.CORRUPTED;
                 case UNSUPPORTED_VERSION -> VaultException.Reason.UNSUPPORTED_VERSION;
-                case IO -> VaultException.Reason.STORAGE;
+                case IO, TOO_LARGE -> VaultException.Reason.STORAGE;
             }, e);
         }
     }

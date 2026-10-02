@@ -119,6 +119,46 @@ class ManifestRepositoryTest {
         )));
     }
 
+    @Test
+    void oversizedManifestFallsBackToAnAuthenticBackup() throws Exception {
+        repository.save(ManifestService.newManifest(userId), manifestId, userMasterKey);
+        repository.save(manifestWithNames(), manifestId, userMasterKey);
+        Files.delete(manifestFile());
+        BoundedFilesTest.sparseFile(manifestFile(), 3L << 30);
+
+        assertEquals(1, repository.load(userId, manifestId, userMasterKey).getEntries().size());
+        BackupRotator.takeRecoveryNotice();
+    }
+
+    @Test
+    void oversizedManifestBackupIsSkipped() throws Exception {
+        repository.save(ManifestService.newManifest(userId), manifestId, userMasterKey);
+        repository.save(ManifestService.newManifest(userId), manifestId, userMasterKey);
+        repository.save(ManifestService.newManifest(userId), manifestId, userMasterKey);
+        Path backup1 = root.resolve(".encryptdrive/backups/manifests/" + manifestId + ".enc.1");
+        Files.delete(backup1);
+        BoundedFilesTest.sparseFile(backup1, 3L << 30);
+        Files.writeString(manifestFile(), "{}", UTF_8);
+
+        assertEquals(1, repository.load(userId, manifestId, userMasterKey).getEntries().size());
+        BackupRotator.takeRecoveryNotice();
+    }
+
+    @Test
+    void saveRefusesManifestOverTheLimit() throws Exception {
+        repository.save(ManifestService.newManifest(userId), manifestId, userMasterKey);
+        byte[] before = Files.readAllBytes(manifestFile());
+        UserManifest huge = ManifestService.newManifest(userId);
+        huge.getEntries().get(0).setName("x".repeat(65 * 1024 * 1024));
+
+        VaultStorageException error = assertThrows(
+                VaultStorageException.class, () -> repository.save(huge, manifestId, userMasterKey)
+        );
+
+        assertEquals(VaultStorageException.Reason.TOO_LARGE, error.getReason());
+        assertArrayEquals(before, Files.readAllBytes(manifestFile()));
+    }
+
     private UserManifest manifestWithNames() throws Exception {
         UserManifest manifest = ManifestService.newManifest(userId);
         ManifestService service = new ManifestService(manifest);

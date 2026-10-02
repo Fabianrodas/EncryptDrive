@@ -23,6 +23,9 @@ public final class VaultRepository {
 
     public static final int FORMAT_VERSION = 1;
 
+    /** Spec limit for vault.json; checked before reading and before writing. */
+    public static final long MAX_HEADER_BYTES = 256L * 1024;
+
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     private final AtomicFileWriter writer = new AtomicFileWriter();
 
@@ -45,12 +48,12 @@ public final class VaultRepository {
     public void writeHeader(Path vaultRoot, VaultHeader header)
             throws VaultStorageException {
 
+        byte[] json = gson.toJson(header).getBytes(StandardCharsets.UTF_8);
+        BoundedFiles.requireWithin(json, MAX_HEADER_BYTES);
+
         try {
             Files.createDirectories(metaDir(vaultRoot));
-            writer.write(
-                    metaDir(vaultRoot).resolve(VAULT_HEADER),
-                    gson.toJson(header).getBytes(StandardCharsets.UTF_8)
-            );
+            writer.write(metaDir(vaultRoot).resolve(VAULT_HEADER), json);
 
         } catch (IOException e) {
             throw new VaultStorageException(VaultStorageException.Reason.IO, e);
@@ -61,10 +64,7 @@ public final class VaultRepository {
         String json;
 
         try {
-            json = Files.readString(
-                    metaDir(vaultRoot).resolve(VAULT_HEADER),
-                    StandardCharsets.UTF_8
-            );
+            json = BoundedFiles.readUtf8(metaDir(vaultRoot).resolve(VAULT_HEADER), MAX_HEADER_BYTES);
 
         } catch (NoSuchFileException e) {
             throw new VaultStorageException(VaultStorageException.Reason.NOT_FOUND, e);

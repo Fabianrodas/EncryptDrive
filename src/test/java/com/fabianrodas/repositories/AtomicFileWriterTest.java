@@ -48,6 +48,17 @@ class AtomicFileWriterTest {
         assertEquals(List.of("occupied"), fileNames(destination));
     }
 
+    @Test
+    void copyStreamsTheSourceIntoPlace(@TempDir Path tempDir) throws IOException {
+        Path source = Files.write(tempDir.resolve("source"), new byte[300_000]);
+        Path destination = Files.writeString(tempDir.resolve("destination"), "old");
+
+        writer.copy(source, destination);
+
+        assertEquals(300_000, Files.size(destination));
+        assertEquals(List.of("destination", "source"), fileNames(tempDir));
+    }
+
     private static List<String> fileNames(Path directory) throws IOException {
         try (Stream<Path> files = Files.list(directory)) {
             return files.map(path -> path.getFileName().toString()).sorted().toList();

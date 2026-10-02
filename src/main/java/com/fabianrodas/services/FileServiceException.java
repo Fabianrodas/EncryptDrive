@@ -12,7 +12,8 @@ public final class FileServiceException extends Exception {
         SOURCE_UNREADABLE,
         INTEGRITY,
         CORRUPTED,
-        STORAGE
+        STORAGE,
+        LIMIT
     }
 
     private final Reason reason;

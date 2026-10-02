@@ -6,7 +6,8 @@ public final class VaultStorageException extends Exception {
         NOT_FOUND,
         CORRUPTED,
         UNSUPPORTED_VERSION,
-        IO
+        IO,
+        TOO_LARGE
     }
 
     private final Reason reason;
