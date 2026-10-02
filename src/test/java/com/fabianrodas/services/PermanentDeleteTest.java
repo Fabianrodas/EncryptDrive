@@ -268,11 +268,13 @@ class PermanentDeleteTest {
         };
 
         assertEquals(1, vault.files(alice, cleanupFails).permanentlyDelete(List.of(doomed.getEntryId())));
+        assertEquals(1, files.stats().pendingDeletions());
 
         assertFalse(Files.exists(vault.blob(doomed)));
         assertEquals(List.of(doomed.getBlobId()), blobIds(vault.manifest(alice).getPendingDeletions()));
         assertEquals(0, files.resumePendingDeletions());
         assertTrue(vault.manifest(alice).getPendingDeletions().isEmpty());
+        assertEquals(0, files.stats().pendingDeletions());
     }
 
     @Test

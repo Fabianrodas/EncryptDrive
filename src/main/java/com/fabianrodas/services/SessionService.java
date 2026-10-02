@@ -34,9 +34,14 @@ public final class SessionService {
         return identity;
     }
 
-    /** Returns a copy of the UMK that the caller must close. */
-    public static synchronized SensitiveBytes copyUserMasterKey() {
+    /** A copy of the UMK that the caller must close; refused if another account signed in meanwhile. */
+    public static synchronized SensitiveBytes copyUserMasterKey(UserSessionIdentity expected) {
         requireActive();
+
+        if (!identity.equals(expected)) {
+            throw new IllegalStateException("A different account is signed in.");
+        }
+
         return SensitiveBytes.wrap(userMasterKey.copy());
     }
 

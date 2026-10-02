@@ -106,17 +106,60 @@ public final class FileService {
         this.crypto = crypto;
     }
 
-    /** Files of the user signed in to the open vault. */
+    /** Files of the user signed in to the open vault; refuses to run for a later session. */
     public static FileService forCurrentSession() {
+        UserSessionIdentity identity = SessionService.identity();
+
         return new FileService(
                 VaultSessionService.current(),
-                SessionService.identity(),
-                SessionService::copyUserMasterKey
+                identity,
+                () -> SessionService.copyUserMasterKey(identity)
         );
     }
 
     public UUID rootFolderId() throws FileServiceException {
-        return withUserMasterKey(key -> load(key).getRootFolderId());
+        return folderView(null).folderId();
+    }
+
+    /** A folder's breadcrumb path (root first) and its active children, from one manifest read. */
+    public record FolderView(UUID folderId, List<ManifestEntry> path, List<ManifestEntry> children) {
+    }
+
+    /**
+     * The view of {@code folderId}, or of the root when it is null or no longer
+     * an active folder (for example because it was moved to the trash).
+     */
+    public FolderView folderView(UUID folderId) throws FileServiceException {
+        return withUserMasterKey(key -> {
+            UserManifest manifest = load(key);
+            ManifestService rules = new ManifestService(manifest);
+            ManifestEntry folder = folderId == null ? null : rules.find(folderId);
+
+            if (folder == null
+                    || folder.getDeletedAt() != null
+                    || folder.getKind() != ManifestEntryKind.FOLDER) {
+                folder = rules.find(manifest.getRootFolderId());
+            }
+
+            return new FolderView(
+                    folder.getEntryId(),
+                    path(rules, folder),
+                    rules.listChildren(folder.getEntryId(), false).stream().sorted(FOLDERS_THEN_NAME).toList()
+            );
+        });
+    }
+
+    /** Folders from the root down to {@code folder}. */
+    private static List<ManifestEntry> path(ManifestService rules, ManifestEntry folder) {
+        LinkedList<ManifestEntry> path = new LinkedList<>();
+
+        for (ManifestEntry entry = folder;
+                entry != null && path.size() <= MAX_FOLDER_DEPTH;
+                entry = entry.getParentId() == null ? null : rules.find(entry.getParentId())) {
+            path.addFirst(entry);
+        }
+
+        return path;
     }
 
     /** Active children, folders first, then by name. */
@@ -125,22 +168,6 @@ public final class FileService {
                 .listChildren(folderId, false).stream()
                 .sorted(FOLDERS_THEN_NAME)
                 .toList());
-    }
-
-    /** Folders from the root down to {@code folderId}, for breadcrumbs. */
-    public List<ManifestEntry> pathTo(UUID folderId) throws FileServiceException {
-        return withUserMasterKey(key -> {
-            ManifestService rules = new ManifestService(load(key));
-            LinkedList<ManifestEntry> path = new LinkedList<>();
-
-            for (ManifestEntry entry = rules.find(folderId);
-                    entry != null && path.size() <= MAX_FOLDER_DEPTH;
-                    entry = entry.getParentId() == null ? null : rules.find(entry.getParentId())) {
-                path.addFirst(entry);
-            }
-
-            return path;
-        });
     }
 
     /** Entries the user moved to the trash, newest first. */
@@ -467,7 +494,9 @@ public final class FileService {
             long encryptedBytes = 0;
             int trash = 0;
 
-            for (ManifestEntry entry : load(key).getEntries()) {
+            UserManifest manifest = load(key);
+
+            for (ManifestEntry entry : manifest.getEntries()) {
                 if (isTrashRoot(entry)) {
                     trash++;
                 }
@@ -482,7 +511,9 @@ public final class FileService {
                 }
             }
 
-            return new WorkspaceStats(activeFiles, activeBytes, encryptedBytes, trash);
+            return new WorkspaceStats(
+                    activeFiles, activeBytes, encryptedBytes, trash, manifest.getPendingDeletions().size()
+            );
         });
     }
 
@@ -670,16 +701,23 @@ public final class FileService {
         }
     }
 
+    /**
+     * The only caller of {@link ManifestRepository#load}: recovery inside it
+     * may copy a backup over the live file, so it must never overlap a save.
+     */
     private UserManifest load(byte[] key) throws FileServiceException {
-        try {
-            return manifestRepository.load(identity.userId(), identity.manifestId(), key);
-        } catch (VaultStorageException e) {
-            throw new FileServiceException(
-                    e.getReason() == VaultStorageException.Reason.IO
-                            ? FileServiceException.Reason.STORAGE
-                            : FileServiceException.Reason.CORRUPTED,
-                    e
-            );
+        // Never read while this process is replacing the manifest.
+        synchronized (MANIFEST_LOCK) {
+            try {
+                return manifestRepository.load(identity.userId(), identity.manifestId(), key);
+            } catch (VaultStorageException e) {
+                throw new FileServiceException(
+                        e.getReason() == VaultStorageException.Reason.IO
+                                ? FileServiceException.Reason.STORAGE
+                                : FileServiceException.Reason.CORRUPTED,
+                        e
+                );
+            }
         }
     }
 

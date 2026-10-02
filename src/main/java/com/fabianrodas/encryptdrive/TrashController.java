@@ -2,15 +2,16 @@ package com.fabianrodas.encryptdrive;
 
 import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.services.FileService;
-import com.fabianrodas.services.FileServiceException;
 import com.fabianrodas.services.RecoveryService;
 import com.fabianrodas.services.SessionService;
 import java.net.URL;
 import java.util.List;
 import java.util.ResourceBundle;
+import java.util.UUID;
 import java.util.function.Function;
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.ReadOnlyStringWrapper;
-import javafx.collections.ListChangeListener;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.Button;
@@ -63,34 +64,40 @@ public class TrashController implements Initializable {
         column(typeColumn, Formats::type);
         column(deletedColumn, entry -> Formats.dateTime(entry.getDeletedAt()));
 
-        table.getSelectionModel().getSelectedItems().addListener(
-                (ListChangeListener<ManifestEntry>) change -> updateActions()
-        );
-
-        if (SessionService.isActive()) {
-            files = FileService.forCurrentSession();
-            refresh();
+        if (!SessionService.isActive()) {
+            restoreButton.setDisable(true);
+            deleteButton.setDisable(true);
+            return;
         }
+
+        files = FileService.forCurrentSession();
+        BooleanBinding unavailable = Bindings.isEmpty(table.getSelectionModel().getSelectedItems())
+                .or(Background.busyProperty());
+        restoreButton.disableProperty().bind(unavailable);
+        deleteButton.disableProperty().bind(unavailable);
+        table.disableProperty().bind(Background.busyProperty());
+        refresh();
     }
 
     @FXML
     private void restore() {
         List<ManifestEntry> selected = List.copyOf(table.getSelectionModel().getSelectedItems());
 
-        try {
+        Background.run(() -> {
             for (ManifestEntry entry : selected) {
                 files.restore(entry.getEntryId());
             }
 
+            return null;
+        }, done -> {
             refresh();
             showSuccess(selected.size() == 1
                     ? "\"" + selected.get(0).getName() + "\" was restored."
                     : selected.size() + " items were restored.");
-
-        } catch (FileServiceException e) {
+        }, failure -> {
             refresh();
-            showError(FilesController.describe(e));
-        }
+            showError(FilesController.describe(failure));
+        });
     }
 
     @FXML
@@ -113,21 +120,18 @@ public class TrashController implements Initializable {
             return;
         }
 
-        try {
-            int pending = files.permanentlyDelete(
-                    selected.stream().map(ManifestEntry::getEntryId).toList()
-            );
+        List<UUID> ids = selected.stream().map(ManifestEntry::getEntryId).toList();
 
+        Background.run(() -> files.permanentlyDelete(ids), pending -> {
             refresh();
             showSuccess((selected.size() == 1
                     ? "\"" + selected.get(0).getName() + "\" was deleted permanently."
                     : selected.size() + " items were deleted permanently.")
                     + (pending > 0 ? " " + Formats.CLEANUP_PENDING : ""));
-
-        } catch (FileServiceException e) {
+        }, failure -> {
             refresh();
-            showError(FilesController.describe(e));
-        }
+            showError(FilesController.describe(failure));
+        });
     }
 
     static String describeItems(List<ManifestEntry> items) {
@@ -147,27 +151,15 @@ public class TrashController implements Initializable {
     }
 
     private void refresh() {
-        try {
-            table.getItems().setAll(files.listTrash());
-        } catch (FileServiceException e) {
-            showError(FilesController.describe(e));
-        }
+        Background.read(files::listTrash, items -> {
+            table.getItems().setAll(items);
 
-        if (RecoveryService.takeRecoveryNotice()) {
-            feedbackLabel.getStyleClass().remove("success");
-            feedbackLabel.getStyleClass().add("notice");
-            feedbackLabel.setText(Formats.RECOVERY_NOTICE);
-        }
-
-        updateActions();
-    }
-
-    private void updateActions() {
-        boolean nothingSelected = files == null
-                || table.getSelectionModel().getSelectedItems().isEmpty();
-
-        restoreButton.setDisable(nothingSelected);
-        deleteButton.setDisable(nothingSelected);
+            if (RecoveryService.takeRecoveryNotice()) {
+                feedbackLabel.getStyleClass().remove("success");
+                feedbackLabel.getStyleClass().add("notice");
+                feedbackLabel.setText(Formats.RECOVERY_NOTICE);
+            }
+        }, failure -> showError(FilesController.describe(failure)));
     }
 
     private void showError(String message) {

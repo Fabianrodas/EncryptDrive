@@ -30,7 +30,45 @@ final class Background {
         return BUSY.get();
     }
 
+    /** Counted as busy until it ends: for work that changes the vault. */
     static <T> void run(
+            Callable<T> work,
+            Consumer<T> onSuccess,
+            Consumer<Throwable> onFailure
+    ) {
+        start(task(work, onSuccess, onFailure));
+    }
+
+    /**
+     * Like {@link #run}, for read-only work: it is not counted as busy, so it
+     * neither locks navigation nor blocks closing.
+     */
+    static <T> void read(Callable<T> work, Consumer<T> onSuccess, Consumer<Throwable> onFailure) {
+        launch(task(work, onSuccess, onFailure));
+    }
+
+    /** Runs the task, counted as busy until it ends. */
+    static void start(Task<?> task) {
+        RUNNING.set(RUNNING.get() + 1);
+        // A filter, not a handler: it runs before the task's onSucceeded/onFailed
+        // callbacks, so a throwing callback cannot leave the app permanently busy.
+        task.addEventFilter(WorkerStateEvent.ANY, event -> {
+            if (event.getEventType() == WorkerStateEvent.WORKER_STATE_SUCCEEDED
+                    || event.getEventType() == WorkerStateEvent.WORKER_STATE_FAILED
+                    || event.getEventType() == WorkerStateEvent.WORKER_STATE_CANCELLED) {
+                RUNNING.set(RUNNING.get() - 1);
+            }
+        });
+        launch(task);
+    }
+
+    private static void launch(Task<?> task) {
+        Thread worker = new Thread(task, "EncryptDrive worker");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private static <T> Task<T> task(
             Callable<T> work,
             Consumer<T> onSuccess,
             Consumer<Throwable> onFailure
@@ -44,23 +82,6 @@ final class Background {
 
         task.setOnSucceeded(event -> onSuccess.accept(task.getValue()));
         task.setOnFailed(event -> onFailure.accept(task.getException()));
-        start(task);
-    }
-
-    static void start(Task<?> task) {
-        RUNNING.set(RUNNING.get() + 1);
-        // A filter, not a handler: it runs before the task's onSucceeded/onFailed
-        // callbacks, so a throwing callback cannot leave the app permanently busy.
-        task.addEventFilter(WorkerStateEvent.ANY, event -> {
-            if (event.getEventType() == WorkerStateEvent.WORKER_STATE_SUCCEEDED
-                    || event.getEventType() == WorkerStateEvent.WORKER_STATE_FAILED
-                    || event.getEventType() == WorkerStateEvent.WORKER_STATE_CANCELLED) {
-                RUNNING.set(RUNNING.get() - 1);
-            }
-        });
-
-        Thread worker = new Thread(task, "EncryptDrive worker");
-        worker.setDaemon(true);
-        worker.start();
+        return task;
     }
 }

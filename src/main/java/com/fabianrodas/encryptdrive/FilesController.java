@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.ResourceBundle;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javafx.beans.property.ReadOnlyStringWrapper;
@@ -95,6 +96,9 @@ public class FilesController implements Initializable {
     private UUID currentFolderId;
     private boolean busy = false;
 
+    /** Results of older folder loads are dropped when they arrive late. */
+    private int viewRequest;
+
     @Override
     public void initialize(URL url, ResourceBundle rb) {
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
@@ -127,13 +131,7 @@ public class FilesController implements Initializable {
         }
 
         files = FileService.forCurrentSession();
-
-        try {
-            currentFolderId = files.rootFolderId();
-            refresh();
-        } catch (FileServiceException e) {
-            showError(describe(e));
-        }
+        refresh();
     }
 
     @FXML
@@ -146,16 +144,9 @@ public class FilesController implements Initializable {
                 "Create"
         );
 
-        if (name.isEmpty()) {
-            return;
-        }
-
-        try {
-            files.createFolder(name.get(), currentFolderId);
-            refresh();
-            showSuccess("Folder created.");
-        } catch (FileServiceException e) {
-            showError(describe(e));
+        if (name.isPresent()) {
+            UUID parent = currentFolderId;
+            change(() -> files.createFolder(name.get(), parent), folder -> showSuccess("Folder created."));
         }
     }
 
@@ -232,42 +223,38 @@ public class FilesController implements Initializable {
             return;
         }
 
-        List<Path> targets;
-
         if (selected.size() == 1 && selected.get(0).getKind() == ManifestEntryKind.FILE) {
             FileChooser chooser = new FileChooser();
             chooser.setTitle("Save a decrypted copy");
             chooser.setInitialFileName(FileService.safeFileName(selected.get(0).getName()));
             File chosen = chooser.showSaveDialog(window());
 
-            if (chosen == null) {
-                return;
+            if (chosen != null) {
+                exportTo(selected, List.of(chosen.toPath()));
             }
 
-            targets = List.of(chosen.toPath());
+            return;
+        }
 
-        } else {
-            DirectoryChooser chooser = new DirectoryChooser();
-            chooser.setTitle("Choose a folder for the decrypted copies");
-            File directory = chooser.showDialog(window());
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Choose a folder for the decrypted copies");
+        File directory = chooser.showDialog(window());
 
-            if (directory == null) {
-                return;
-            }
+        if (directory == null) {
+            return;
+        }
 
-            try {
-                targets = files.exportTargets(
-                        selected.stream().map(ManifestEntry::getEntryId).toList(),
-                        directory.toPath()
-                );
-            } catch (FileServiceException e) {
-                showError(describe(e));
-                return;
-            }
+        List<UUID> ids = selected.stream().map(ManifestEntry::getEntryId).toList();
 
-            long existing = targets.stream().filter(Files::exists).count();
+        record Plan(List<Path> targets, long existing) { }
 
-            if (existing > 0 && !DialogFactory.confirm(
+        Background.read(() -> {
+            List<Path> targets = files.exportTargets(ids, directory.toPath());
+            return new Plan(targets, targets.stream().filter(Files::exists).count());
+        }, plan -> {
+            long existing = plan.existing();
+
+            if (existing == 0 || DialogFactory.confirm(
                     window(),
                     "Replace existing items?",
                     (existing == 1 ? "1 item with the same name already exists"
@@ -275,11 +262,9 @@ public class FilesController implements Initializable {
                             + " in that folder. Replace them with the decrypted copies?",
                     "Replace"
             )) {
-                return;
+                exportTo(selected, plan.targets());
             }
-        }
-
-        exportTo(selected, targets);
+        }, failure -> showError(describe(failure)));
     }
 
     /** Writes decrypted copies of the entries to the given targets, which may be replaced. */
@@ -311,20 +296,21 @@ public class FilesController implements Initializable {
             return;
         }
 
-        try {
+        change(() -> {
             for (ManifestEntry entry : selected) {
                 files.moveToTrash(entry.getEntryId());
             }
 
-            refresh();
-            showSuccess(selected.size() == 1
-                    ? "\"" + selected.get(0).getName() + "\" moved to the trash."
-                    : selected.size() + " items moved to the trash.");
+            return null;
+        }, done -> showSuccess(selected.size() == 1
+                ? "\"" + selected.get(0).getName() + "\" moved to the trash."
+                : selected.size() + " items moved to the trash."));
+    }
 
-        } catch (FileServiceException e) {
-            refresh();
-            showError(describe(e));
-        }
+    static String describe(Throwable failure) {
+        return failure instanceof FileServiceException error
+                ? describe(error)
+                : "The operation could not be completed.";
     }
 
     static String describe(FileServiceException e) {
@@ -343,37 +329,54 @@ public class FilesController implements Initializable {
         };
     }
 
+    /** Runs a vault change in the background with the view locked, then reloads the folder. */
+    private <T> void change(Callable<T> work, Consumer<T> onDone) {
+        setBusy(true);
+        Background.run(work, result -> {
+            setBusy(false);
+            refresh();
+            onDone.accept(result);
+        }, failure -> {
+            setBusy(false);
+            refresh();
+            showError(describe(failure));
+        });
+    }
+
     private <T> void runWithProgress(Task<T> task, Consumer<T> onDone) {
         setBusy(true);
+        showProgress(true);
         progressBar.progressProperty().bind(task.progressProperty());
         progressLabel.textProperty().bind(task.messageProperty());
 
         task.setOnSucceeded(event -> {
+            showProgress(false);
             setBusy(false);
             refresh();
             onDone.accept(task.getValue());
         });
         task.setOnFailed(event -> {
+            showProgress(false);
             setBusy(false);
             refresh();
-            showError(task.getException() instanceof FileServiceException error
-                    ? describe(error)
-                    : "The operation could not be completed.");
+            showError(describe(task.getException()));
         });
 
         Background.start(task);
     }
 
-    private void setBusy(boolean busy) {
-        this.busy = busy;
-
-        if (!busy) {
+    private void showProgress(boolean visible) {
+        if (!visible) {
             progressBar.progressProperty().unbind();
             progressLabel.textProperty().unbind();
         }
 
-        progressBox.setVisible(busy);
-        progressBox.setManaged(busy);
+        progressBox.setVisible(visible);
+        progressBox.setManaged(visible);
+    }
+
+    private void setBusy(boolean busy) {
+        this.busy = busy;
         table.setDisable(busy);
         breadcrumbBar.setDisable(busy);
         updateActions();
@@ -398,12 +401,24 @@ public class FilesController implements Initializable {
             return;
         }
 
-        try {
-            table.getItems().setAll(files.listChildren(currentFolderId));
-            renderBreadcrumbs(files.pathTo(currentFolderId));
-        } catch (FileServiceException e) {
-            showError(describe(e));
-        }
+        int request = ++viewRequest;
+        UUID folderId = currentFolderId;
+
+        Background.read(() -> files.folderView(folderId), view -> {
+            if (request == viewRequest) {
+                show(view);
+            }
+        }, failure -> {
+            if (request == viewRequest) {
+                showError(describe(failure));
+            }
+        });
+    }
+
+    private void show(FileService.FolderView view) {
+        currentFolderId = view.folderId();
+        table.getItems().setAll(view.children());
+        renderBreadcrumbs(view.path());
 
         if (RecoveryService.takeRecoveryNotice()) {
             feedbackLabel.getStyleClass().remove("success");
@@ -439,7 +454,8 @@ public class FilesController implements Initializable {
     }
 
     private void updateActions() {
-        boolean unavailable = busy || files == null;
+        // Until the first folder view arrives there is no folder to act in.
+        boolean unavailable = busy || files == null || currentFolderId == null;
         boolean nothingSelected = table.getSelectionModel().getSelectedItems().isEmpty();
 
         newFolderButton.setDisable(unavailable);

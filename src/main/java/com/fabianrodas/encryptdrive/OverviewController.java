@@ -1,9 +1,7 @@
 package com.fabianrodas.encryptdrive;
 
 import com.fabianrodas.models.VaultContext;
-import com.fabianrodas.models.WorkspaceStats;
 import com.fabianrodas.services.FileService;
-import com.fabianrodas.services.FileServiceException;
 import com.fabianrodas.services.RecoveryService;
 import com.fabianrodas.services.SessionService;
 import com.fabianrodas.services.VaultSessionService;
@@ -50,6 +48,7 @@ public class OverviewController implements Initializable {
     private VBox emptyStateCard;
 
     private Runnable onOpenFiles = () -> { };
+    private FileService files;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -62,9 +61,12 @@ public class OverviewController implements Initializable {
         vaultNameLabel.setText(App.openVaultName());
         vaultPathLabel.setText(vault.root().toString());
 
-        try {
-            WorkspaceStats stats = FileService.forCurrentSession().stats();
+        files = FileService.forCurrentSession();
+        loadStats();
+    }
 
+    private void loadStats() {
+        Background.read(files::stats, stats -> {
             fileCountLabel.setText(String.valueOf(stats.activeFileCount()));
             plainSizeLabel.setText(Formats.bytes(stats.activePlainBytes()));
             encryptedSizeLabel.setText(Formats.bytes(stats.encryptedBytes()));
@@ -72,15 +74,34 @@ public class OverviewController implements Initializable {
             show(emptyStateCard, stats.activeFileCount() == 0);
 
             if (RecoveryService.takeRecoveryNotice()) {
-                feedbackLabel.setText(Formats.RECOVERY_NOTICE);
-                feedbackLabel.getStyleClass().add("notice");
-                show(feedbackLabel, true);
+                showFeedback(Formats.RECOVERY_NOTICE);
             }
 
-        } catch (FileServiceException e) {
-            feedbackLabel.setText("Your encrypted file list could not be read.");
-            show(feedbackLabel, true);
+            if (stats.pendingDeletions() > 0) {
+                resumePendingDeletions();
+            }
+        }, failure -> showFeedback("Your encrypted file list could not be read."));
+    }
+
+    /** Spec 9.4: deletions that stopped earlier are retried after login; never blocks it. */
+    private void resumePendingDeletions() {
+        Background.run(files::resumePendingDeletions, remaining -> {
+            if (remaining > 0) {
+                showFeedback(Formats.CLEANUP_PENDING);
+            }
+
+            loadStats();
+        }, failure -> showFeedback(Formats.CLEANUP_PENDING));
+    }
+
+    private void showFeedback(String message) {
+        feedbackLabel.setText(message);
+
+        if (!feedbackLabel.getStyleClass().contains("notice")) {
+            feedbackLabel.getStyleClass().add("notice");
         }
+
+        show(feedbackLabel, true);
     }
 
     void setOnOpenFiles(Runnable onOpenFiles) {

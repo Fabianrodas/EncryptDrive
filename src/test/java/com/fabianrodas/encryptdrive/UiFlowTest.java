@@ -7,8 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.fabianrodas.models.ManifestEntry;
+import com.fabianrodas.models.PendingDeletion;
 import com.fabianrodas.models.UserLoginResult;
+import com.fabianrodas.models.UserManifest;
+import com.fabianrodas.models.UserSessionIdentity;
 import com.fabianrodas.models.VaultContext;
+import com.fabianrodas.repositories.BlobRepository;
+import com.fabianrodas.repositories.ManifestRepository;
 import com.fabianrodas.security.SensitiveBytes;
 import com.fabianrodas.services.AuthService;
 import com.fabianrodas.services.FileService;
@@ -17,6 +22,7 @@ import com.fabianrodas.services.VaultService;
 import com.fabianrodas.services.VaultSessionService;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import javafx.scene.Scene;
 import javafx.scene.control.ButtonBase;
 import javafx.scene.control.Labeled;
@@ -112,15 +118,39 @@ class UiFlowTest {
         Scene scene = FxTestSupport.showScreen("dashboard");
         click(scene, "#trashNavButton");
 
+        waitForRows(scene);
         selectFirstRow(scene);
         FxTestSupport.fireAndAnswerPopup(scene, "#deleteButton", "Cancel");
         // The popup is answered while the button handler is still running: let it finish.
         FxTestSupport.onFxThread(() -> null);
         assertEquals(1, files.listTrash().size());
 
+        waitForRows(scene);
         selectFirstRow(scene);
         FxTestSupport.fireAndAnswerPopup(scene, "#deleteButton", "Delete permanently");
         FxTestSupport.waitUntil(() -> files.listTrash().isEmpty());
+    }
+
+    @Test
+    void overviewRetriesDeletionsInterruptedEarlier() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        ManifestEntry orphan = files.importFile(Files.writeString(tempDir.resolve("orphan.txt"), "x"), files.rootFolderId());
+        UserSessionIdentity identity = SessionService.identity();
+        byte[] key = userMasterKey.copy();
+        ManifestRepository manifests = new ManifestRepository(vault);
+        // As if a permanent delete stopped after its manifest commit: entry gone, blob queued.
+        UserManifest manifest = manifests.load(identity.userId(), identity.manifestId(), key);
+        manifest.getEntries().removeIf(entry -> entry.getEntryId().equals(orphan.getEntryId()));
+        manifest.getPendingDeletions().add(new PendingDeletion(orphan.getBlobId(), Instant.now().toString()));
+        manifests.save(manifest, identity.manifestId(), key);
+        Path blob = new BlobRepository().blobPath(vault.root(), orphan.getBlobId());
+
+        FxTestSupport.showScreen("dashboard");
+
+        FxTestSupport.waitUntil(() -> !Files.exists(blob));
+        // The blob goes first; the shorter journal is saved just after.
+        FxTestSupport.waitUntil(() -> !Background.isBusy());
+        assertTrue(manifests.load(identity.userId(), identity.manifestId(), key).getPendingDeletions().isEmpty());
     }
 
     @Test
@@ -134,6 +164,10 @@ class UiFlowTest {
             scene.getRoot().applyCss();
             return ((Labeled) scene.getRoot().lookup("#appVersionLabel")).getText();
         }));
+    }
+
+    private static void waitForRows(Scene scene) throws Exception {
+        FxTestSupport.waitUntil(() -> !((TableView<?>) scene.getRoot().lookup("#table")).getItems().isEmpty());
     }
 
     private static void selectFirstRow(Scene scene) throws Exception {

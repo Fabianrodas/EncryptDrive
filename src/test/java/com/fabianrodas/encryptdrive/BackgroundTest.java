@@ -1,13 +1,16 @@
 package com.fabianrodas.encryptdrive;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import javafx.application.Platform;
 import javafx.concurrent.Task;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -15,8 +18,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /*
- * The busy state guards every exit path, so it must return to idle however a
- * task ends, including when the screen's own callback throws.
+ * The background boundary: work runs off the JavaFX thread and reports back
+ * on it. The busy state guards every exit path, so it must return to idle
+ * however a task ends, including when the screen's own callback throws.
  */
 class BackgroundTest {
 
@@ -44,6 +48,47 @@ class BackgroundTest {
             Thread.currentThread().setUncaughtExceptionHandler(original);
             return null;
         });
+    }
+
+    @Test
+    void readRunsOffTheFxThreadReportsOnItAndIsNotBusy() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        CompletableFuture<Boolean> workOnFx = new CompletableFuture<>();
+        CompletableFuture<Boolean> callbackOnFx = new CompletableFuture<>();
+
+        FxTestSupport.onFxThread(() -> {
+            Background.read(() -> {
+                workOnFx.complete(Platform.isFxApplicationThread());
+                release.await();
+                return "value";
+            }, value -> callbackOnFx.complete(Platform.isFxApplicationThread()), failure -> callbackOnFx.complete(false));
+            return null;
+        });
+
+        assertFalse(workOnFx.get(10, TimeUnit.SECONDS));
+        assertFalse(FxTestSupport.onFxThread(Background::isBusy));
+        release.countDown();
+        assertTrue(callbackOnFx.get(10, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void runIsBusyUntilItFinishesAndFailuresArriveOnTheFxThread() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        CompletableFuture<String> failure = new CompletableFuture<>();
+
+        FxTestSupport.onFxThread(() -> {
+            Background.run(() -> {
+                release.await();
+                throw new IllegalStateException("boom");
+            }, value -> failure.complete("unexpected success"), error -> failure.complete(
+                    Platform.isFxApplicationThread() ? error.getMessage() : "failure reported off the FX thread"));
+            return null;
+        });
+
+        assertTrue(FxTestSupport.onFxThread(Background::isBusy));
+        release.countDown();
+        assertEquals("boom", failure.get(10, TimeUnit.SECONDS));
+        FxTestSupport.waitUntil(() -> !Background.isBusy());
     }
 
     @Test

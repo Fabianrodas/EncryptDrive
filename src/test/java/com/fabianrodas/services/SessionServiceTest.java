@@ -34,7 +34,7 @@ class SessionServiceTest {
         assertTrue(userMasterKey.isDestroyed());
         assertFalse(SessionService.isActive());
         assertThrows(IllegalStateException.class, SessionService::identity);
-        assertThrows(IllegalStateException.class, SessionService::copyUserMasterKey);
+        assertThrows(IllegalStateException.class, () -> SessionService.copyUserMasterKey(ALICE));
     }
 
     @Test
@@ -63,12 +63,22 @@ class SessionServiceTest {
         SensitiveBytes userMasterKey = SensitiveBytes.copyOf(new byte[]{1, 2, 3});
         SessionService.start(ALICE, userMasterKey);
 
-        SensitiveBytes copy = SessionService.copyUserMasterKey();
+        SensitiveBytes copy = SessionService.copyUserMasterKey(ALICE);
         assertArrayEquals(new byte[]{1, 2, 3}, copy.copy());
         copy.close();
 
         assertFalse(userMasterKey.isDestroyed());
         assertEquals(ALICE, SessionService.identity());
+    }
+
+    @Test
+    void keyCopyForAnotherIdentityIsRefused() {
+        UserSessionIdentity alice = new UserSessionIdentity(UUID.randomUUID(), "Alice", "alice", UUID.randomUUID());
+        UserSessionIdentity bob = new UserSessionIdentity(UUID.randomUUID(), "Bob", "bob", UUID.randomUUID());
+        SessionService.start(bob, SensitiveBytes.copyOf(new byte[32]));
+
+        assertThrows(IllegalStateException.class, () -> SessionService.copyUserMasterKey(alice));
+        SessionService.copyUserMasterKey(bob).close();
     }
 
     @Test

@@ -224,7 +224,7 @@ class FileServiceTest {
         assertEquals(List.of(sub.getEntryId(), file.getEntryId()), ids(files.listChildren(docs.getEntryId())));
         assertEquals(
                 List.of(files.rootFolderId(), docs.getEntryId(), sub.getEntryId()),
-                ids(files.pathTo(sub.getEntryId()))
+                ids(files.folderView(sub.getEntryId()).path())
         );
     }
 
@@ -362,7 +362,7 @@ class FileServiceTest {
         assertEquals(List.of(), files.listTrash());
         assertEquals(List.of(kept.getEntryId()), ids(files.listChildren(files.rootFolderId())));
         assertEquals(1, blobFiles().size());
-        assertEquals(new WorkspaceStats(1, 1, 17, 0), files.stats());
+        assertEquals(new WorkspaceStats(1, 1, 17, 0, 0), files.stats());
     }
 
     @Test
@@ -398,7 +398,7 @@ class FileServiceTest {
         files.importFile(source("thirty.bin", new byte[30]), files.rootFolderId());
         files.moveToTrash(docs.getEntryId());
 
-        assertEquals(new WorkspaceStats(2, 40, 10 + 20 + 30 + 3 * 16, 1), files.stats());
+        assertEquals(new WorkspaceStats(2, 40, 10 + 20 + 30 + 3 * 16, 1, 0), files.stats());
     }
 
     // ---------------------------------------------------------- integrity
