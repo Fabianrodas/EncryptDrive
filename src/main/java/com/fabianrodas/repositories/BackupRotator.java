@@ -15,7 +15,15 @@ public final class BackupRotator {
 
     private static final AtomicBoolean RECOVERED = new AtomicBoolean();
 
-    private final AtomicFileWriter writer = new AtomicFileWriter();
+    private final AtomicFileWriter writer;
+
+    public BackupRotator() {
+        this(new AtomicFileWriter());
+    }
+
+    BackupRotator(AtomicFileWriter writer) {
+        this.writer = writer;
+    }
 
     /** Reads and authenticates one encrypted metadata file. */
     @FunctionalInterface
@@ -98,5 +106,20 @@ public final class BackupRotator {
         }
 
         writer.copy(encryptedFile, backupDirectory.resolve(name + ".1"));
+    }
+
+    /**
+     * Replaces every backup generation of the file called {@code name} with
+     * {@code content}, so no older state stays recoverable after a
+     * security-sensitive change.
+     */
+    public void reseed(String name, byte[] content, Path backupDirectory, int generations)
+            throws IOException {
+
+        Files.createDirectories(backupDirectory);
+
+        for (int generation = 1; generation <= generations; generation++) {
+            writer.write(backupDirectory.resolve(name + "." + generation), content);
+        }
     }
 }

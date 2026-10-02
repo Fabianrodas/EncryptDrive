@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fabianrodas.models.EncryptedPayload;
 import com.fabianrodas.models.KdfConfig;
@@ -17,6 +18,7 @@ import com.fabianrodas.models.UserRecord;
 import com.fabianrodas.models.UserRegistry;
 import com.fabianrodas.models.UserSessionIdentity;
 import com.fabianrodas.models.VaultContext;
+import com.fabianrodas.repositories.FailingWriter;
 import com.fabianrodas.repositories.ManifestRepository;
 import com.fabianrodas.repositories.UserRegistryRepository;
 import com.fabianrodas.security.Aad;
@@ -25,6 +27,7 @@ import com.fabianrodas.security.Argon2KeyDeriver;
 import com.fabianrodas.security.SensitiveBytes;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Arrays;
@@ -37,6 +40,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class AuthServiceTest {
 
@@ -186,6 +191,149 @@ class AuthServiceTest {
     }
 
     @Test
+    void noRetainedRegistryGenerationAcceptsTheOldPassword() throws Exception {
+        UserSessionIdentity user = auth.register("Example User", "ExampleUser", PASSWORD.toCharArray());
+        auth.register("Other User", "otheruser", "other password".toCharArray());
+        auth.register("Third User", "thirduser", "third password".toCharArray());
+
+        auth.changePassword(user.userId(), PASSWORD.toCharArray(), NEW_PASSWORD.toCharArray());
+
+        vaultService.closeVault();
+        Path meta = tempDir.resolve("vault").resolve(".encryptdrive");
+        byte[] current = Files.readAllBytes(meta.resolve("users.enc"));
+
+        for (int generation = 1; generation <= 3; generation++) {
+            Path backup = meta.resolve("backups").resolve("users.enc." + generation);
+            Files.copy(backup, meta.resolve("users.enc"), StandardCopyOption.REPLACE_EXISTING);
+
+            VaultContext reopened = vaultService.unlockVault(
+                    tempDir.resolve("vault"), "correct vault password".toCharArray()
+            );
+            AuthService restored = new AuthService(reopened);
+            int g = generation;
+
+            assertReason(AuthException.Reason.INVALID_CREDENTIALS,
+                    () -> restored.login("ExampleUser", PASSWORD.toCharArray()));
+            assertEquals(user, restored.login("ExampleUser", NEW_PASSWORD.toCharArray()).identity(), "generation " + g);
+            restored.login("otheruser", "other password".toCharArray()).userMasterKey().close();
+            restored.login("thirduser", "third password".toCharArray()).userMasterKey().close();
+            vaultService.closeVault();
+        }
+
+        Files.write(meta.resolve("users.enc"), current);
+        vault = vaultService.unlockVault(tempDir.resolve("vault"), "correct vault password".toCharArray());
+    }
+
+    @Test
+    void failedBackupReseedLeavesTheLivePasswordUnchanged() throws Exception {
+        UserSessionIdentity user = auth.register("Example User", "ExampleUser", PASSWORD.toCharArray());
+        Path backup2 = tempDir.resolve("vault").resolve(".encryptdrive").resolve("backups").resolve("users.enc.2");
+        // A non-empty directory in place of generation 2 makes replacing it fail.
+        Files.deleteIfExists(backup2);
+        Files.createDirectories(backup2.resolve("blocker"));
+
+        assertReason(AuthException.Reason.STORAGE,
+                () -> auth.changePassword(user.userId(), PASSWORD.toCharArray(), NEW_PASSWORD.toCharArray()));
+
+        // users.enc is written last, so the reported failure means nothing changed for the user.
+        assertEquals(user, auth.login("ExampleUser", PASSWORD.toCharArray()).identity());
+        assertReason(AuthException.Reason.INVALID_CREDENTIALS,
+                () -> auth.login("ExampleUser", NEW_PASSWORD.toCharArray()));
+    }
+
+    /** Writes 1-3 are the backup generations, write 4 is the live users.enc. */
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 3})
+    void failureWhileReseedingAnyBackupGenerationChangesNothingForTheUser(int failingWrite) throws Exception {
+        FailingWriter writer = new FailingWriter();
+        AuthService failing = new AuthService(vault, new UserRegistryRepository(writer));
+        UserSessionIdentity user = auth.register("Example User", "ExampleUser", PASSWORD.toCharArray());
+        byte[] liveBefore = Files.readAllBytes(usersFile());
+        writer.failBeforeWrite(failingWrite);
+
+        assertReason(AuthException.Reason.STORAGE,
+                () -> failing.changePassword(user.userId(), PASSWORD.toCharArray(), NEW_PASSWORD.toCharArray()));
+
+        assertArrayEquals(liveBefore, Files.readAllBytes(usersFile()));
+        assertEquals(user, auth.login("ExampleUser", PASSWORD.toCharArray()).identity());
+        assertReason(AuthException.Reason.INVALID_CREDENTIALS,
+                () -> auth.login("ExampleUser", NEW_PASSWORD.toCharArray()));
+    }
+
+    @Test
+    void failureImmediatelyBeforeTheLiveCheckpointKeepsTheOldPassword() throws Exception {
+        FailingWriter writer = new FailingWriter();
+        AuthService failing = new AuthService(vault, new UserRegistryRepository(writer));
+        UserSessionIdentity user = auth.register("Example User", "ExampleUser", PASSWORD.toCharArray());
+        byte[] liveBefore = Files.readAllBytes(usersFile());
+        writer.failBeforeWrite(4);          // all three backups are already the new state
+
+        assertReason(AuthException.Reason.STORAGE,
+                () -> failing.changePassword(user.userId(), PASSWORD.toCharArray(), NEW_PASSWORD.toCharArray()));
+
+        assertArrayEquals(liveBefore, Files.readAllBytes(usersFile()));
+        assertEquals(user, auth.login("ExampleUser", PASSWORD.toCharArray()).identity());
+        assertReason(AuthException.Reason.INVALID_CREDENTIALS,
+                () -> auth.login("ExampleUser", NEW_PASSWORD.toCharArray()));
+    }
+
+    @Test
+    void failureOfTheFinalLiveWriteIsReportedAndKeepsTheOldPassword() throws Exception {
+        FailingWriter writer = new FailingWriter();
+        AuthService failing = new AuthService(vault, new UserRegistryRepository(writer));
+        UserSessionIdentity user = auth.register("Example User", "ExampleUser", PASSWORD.toCharArray());
+        byte[] liveBefore = Files.readAllBytes(usersFile());
+        writer.failDuringWrite(4);          // the users.enc write starts and fails
+
+        assertReason(AuthException.Reason.STORAGE,
+                () -> failing.changePassword(user.userId(), PASSWORD.toCharArray(), NEW_PASSWORD.toCharArray()));
+
+        assertArrayEquals(liveBefore, Files.readAllBytes(usersFile()));
+        assertEquals(user, auth.login("ExampleUser", PASSWORD.toCharArray()).identity());
+        assertReason(AuthException.Reason.INVALID_CREDENTIALS,
+                () -> auth.login("ExampleUser", NEW_PASSWORD.toCharArray()));
+
+        // The interrupted change can simply be repeated.
+        auth.changePassword(user.userId(), PASSWORD.toCharArray(), NEW_PASSWORD.toCharArray());
+        assertEquals(user, auth.login("ExampleUser", NEW_PASSWORD.toCharArray()).identity());
+        assertReason(AuthException.Reason.INVALID_CREDENTIALS,
+                () -> auth.login("ExampleUser", PASSWORD.toCharArray()));
+    }
+
+    /*
+     * The partially reseeded states, proven rather than assumed: backup 1 holds
+     * the new password, while users.enc (and, if the failure came earlier,
+     * backups 2-3) still hold the old one. While users.enc is intact the old
+     * password is the valid one. If users.enc is then damaged, recovery restores
+     * the newest authentic generation (backup 1), so from that moment only the
+     * new password works - the password the user typed twice - and the recovery
+     * notice is raised. No generation is ever restored that the user did not
+     * create.
+     */
+    @ParameterizedTest
+    @ValueSource(ints = {2, 3, 4})
+    void recoveryFromAPartiallyReseededStateRestoresTheNewestGeneration(int failingWrite) throws Exception {
+        FailingWriter writer = new FailingWriter();
+        AuthService failing = new AuthService(vault, new UserRegistryRepository(writer));
+        UserSessionIdentity user = auth.register("Example User", "ExampleUser", PASSWORD.toCharArray());
+        auth.register("Other User", "otheruser", "other password".toCharArray());
+        writer.failBeforeWrite(failingWrite);   // backup 1 is reseeded; the failure comes after it
+
+        assertReason(AuthException.Reason.STORAGE,
+                () -> failing.changePassword(user.userId(), PASSWORD.toCharArray(), NEW_PASSWORD.toCharArray()));
+        assertEquals(user, auth.login("ExampleUser", PASSWORD.toCharArray()).identity());
+
+        RecoveryService.takeRecoveryNotice();
+        Files.writeString(usersFile(), "{}");                 // users.enc damaged afterwards
+
+        assertEquals(user, auth.login("ExampleUser", NEW_PASSWORD.toCharArray()).identity());
+        assertTrue(RecoveryService.takeRecoveryNotice());
+        assertReason(AuthException.Reason.INVALID_CREDENTIALS,
+                () -> auth.login("ExampleUser", PASSWORD.toCharArray()));
+        auth.login("otheruser", "other password".toCharArray()).userMasterKey().close();
+    }
+
+    @Test
     void registrationRejectsInvalidInput() {
         assertReason(
                 AuthException.Reason.INVALID_INPUT,
@@ -289,6 +437,10 @@ class AuthServiceTest {
         ));
         registries.save(vault, registry);
         return new UserSessionIdentity(userId, "Legacy User", username, manifestId);
+    }
+
+    private Path usersFile() {
+        return tempDir.resolve("vault").resolve(".encryptdrive").resolve("users.enc");
     }
 
     private byte[] userMasterKey(String username, String password) throws AuthException {

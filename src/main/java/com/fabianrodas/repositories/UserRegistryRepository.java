@@ -32,9 +32,19 @@ public final class UserRegistryRepository {
     private static final int BACKUP_GENERATIONS = 3;
 
     private final AesGcmService aes = new AesGcmService();
-    private final AtomicFileWriter writer = new AtomicFileWriter();
-    private final BackupRotator rotator = new BackupRotator();
+    private final AtomicFileWriter writer;
+    private final BackupRotator rotator;
     private final Gson gson = new Gson();
+
+    public UserRegistryRepository() {
+        this(new AtomicFileWriter());
+    }
+
+    /** For tests that make individual writes fail. */
+    public UserRegistryRepository(AtomicFileWriter writer) {
+        this.writer = writer;
+        this.rotator = new BackupRotator(writer);
+    }
 
     /**
      * Decrypts {@code users.enc}. If it fails authentication, the newest
@@ -145,6 +155,26 @@ public final class UserRegistryRepository {
 
         try {
             rotator.rotate(usersFile, VaultRepository.backupsDir(vault.root()), BACKUP_GENERATIONS);
+            writer.write(usersFile, envelope);
+        } catch (IOException e) {
+            throw new VaultStorageException(VaultStorageException.Reason.IO, e);
+        }
+    }
+
+    /**
+     * Saves without keeping older states: users.enc and every backup become
+     * this registry. Used after a password change so no backup still holds a
+     * key envelope wrapped under the old password. The backups are replaced
+     * first and users.enc last: until that last write the change has not
+     * happened, and afterwards no older generation is left.
+     */
+    public void saveCheckpoint(VaultContext vault, UserRegistry registry) throws VaultStorageException {
+        byte[] envelope = seal(vault, registry);
+        Path usersFile = VaultRepository.usersFile(vault.root());
+
+        try {
+            rotator.reseed(VaultRepository.USERS_FILE, envelope,
+                    VaultRepository.backupsDir(vault.root()), BACKUP_GENERATIONS);
             writer.write(usersFile, envelope);
         } catch (IOException e) {
             throw new VaultStorageException(VaultStorageException.Reason.IO, e);

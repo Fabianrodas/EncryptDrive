@@ -36,13 +36,19 @@ public final class AuthService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final VaultContext vault;
-    private final UserRegistryRepository registryRepository = new UserRegistryRepository();
+    private final UserRegistryRepository registryRepository;
     private final ManifestRepository manifestRepository;
     private final Argon2KeyDeriver keyDeriver = new Argon2KeyDeriver();
     private final AesGcmService aes = new AesGcmService();
 
     public AuthService(VaultContext vault) {
+        this(vault, new UserRegistryRepository());
+    }
+
+    /** For tests that make individual registry writes fail. */
+    AuthService(VaultContext vault, UserRegistryRepository registryRepository) {
         this.vault = vault;
+        this.registryRepository = registryRepository;
         this.manifestRepository = new ManifestRepository(vault);
     }
 
@@ -124,7 +130,9 @@ public final class AuthService {
 
     /**
      * Rewraps the same UMK under a key derived from the new password, so
-     * existing manifests and file blobs stay readable without re-encryption.
+     * existing manifests and file blobs stay readable without re-encryption,
+     * and replaces every registry backup, so the old password opens no
+     * retained generation.
      */
     public void changePassword(UUID userId, char[] currentPassword, char[] newPassword)
             throws AuthException {
@@ -147,7 +155,7 @@ public final class AuthService {
                     userKdf,
                     wrap(userMasterKey, newPassword, userKdf, record.getUserId())
             );
-            saveRegistry(registry);
+            saveRegistryCheckpoint(registry);
 
         } finally {
             Arrays.fill(userMasterKey, (byte) 0);
@@ -210,6 +218,14 @@ public final class AuthService {
     private void saveRegistry(UserRegistry registry) throws AuthException {
         try {
             registryRepository.save(vault, registry);
+        } catch (VaultStorageException e) {
+            throw storageFailure(e);
+        }
+    }
+
+    private void saveRegistryCheckpoint(UserRegistry registry) throws AuthException {
+        try {
+            registryRepository.saveCheckpoint(vault, registry);
         } catch (VaultStorageException e) {
             throw storageFailure(e);
         }

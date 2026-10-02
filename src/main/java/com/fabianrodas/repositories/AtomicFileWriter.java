@@ -14,7 +14,7 @@ import java.nio.file.StandardOpenOption;
  * {@code <name>.<random>.tmp}, so a crash never leaves a partial file at
  * the destination.
  */
-public final class AtomicFileWriter {
+public class AtomicFileWriter {
 
     public static final String TEMP_SUFFIX = ".tmp";
 

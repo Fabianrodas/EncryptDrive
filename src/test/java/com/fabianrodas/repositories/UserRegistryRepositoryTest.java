@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
@@ -31,6 +32,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class UserRegistryRepositoryTest {
 
@@ -103,6 +106,73 @@ class UserRegistryRepositoryTest {
                 previous,
                 Files.readAllBytes(root.resolve(".encryptdrive/backups/users.enc.1"))
         );
+    }
+
+    @Test
+    void checkpointLeavesNoOlderRegistryInTheBackups() throws Exception {
+        repository.save(vault, new UserRegistry(1, new ArrayList<>()));
+        repository.save(vault, registryWith(record()));
+        repository.save(vault, new UserRegistry(1, new ArrayList<>()));
+
+        repository.saveCheckpoint(vault, registryWith(record()));
+
+        byte[] current = Files.readAllBytes(usersFile());
+        for (int generation = 1; generation <= 3; generation++) {
+            assertArrayEquals(current, Files.readAllBytes(backup(generation)));
+        }
+    }
+
+    /** Pins the order the checkpoint's safety rests on: backup 1, backup 2, backup 3, then users.enc. */
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 3, 4})
+    void aFailedCheckpointHasReseededOnlyTheBackupsWrittenBeforeTheFailure(int failingWrite) throws Exception {
+        FailingWriter writer = new FailingWriter();
+        UserRegistryRepository failing = new UserRegistryRepository(writer);
+        failing.save(vault, new UserRegistry(1, new ArrayList<>()));
+        failing.save(vault, registryWith(record()));
+        failing.save(vault, new UserRegistry(1, new ArrayList<>()));
+        failing.save(vault, registryWith(record()));
+        byte[] live = Files.readAllBytes(usersFile());
+        List<byte[]> before = List.of(
+                Files.readAllBytes(backup(1)), Files.readAllBytes(backup(2)), Files.readAllBytes(backup(3))
+        );
+        writer.failBeforeWrite(failingWrite);
+
+        VaultStorageException error = assertThrows(
+                VaultStorageException.class, () -> failing.saveCheckpoint(vault, registryWith(record()))
+        );
+
+        assertEquals(VaultStorageException.Reason.IO, error.getReason());
+        assertArrayEquals(live, Files.readAllBytes(usersFile()));
+        byte[] reseeded = Files.readAllBytes(backup(1));
+
+        for (int generation = 1; generation <= 3; generation++) {
+            byte[] after = Files.readAllBytes(backup(generation));
+
+            if (generation < failingWrite) {
+                assertArrayEquals(reseeded, after, "backup " + generation + " was reseeded");
+                assertFalse(Arrays.equals(before.get(generation - 1), after), "backup " + generation);
+                assertFalse(Arrays.equals(live, after), "backup " + generation);
+            } else {
+                assertArrayEquals(before.get(generation - 1), after, "backup " + generation + " is untouched");
+            }
+        }
+    }
+
+    @Test
+    void aCheckpointPerformsExactlyFourWrites() throws Exception {
+        FailingWriter writer = new FailingWriter();
+        UserRegistryRepository counting = new UserRegistryRepository(writer);
+        counting.save(vault, new UserRegistry(1, new ArrayList<>()));
+        writer.failBeforeWrite(5);              // a fifth write would fail; the fourth is users.enc
+
+        counting.saveCheckpoint(vault, registryWith(record()));
+
+        byte[] current = Files.readAllBytes(usersFile());
+        for (int generation = 1; generation <= 3; generation++) {
+            assertArrayEquals(current, Files.readAllBytes(backup(generation)));
+        }
+        assertEquals(USER_ID, repository.load(vault).getUsers().get(0).getUserId());
     }
 
     @Test
@@ -247,6 +317,10 @@ class UserRegistryRepositoryTest {
 
     private Path usersFile() {
         return root.resolve(".encryptdrive").resolve("users.enc");
+    }
+
+    private Path backup(int generation) {
+        return root.resolve(".encryptdrive/backups/users.enc." + generation);
     }
 
     private static UserRegistry registryWith(UserRecord record) {

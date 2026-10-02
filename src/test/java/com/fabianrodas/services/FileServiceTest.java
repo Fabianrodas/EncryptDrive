@@ -424,6 +424,24 @@ class FileServiceTest {
         assertEquals(List.of(), names(out));
     }
 
+    @Test
+    void filesStillExportAfterAPasswordChange() throws Exception {
+        byte[] content = random(50_000);
+        FileService files = files(alice);
+        ManifestEntry entry = files.importFile(source("keep.bin", content), files.rootFolderId());
+        AuthService auth = new AuthService(vault);
+
+        auth.changePassword(alice.identity().userId(), "alice password".toCharArray(), "alice new password".toCharArray());
+
+        UserLoginResult login = auth.login("alice", "alice new password".toCharArray());
+        try (SensitiveBytes key = login.userMasterKey()) {
+            FileService again = new FileService(vault, login.identity(), () -> SensitiveBytes.copyOf(key.copy()));
+            Path out = tempDir.resolve("keep-out.bin");
+            again.exportEntry(entry.getEntryId(), out);
+            assertArrayEquals(content, Files.readAllBytes(out));
+        }
+    }
+
     // ---------------------------------------------------- user isolation
 
     @Test

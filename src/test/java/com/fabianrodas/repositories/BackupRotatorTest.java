@@ -66,6 +66,19 @@ class BackupRotatorTest {
         assertFalse(Files.exists(metaDir.resolve("backups").resolve("users.enc.1")));
     }
 
+    @Test
+    void reseedReplacesEveryGenerationWithTheGivenContent() throws IOException {
+        Path backups = metaDir.resolve("backups");
+        Files.createDirectories(backups);
+        Files.writeString(backups.resolve("users.enc.1"), "old 1");
+
+        new BackupRotator().reseed("users.enc", "new state".getBytes(UTF_8), backups, 3);
+
+        for (int generation = 1; generation <= 3; generation++) {
+            assertEquals("new state", Files.readString(backups.resolve("users.enc." + generation)));
+        }
+    }
+
     private static List<String> fileNames(Path directory) throws IOException {
         try (Stream<Path> files = Files.list(directory)) {
             return files.map(path -> path.getFileName().toString()).sorted().toList();
