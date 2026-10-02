@@ -3,12 +3,14 @@ package com.fabianrodas.repositories;
 import com.fabianrodas.models.VaultHeader;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonParseException;
+import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.UUID;
 
 public final class VaultRepository {
@@ -61,10 +63,10 @@ public final class VaultRepository {
     }
 
     public VaultHeader readHeader(Path vaultRoot) throws VaultStorageException {
-        String json;
+        String text;
 
         try {
-            json = BoundedFiles.readUtf8(metaDir(vaultRoot).resolve(VAULT_HEADER), MAX_HEADER_BYTES);
+            text = BoundedFiles.readUtf8(metaDir(vaultRoot).resolve(VAULT_HEADER), MAX_HEADER_BYTES);
 
         } catch (NoSuchFileException e) {
             throw new VaultStorageException(VaultStorageException.Reason.NOT_FOUND, e);
@@ -72,30 +74,38 @@ public final class VaultRepository {
             throw new VaultStorageException(VaultStorageException.Reason.IO, e);
         }
 
-        VaultHeader header;
+        JsonObject json = MetadataJson.object(text);
+        int formatVersion = MetadataJson.integer(json, "formatVersion");
 
-        try {
-            header = gson.fromJson(json, VaultHeader.class);
-        } catch (JsonParseException e) {
-            throw new VaultStorageException(VaultStorageException.Reason.CORRUPTED, e);
+        // Checked first so a newer vault is reported as such, whatever else it contains.
+        if (formatVersion > FORMAT_VERSION) {
+            throw new VaultStorageException(VaultStorageException.Reason.UNSUPPORTED_VERSION);
         }
 
-        if (header != null && header.getFormatVersion() > FORMAT_VERSION) {
-            throw new VaultStorageException(
-                    VaultStorageException.Reason.UNSUPPORTED_VERSION
-            );
-        }
+        VaultHeader header = new VaultHeader(
+                formatVersion,
+                MetadataJson.string(json, "vaultId"),
+                MetadataJson.string(json, "createdAt"),
+                MetadataJson.kdf(json, "kdf"),
+                MetadataJson.envelope(json, "wrappedRegistryKey")
+        );
 
-        if (header == null
-                || header.getFormatVersion() != FORMAT_VERSION
+        if (formatVersion != FORMAT_VERSION
                 || !isCanonicalUuid(header.getVaultId())
-                || header.getCreatedAt() == null
-                || header.getKdf() == null
-                || header.getWrappedRegistryKey() == null) {
+                || !isInstant(header.getCreatedAt())) {
             throw new VaultStorageException(VaultStorageException.Reason.CORRUPTED);
         }
 
         return header;
+    }
+
+    private static boolean isInstant(String value) {
+        try {
+            Instant.parse(value);
+            return true;
+        } catch (DateTimeParseException e) {
+            return false;
+        }
     }
 
     static boolean isCanonicalUuid(String value) {

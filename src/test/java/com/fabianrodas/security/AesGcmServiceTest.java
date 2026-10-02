@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fabianrodas.models.EncryptedPayload;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
@@ -164,6 +165,24 @@ class AesGcmServiceTest {
         EncryptedPayload notAKey = aes.encrypt(new byte[16], key, AAD);
 
         assertThrows(CryptoException.class, () -> aes.unwrapKey(notAKey, key, AAD));
+    }
+
+    @Test
+    void unwrapRejectsWrappedKeysOfTheWrongSize() {
+        EncryptedPayload wrapped = aes.wrapKey(randomKey(), key, AAD);
+        byte[] ciphertext = decode(wrapped.getCiphertext());
+
+        for (int size : new int[]{0, 47, 49, 64}) {
+            EncryptedPayload resized = new EncryptedPayload(
+                    1, wrapped.getAlgorithm(), wrapped.getNonce(), encode(Arrays.copyOf(ciphertext, size))
+            );
+            assertThrows(CryptoException.class, () -> aes.unwrapKey(resized, key, AAD), "size " + size);
+        }
+
+        assertThrows(CryptoException.class, () -> aes.unwrapKey(null, key, AAD));
+        assertThrows(CryptoException.class, () -> aes.unwrapKey(
+                new EncryptedPayload(1, wrapped.getAlgorithm(), wrapped.getNonce(), "not base64!"), key, AAD
+        ));
     }
 
     private static byte[] randomKey() {

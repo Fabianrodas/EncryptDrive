@@ -3,7 +3,6 @@ package com.fabianrodas.security;
 import com.fabianrodas.models.EncryptedPayload;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.Base64;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -13,6 +12,9 @@ public final class AesGcmService {
 
     public static final String ALGORITHM = "AES/GCM/NoPadding";
     public static final int PAYLOAD_VERSION = 1;
+
+    /** Ciphertext size of a wrapped 256-bit key: the key followed by the 16-byte tag. */
+    public static final int WRAPPED_KEY_BYTES = CryptoConstants.KEY_BYTES + CryptoConstants.GCM_TAG_BITS / 8;
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -76,14 +78,12 @@ public final class AesGcmService {
             byte[] aad
     ) throws CryptoException {
 
-        byte[] key = decrypt(wrappedKey, wrappingKey, aad);
-
-        if (key.length != CryptoConstants.KEY_BYTES) {
-            Arrays.fill(key, (byte) 0);
+        // Checked before decrypting, so a malformed envelope never reaches the cipher.
+        if (wrappedKey == null || decode(wrappedKey.getCiphertext()).length != WRAPPED_KEY_BYTES) {
             throw new CryptoException();
         }
 
-        return key;
+        return decrypt(wrappedKey, wrappingKey, aad);
     }
 
     private static Cipher cipher(int mode, byte[] key, byte[] nonce, byte[] aad)

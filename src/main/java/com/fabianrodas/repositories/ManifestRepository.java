@@ -1,6 +1,5 @@
 package com.fabianrodas.repositories;
 
-import com.fabianrodas.models.EncryptedPayload;
 import com.fabianrodas.models.UserManifest;
 import com.fabianrodas.models.VaultContext;
 import com.fabianrodas.security.Aad;
@@ -84,7 +83,7 @@ public class ManifestRepository {
 
         try {
             plaintext = aes.decrypt(
-                    gson.fromJson(json, EncryptedPayload.class),
+                    MetadataJson.envelope(json),
                     userMasterKey,
                     Aad.manifest(vault.vaultId(), userId.toString())
             );

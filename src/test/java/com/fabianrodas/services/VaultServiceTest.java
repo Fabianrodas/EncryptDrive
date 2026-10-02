@@ -249,6 +249,14 @@ class VaultServiceTest {
         assertReason(VaultException.Reason.CORRUPTED, () -> unlock(PASSWORD));
     }
 
+    @Test
+    void typeConfusedHeaderIsReportedAsCorrupted() throws Exception {
+        createAndClose();
+        editHeader(header -> header.getAsJsonObject("kdf").addProperty("iterations", "3"));
+
+        assertReason(VaultException.Reason.CORRUPTED, () -> unlock(PASSWORD));
+    }
+
     private VaultContext unlock(String password) throws VaultException {
         return vaultService.unlockVault(root, password.toCharArray());
     }

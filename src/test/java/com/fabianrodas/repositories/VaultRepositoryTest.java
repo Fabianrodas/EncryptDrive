@@ -107,6 +107,37 @@ class VaultRepositoryTest {
     }
 
     @Test
+    void typeConfusedHeadersAreCorrupted(@TempDir Path tempDir) throws Exception {
+        repository.writeHeader(tempDir, header(1));
+        String valid = Files.readString(tempDir.resolve(".encryptdrive").resolve("vault.json"), UTF_8);
+
+        for (String content : new String[]{
+            valid.replace("\"memoryKiB\": 65536", "\"memoryKiB\": \"65536\""),
+            valid.replace("\"createdAt\": \"2026-09-30T17:00:00Z\"", "\"createdAt\": \"yesterday\""),
+            valid.replace("\"formatVersion\": 1", "\"formatVersion\": \"1\""),
+            valid.replaceFirst("\"kdf\": \\{", "\"kdf\": [], \"unused\": {")
+        }) {
+            writeRawHeader(tempDir, content);
+
+            VaultStorageException error = assertThrows(
+                    VaultStorageException.class, () -> repository.readHeader(tempDir), content
+            );
+            assertEquals(VaultStorageException.Reason.CORRUPTED, error.getReason(), content);
+        }
+    }
+
+    @Test
+    void newerFormatVersionIsReportedEvenWhenTheRestIsUnknown(@TempDir Path tempDir) throws Exception {
+        writeRawHeader(tempDir, "{\"formatVersion\": 2, \"somethingNew\": true}");
+
+        VaultStorageException error = assertThrows(
+                VaultStorageException.class, () -> repository.readHeader(tempDir)
+        );
+
+        assertEquals(VaultStorageException.Reason.UNSUPPORTED_VERSION, error.getReason());
+    }
+
+    @Test
     void oversizedHeaderIsRejectedBeforeParsing(@TempDir Path tempDir) throws Exception {
         Files.createDirectories(tempDir.resolve(".encryptdrive"));
         BoundedFilesTest.sparseFile(tempDir.resolve(".encryptdrive").resolve("vault.json"), 3L << 30);

@@ -1,6 +1,5 @@
 package com.fabianrodas.repositories;
 
-import com.fabianrodas.models.EncryptedPayload;
 import com.fabianrodas.models.UserRegistry;
 import com.fabianrodas.models.VaultContext;
 import com.fabianrodas.security.Aad;
@@ -74,7 +73,7 @@ public final class UserRegistryRepository {
 
         try {
             plaintext = aes.decrypt(
-                    gson.fromJson(json, EncryptedPayload.class),
+                    MetadataJson.envelope(json),
                     registryKey,
                     Aad.users(vault.vaultId())
             );

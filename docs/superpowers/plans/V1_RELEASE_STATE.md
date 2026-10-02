@@ -9,10 +9,10 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 01-foundation done; next 02-storage-security |
-| current task | T4 done (next: T5) |
-| last completed commit | `93c28c6 feat: expose the canonical Maven version in the app` |
-| tests last run | `mvn -B clean verify` (2026-10-02, T4, 3 min 10 s) |
-| test result | BUILD SUCCESS — 180 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| current task | T5 done (next: T6) |
+| last completed commit | `b09e657 fix: bound vault metadata reads and writes to the spec limits` |
+| tests last run | `mvn -B clean verify` (2026-10-02, T5, 3 min 24 s) |
+| test result | BUILD SUCCESS — 186 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 
