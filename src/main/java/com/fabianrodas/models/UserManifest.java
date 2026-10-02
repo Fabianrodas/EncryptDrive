@@ -1,5 +1,6 @@
 package com.fabianrodas.models;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -12,6 +13,7 @@ public final class UserManifest {
     private UUID userId;
     private UUID rootFolderId;
     private List<ManifestEntry> entries;
+    private List<PendingDeletion> pendingDeletions;
 
     public UserManifest() {
     }
@@ -42,5 +44,14 @@ public final class UserManifest {
 
     public List<ManifestEntry> getEntries() {
         return entries;
+    }
+
+    /** Blobs queued for physical deletion; empty, never null. */
+    public List<PendingDeletion> getPendingDeletions() {
+        if (pendingDeletions == null) {
+            pendingDeletions = new ArrayList<>();
+        }
+
+        return pendingDeletions;
     }
 }

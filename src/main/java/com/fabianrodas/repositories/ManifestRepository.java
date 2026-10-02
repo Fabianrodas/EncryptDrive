@@ -2,6 +2,7 @@ package com.fabianrodas.repositories;
 
 import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.models.ManifestEntryKind;
+import com.fabianrodas.models.PendingDeletion;
 import com.fabianrodas.models.UserManifest;
 import com.fabianrodas.models.VaultContext;
 import com.fabianrodas.security.Aad;
@@ -134,6 +135,12 @@ public class ManifestRepository {
             return false;
         }
 
+        for (PendingDeletion deletion : manifest.getPendingDeletions()) {
+            if (deletion == null || deletion.blobId() == null) {
+                return false;
+            }
+        }
+
         Map<UUID, ManifestEntry> byId = new HashMap<>();
 
         for (ManifestEntry entry : manifest.getEntries()) {
@@ -208,6 +215,27 @@ public class ManifestRepository {
         try {
             rotator.rotate(manifestFile, manifestBackupsDir(), BACKUP_GENERATIONS);
             writer.write(manifestFile, envelope);
+        } catch (IOException e) {
+            throw new VaultStorageException(VaultStorageException.Reason.IO, e);
+        }
+    }
+
+    /**
+     * Saves without keeping older states: the manifest and every backup
+     * generation become this manifest. Permanent deletion uses it so that no
+     * backup can bring back entries whose blobs are about to be destroyed.
+     */
+    public void saveCheckpoint(UserManifest manifest, UUID manifestId, byte[] userMasterKey)
+            throws VaultStorageException {
+
+        byte[] envelope = seal(manifest, userMasterKey);
+        Path manifestFile = manifestFile(manifestId);
+
+        try {
+            // Spec 9.2 steps 4-5: the manifest first, then every backup.
+            writer.write(manifestFile, envelope);
+            rotator.reseed(manifestFile.getFileName().toString(), envelope,
+                    manifestBackupsDir(), BACKUP_GENERATIONS);
         } catch (IOException e) {
             throw new VaultStorageException(VaultStorageException.Reason.IO, e);
         }

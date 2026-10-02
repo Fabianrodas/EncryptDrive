@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.fabianrodas.models.EncryptedPayload;
 import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.models.ManifestEntryKind;
+import com.fabianrodas.models.PendingDeletion;
 import com.fabianrodas.models.UserManifest;
 import com.fabianrodas.models.VaultContext;
 import com.fabianrodas.security.SensitiveBytes;
@@ -200,6 +201,52 @@ class ManifestRepositoryTest {
                     "damage " + damage
             );
             assertEquals(VaultStorageException.Reason.CORRUPTED, error.getReason(), "damage " + damage);
+        }
+    }
+
+    @Test
+    void pendingDeletionsRoundTripInsideTheEncryptedManifest() throws Exception {
+        UserManifest manifest = ManifestService.newManifest(userId);
+        UUID blobId = UUID.randomUUID();
+        manifest.getPendingDeletions().add(new PendingDeletion(blobId, "2026-10-01T10:00:00Z"));
+
+        repository.save(manifest, manifestId, userMasterKey);
+
+        assertEquals(
+                List.of(new PendingDeletion(blobId, "2026-10-01T10:00:00Z")),
+                repository.load(userId, manifestId, userMasterKey).getPendingDeletions()
+        );
+        assertFalse(Files.readString(manifestFile(), UTF_8).contains(blobId.toString()));
+    }
+
+    @Test
+    void manifestWithoutAJournalLoadsWithAnEmptyOne() throws Exception {
+        repository.save(ManifestService.newManifest(userId), manifestId, userMasterKey);
+
+        assertEquals(List.of(), repository.load(userId, manifestId, userMasterKey).getPendingDeletions());
+    }
+
+    @Test
+    void journalEntryWithoutABlobIdIsCorrupted() throws Exception {
+        UserManifest manifest = ManifestService.newManifest(userId);
+        manifest.getPendingDeletions().add(new PendingDeletion(null, "2026-10-01T10:00:00Z"));
+        repository.save(manifest, manifestId, userMasterKey);
+
+        assertCorrupted(() -> repository.load(userId, manifestId, userMasterKey));
+    }
+
+    @Test
+    void checkpointLeavesNoOlderManifestInTheBackups() throws Exception {
+        repository.save(ManifestService.newManifest(userId), manifestId, userMasterKey);
+        repository.save(manifestWithNames(), manifestId, userMasterKey);
+        repository.save(ManifestService.newManifest(userId), manifestId, userMasterKey);
+
+        repository.saveCheckpoint(manifestWithNames(), manifestId, userMasterKey);
+
+        byte[] current = Files.readAllBytes(manifestFile());
+        for (int generation = 1; generation <= 3; generation++) {
+            assertArrayEquals(current, Files.readAllBytes(root.resolve(
+                    ".encryptdrive/backups/manifests/" + manifestId + ".enc." + generation)));
         }
     }
 
