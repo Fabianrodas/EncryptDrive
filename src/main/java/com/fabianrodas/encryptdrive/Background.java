@@ -25,6 +25,11 @@ final class Background {
         return BUSY;
     }
 
+    /** True while a counted background task runs. Call on the JavaFX thread. */
+    static boolean isBusy() {
+        return BUSY.get();
+    }
+
     static <T> void run(
             Callable<T> work,
             Consumer<T> onSuccess,

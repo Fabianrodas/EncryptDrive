@@ -120,11 +120,7 @@ public class VaultSelectionController implements Initializable {
 
     @FXML
     private void close() {
-        Stage stage = getStage();
-
-        if (stage != null) {
-            stage.close();
-        }
+        App.requestClose(getStage());
     }
 
     @FXML

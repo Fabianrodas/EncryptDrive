@@ -55,6 +55,9 @@ public class LoginController implements Initializable {
     @FXML
     private Label vaultNameLabel;
 
+    @FXML
+    private Button closeVaultButton;
+
     private final WindowDragHandler windowDragHandler
         = new WindowDragHandler();
     
@@ -65,6 +68,7 @@ public class LoginController implements Initializable {
         visiblePasswordField.textProperty()
                 .bindBidirectional(passwordField.textProperty());
 
+        closeVaultButton.disableProperty().bind(Background.busyProperty());
         vaultNameLabel.setText(App.openVaultName());
         configureResponsiveForm();
 
@@ -86,11 +90,7 @@ public class LoginController implements Initializable {
 
     @FXML
     private void close() {
-        Stage stage = getStage();
-
-        if (stage != null) {
-            stage.close();
-        }
+        App.requestClose(getStage());
     }
 
     @FXML

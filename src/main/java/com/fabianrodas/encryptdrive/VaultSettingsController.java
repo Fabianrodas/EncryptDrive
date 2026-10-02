@@ -52,10 +52,14 @@ public class VaultSettingsController implements Initializable {
     @FXML
     private Button changePasswordButton;
 
+    @FXML
+    private Button settingsCloseVaultButton;
+
     private final VaultService vaultService = new VaultService();
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
+        settingsCloseVaultButton.disableProperty().bind(Background.busyProperty());
         appVersionLabel.setText(App.version());
         newPasswordField.setPromptText("At least " + VaultService.MIN_PASSWORD_LENGTH + " characters");
 

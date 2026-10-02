@@ -14,11 +14,15 @@ import javafx.scene.Scene;
 import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
+import javafx.stage.WindowEvent;
 
 public class App extends Application {
 
     private static final double DEFAULT_WIDTH = 1000;
     private static final double DEFAULT_HEIGHT = 600;
+
+    static final String BUSY_CLOSE_MESSAGE
+            = "Please wait for the current file operation to finish before closing EncryptDrive.";
 
     private static Scene scene;
 
@@ -45,7 +49,7 @@ public class App extends Application {
         stage.setMinWidth(DEFAULT_WIDTH);
         stage.setMinHeight(DEFAULT_HEIGHT);
         stage.setResizable(true);
-        stage.setOnCloseRequest(event -> destroySessionKeys());
+        installCloseGuard(stage);
 
         stage.setScene(scene);
         stage.show();
@@ -53,16 +57,44 @@ public class App extends Application {
 
     @Override
     public void stop() {
-        destroySessionKeys();
+        // Backstop for exits that bypass the close guard; idempotent.
+        VaultSessionService.closeVault();
     }
 
     /**
-     * Destroys user and vault key material and releases the vault lock.
-     * Idempotent, so every exit path can call it.
+     * The single close path. Title-bar buttons (through {@link #requestClose}),
+     * Alt+F4 and OS close requests all reach this handler. While background
+     * work runs the request is refused; otherwise user and vault keys are
+     * wiped and the vault lock released before the window closes.
      */
-    private static void destroySessionKeys() {
+    static void installCloseGuard(Stage stage) {
+        stage.setOnCloseRequest(event -> {
+            if (Background.isBusy()) {
+                event.consume();
+                DialogFactory.inform(stage, "Please wait", BUSY_CLOSE_MESSAGE);
+                return;
+            }
+
+            VaultSessionService.closeVault();
+        });
+    }
+
+    /** Asks the window to close the way the OS does, so the close guard decides. */
+    static void requestClose(Stage stage) {
+        if (stage != null) {
+            stage.fireEvent(new WindowEvent(stage, WindowEvent.WINDOW_CLOSE_REQUEST));
+        }
+    }
+
+    /** Ends the account session and shows Login; refused while background work runs. */
+    static boolean logout() throws IOException {
+        if (Background.isBusy()) {
+            return false;
+        }
+
         SessionService.logout();
-        VaultSessionService.closeVault();
+        setRoot("login");
+        return true;
     }
 
     static void setRoot(String fxml) throws IOException {
@@ -70,12 +102,17 @@ public class App extends Application {
     }
 
     /**
-     * Logs out, destroys user and vault key material, releases the vault
-     * lock, and returns to Vault Selection.
+     * Logs out, wipes the vault key, releases the vault lock and shows Vault
+     * Selection; refused while background work runs.
      */
-    static void closeVault() throws IOException {
+    static boolean closeVault() throws IOException {
+        if (Background.isBusy()) {
+            return false;
+        }
+
         VaultSessionService.closeVault();
         setRoot("vault-selection");
+        return true;
     }
 
     /** The Maven project version, filtered into version.properties at build time. */

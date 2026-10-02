@@ -114,11 +114,13 @@ class UiFlowTest {
 
         selectFirstRow(scene);
         FxTestSupport.fireAndAnswerPopup(scene, "#deleteButton", "Cancel");
+        // The popup is answered while the button handler is still running: let it finish.
+        FxTestSupport.onFxThread(() -> null);
         assertEquals(1, files.listTrash().size());
 
         selectFirstRow(scene);
         FxTestSupport.fireAndAnswerPopup(scene, "#deleteButton", "Delete permanently");
-        assertEquals(0, files.listTrash().size());
+        FxTestSupport.waitUntil(() -> files.listTrash().isEmpty());
     }
 
     @Test

@@ -70,6 +70,9 @@ public class RegisterController implements Initializable {
     @FXML
     private Label vaultNameLabel;
 
+    @FXML
+    private Button closeVaultButton;
+
     private boolean passwordVisible = false;
     private boolean confirmPasswordVisible = false;
 
@@ -88,6 +91,7 @@ public class RegisterController implements Initializable {
         passwordField.setPromptText(hint);
         visiblePasswordField.setPromptText(hint);
 
+        closeVaultButton.disableProperty().bind(Background.busyProperty());
         vaultNameLabel.setText(App.openVaultName());
         configureResponsiveForm();
     }
@@ -104,11 +108,7 @@ public class RegisterController implements Initializable {
 
     @FXML
     private void close() {
-        Stage stage = getStage();
-
-        if (stage != null) {
-            stage.close();
-        }
+        App.requestClose(getStage());
     }
 
     @FXML

@@ -27,6 +27,9 @@ public class ConfirmationPopupController implements Initializable {
     private Button confirmButton;
 
     @FXML
+    private Button cancelButton;
+
+    @FXML
     private StackPane iconBadge;
 
     @FXML
@@ -62,6 +65,14 @@ public class ConfirmationPopupController implements Initializable {
     void setDestructive() {
         iconBadge.getStyleClass().add("danger");
         confirmButton.getStyleClass().setAll("button", "popup-danger-button");
+    }
+
+    /** A message only: an "i" badge and no Cancel button. */
+    void setInformational() {
+        iconLabel.setText("i");
+        iconBadge.getStyleClass().add("info");
+        cancelButton.setVisible(false);
+        cancelButton.setManaged(false);
     }
 
     /** Shows a text field for the user's answer, pre-filled and focused. */

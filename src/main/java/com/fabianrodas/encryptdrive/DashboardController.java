@@ -109,9 +109,7 @@ public class DashboardController implements Initializable {
     @FXML
     private void logout() {
         try {
-            SessionService.logout();
-            App.setRoot("login");
-
+            App.logout();
         } catch (IOException e) {
             System.err.println("Could not return to the login screen.");
         }
@@ -152,11 +150,7 @@ public class DashboardController implements Initializable {
 
     @FXML
     private void close() {
-        Stage stage = getStage();
-
-        if (stage != null) {
-            stage.close();
-        }
+        App.requestClose(getStage());
     }
 
     private <T> T show(String fxml, Button navigation) {

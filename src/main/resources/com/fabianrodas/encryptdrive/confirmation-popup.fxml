@@ -60,7 +60,8 @@
 
                 <HBox alignment="CENTER" spacing="10.0">
                     <children>
-                        <Button cancelButton="true"
+                        <Button fx:id="cancelButton"
+                                cancelButton="true"
                                 mnemonicParsing="false"
                                 onAction="#cancel"
                                 styleClass="popup-secondary-button"

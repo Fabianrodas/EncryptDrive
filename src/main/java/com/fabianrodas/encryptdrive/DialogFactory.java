@@ -27,7 +27,7 @@ final class DialogFactory {
             return false;
         }
 
-        showModal(owner, popup);
+        stage(owner, popup).showAndWait();
         return popup.isConfirmed();
     }
 
@@ -45,8 +45,18 @@ final class DialogFactory {
         }
 
         popup.setDestructive();
-        showModal(owner, popup);
+        stage(owner, popup).showAndWait();
         return popup.isConfirmed();
+    }
+
+    /** Shows a message with a single OK button and returns at once. */
+    static void inform(Window owner, String title, String message) {
+        ConfirmationPopupController popup = open(title, message, "OK");
+
+        if (popup != null) {
+            popup.setInformational();
+            stage(owner, popup).show();
+        }
     }
 
     /** Returns the entered text, or empty when the user cancels. */
@@ -64,7 +74,7 @@ final class DialogFactory {
         }
 
         popup.setPrompt(initialValue);
-        showModal(owner, popup);
+        stage(owner, popup).showAndWait();
         return popup.isConfirmed() ? Optional.of(popup.getInput()) : Optional.empty();
     }
 
@@ -86,7 +96,7 @@ final class DialogFactory {
         return popup;
     }
 
-    private static void showModal(Window owner, ConfirmationPopupController popup) {
+    private static Stage stage(Window owner, ConfirmationPopupController popup) {
         Stage popupStage = new Stage();
 
         if (owner != null) {
@@ -97,6 +107,6 @@ final class DialogFactory {
         popupStage.initStyle(StageStyle.UNDECORATED);
         popupStage.setResizable(false);
         popupStage.setScene(new Scene((Parent) popup.root()));
-        popupStage.showAndWait();
+        return popupStage;
     }
 }

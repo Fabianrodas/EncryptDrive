@@ -160,7 +160,8 @@
 
                         <Region minWidth="10.0" />
 
-                        <Button mnemonicParsing="false"
+                        <Button fx:id="settingsCloseVaultButton"
+                                mnemonicParsing="false"
                                 minWidth="-Infinity"
                                 onAction="#closeVault"
                                 prefHeight="40.0"
