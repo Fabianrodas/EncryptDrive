@@ -128,6 +128,10 @@ class CloseGuardTest {
     @Test
     void idleCloseWipesKeysReleasesTheLockAndLeavesNoWorker() throws Exception {
         Stage stage = FxTestSupport.showInStage("dashboard");
+        // Real counted work first, so "no worker left" is checked after a worker really ran.
+        busy = FxTestSupport.holdBusy();
+        busy.countDown();
+        FxTestSupport.waitUntil(() -> !Background.isBusy());
 
         click(stage, "#close");
 

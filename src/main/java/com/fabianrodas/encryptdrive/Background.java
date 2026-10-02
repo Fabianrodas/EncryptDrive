@@ -49,7 +49,9 @@ final class Background {
 
     static void start(Task<?> task) {
         RUNNING.set(RUNNING.get() + 1);
-        task.addEventHandler(WorkerStateEvent.ANY, event -> {
+        // A filter, not a handler: it runs before the task's onSucceeded/onFailed
+        // callbacks, so a throwing callback cannot leave the app permanently busy.
+        task.addEventFilter(WorkerStateEvent.ANY, event -> {
             if (event.getEventType() == WorkerStateEvent.WORKER_STATE_SUCCEEDED
                     || event.getEventType() == WorkerStateEvent.WORKER_STATE_FAILED
                     || event.getEventType() == WorkerStateEvent.WORKER_STATE_CANCELLED) {

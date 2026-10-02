@@ -10,9 +10,9 @@ Updated after every task. Git history and test output are the record; this is th
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 01-foundation done; next 02-storage-security |
 | current task | T11 done (next: T12) |
-| last completed commit | `df05109 fix: make permanent deletion crash-safe` |
-| tests last run | `mvn -B clean verify` (2026-10-02, T11, 4 min 58 s) |
-| test result | BUILD SUCCESS — 262 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| last completed commit | `0c87f0e fix: route every exit path through one busy-aware close guard` |
+| tests last run | `mvn -B clean verify` (2026-10-02, T11 fix round 1, 5 min 09 s) |
+| test result | BUILD SUCCESS — 265 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 
