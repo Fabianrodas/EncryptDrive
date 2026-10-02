@@ -16,6 +16,7 @@ import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
@@ -227,6 +228,106 @@ class VaultServiceTest {
     }
 
     @Test
+    void aFailedCreationLeavesNothingBehindAndCanBeRetried() throws Exception {
+        Path parent = Files.createDirectories(tempDir.resolve("staged"));
+        Path target = parent.resolve("retry");
+        VaultService failing = new VaultService() {
+            @Override
+            void moveIntoPlace(Path from, Path to) throws IOException {
+                throw new IOException("simulated failure before the vault is published");
+            }
+        };
+
+        assertReason(VaultException.Reason.STORAGE, () -> failing.createVault(target, PASSWORD.toCharArray()));
+
+        assertFalse(Files.exists(target));
+        assertEquals(List.of(), names(parent));          // no staging folder left
+        assertFalse(VaultSessionService.isOpen());
+
+        vaultService.createVault(target, PASSWORD.toCharArray());
+        vaultService.closeVault();
+        vaultService.unlockVault(target, PASSWORD.toCharArray());
+    }
+
+    @Test
+    void anIncompleteLookingFolderWithAUserFileIsRefusedAndUntouched() throws Exception {
+        Path parent = Files.createDirectories(tempDir.resolve("staged"));
+        Path target = parent.resolve("looks-incomplete");
+        Files.createDirectories(target.resolve(".encryptdrive").resolve("manifests"));
+        Files.createDirectories(target.resolve("storage").resolve("blobs"));
+        Path userFile = Files.writeString(target.resolve("my notes.txt"), "do not touch");
+        FileTime modified = Files.getLastModifiedTime(userFile);
+        List<String> before = tree(target);
+
+        assertReason(VaultException.Reason.ALREADY_EXISTS, () -> vaultService.createVault(target, PASSWORD.toCharArray()));
+
+        assertEquals("do not touch", Files.readString(userFile));
+        assertEquals(modified, Files.getLastModifiedTime(userFile));
+        assertEquals(before, tree(target));
+        assertEquals(List.of("looks-incomplete"), names(parent));
+    }
+
+    @Test
+    void aBareSkeletonIsNotReusedEither() throws Exception {
+        Path target = tempDir.resolve("staged").resolve("skeleton");
+        Files.createDirectories(target.resolve(".encryptdrive").resolve("manifests"));
+        List<String> before = tree(target);
+
+        assertReason(VaultException.Reason.ALREADY_EXISTS, () -> vaultService.createVault(target, PASSWORD.toCharArray()));
+
+        assertEquals(before, tree(target));
+    }
+
+    @Test
+    void anEmptyTargetFolderAndAStaleStagingFolderDoNotBlockCreation() throws Exception {
+        Path parent = Files.createDirectories(tempDir.resolve("staged"));
+        Path target = Files.createDirectories(parent.resolve("fresh"));
+        Path stale = Files.createDirectories(parent.resolve(".fresh.creating-00000000-0000-0000-0000-000000000000"));
+        Files.writeString(stale.resolve("left by a crash"), "x");
+
+        vaultService.createVault(target, PASSWORD.toCharArray());
+        vaultService.closeVault();
+
+        vaultService.unlockVault(target, PASSWORD.toCharArray());
+        assertTrue(Files.exists(stale.resolve("left by a crash")));   // never ours to delete
+    }
+
+    @Test
+    void aFolderWithoutAParentIsRefusedBeforeAnythingIsWritten() {
+        assertReason(
+                VaultException.Reason.STORAGE,
+                () -> vaultService.createVault(tempDir.getRoot(), PASSWORD.toCharArray())
+        );
+        assertFalse(VaultSessionService.isOpen());
+    }
+
+    @Test
+    void anEmptyTargetThatCannotBeReplacedIsGivenBack() throws Exception {
+        Path target = Files.createDirectories(tempDir.resolve("staged").resolve("empty"));
+
+        // The staging folder does not exist, so the rename fails after the empty target was removed.
+        assertThrows(IOException.class, () -> vaultService.moveIntoPlace(tempDir.resolve("no-such-staging"), target));
+
+        assertTrue(Files.isDirectory(target));
+        assertEquals(List.of(), names(target));
+    }
+
+    @Test
+    void anythingButAnEmptyFolderIsNeverReplacedByThePublishingRename() throws Exception {
+        Path staging = Files.createDirectories(tempDir.resolve("finished"));
+        Path occupied = Files.createDirectories(tempDir.resolve("staged").resolve("occupied"));
+        Path userFile = Files.writeString(occupied.resolve("my notes.txt"), "do not touch");
+        Path asFile = Files.writeString(tempDir.resolve("staged").resolve("a-file"), "do not touch");
+
+        assertThrows(IOException.class, () -> vaultService.moveIntoPlace(staging, occupied));
+        assertThrows(IOException.class, () -> vaultService.moveIntoPlace(staging, asFile));
+
+        assertEquals("do not touch", Files.readString(userFile));
+        assertEquals("do not touch", Files.readString(asFile));
+        assertTrue(Files.isDirectory(staging));
+    }
+
+    @Test
     void unlockRejectsAFolderThatIsNotAVault() throws Exception {
         Files.createDirectories(root);
 
@@ -285,6 +386,18 @@ class VaultServiceTest {
     private static void assertReason(VaultException.Reason reason, Executable action) {
         VaultException error = assertThrows(VaultException.class, action);
         assertEquals(reason, error.getReason());
+    }
+
+    private static List<String> names(Path dir) throws IOException {
+        try (Stream<Path> entries = Files.list(dir)) {
+            return entries.map(entry -> entry.getFileName().toString()).sorted().toList();
+        }
+    }
+
+    private static List<String> tree(Path dir) throws IOException {
+        try (Stream<Path> entries = Files.walk(dir)) {
+            return entries.map(entry -> dir.relativize(entry).toString()).sorted().toList();
+        }
     }
 
     private static Set<String> relativePaths(Path root) throws IOException {

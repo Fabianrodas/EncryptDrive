@@ -9,10 +9,10 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 01-foundation done; next 02-storage-security |
-| current task | T6 done (next: T6A) |
-| last completed commit | `2f98a54 fix: read metadata envelopes with a strict streaming parser` |
-| tests last run | `mvn -B clean verify` (2026-10-02, T6, 1 min 1 s) |
-| test result | BUILD SUCCESS — 194 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| current task | T6A done (next: T7) |
+| last completed commit | `42c3988 fix: reject structurally invalid registries and manifests` |
+| tests last run | `mvn -B clean verify` (2026-10-02, T6A, 1 min 11 s) |
+| test result | BUILD SUCCESS — 201 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 

@@ -15,13 +15,17 @@ import com.fabianrodas.security.CryptoConstants;
 import com.fabianrodas.security.CryptoException;
 import com.fabianrodas.security.SensitiveBytes;
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -29,7 +33,7 @@ import java.util.stream.Stream;
  * Vault lifecycle around the key hierarchy: the vault password derives a
  * key that wraps a random registry master key (RMK).
  */
-public final class VaultService {
+public class VaultService {
 
     public static final int MIN_PASSWORD_LENGTH = 12;
 
@@ -41,50 +45,126 @@ public final class VaultService {
     private final Argon2KeyDeriver keyDeriver = new Argon2KeyDeriver();
     private final AesGcmService aes = new AesGcmService();
 
+    /**
+     * Builds the whole vault in a staging folder next to the chosen one and
+     * renames it into place, so a failure never leaves a half-made vault and
+     * never touches anything the user already has.
+     */
     public VaultContext createVault(Path root, char[] vaultPassword)
             throws VaultException {
 
         requireValidPassword(vaultPassword);
         Path vaultRoot = root.toAbsolutePath().normalize();
-        requireEmptyOrMissing(vaultRoot);
-        createStructure(vaultRoot);
+        Path parent = vaultRoot.getParent();
 
-        VaultLockService.VaultLock lock = lockService.acquire(vaultRoot);
+        if (parent == null) {
+            // A drive root cannot be renamed into; vaults live in a folder.
+            throw new VaultException(VaultException.Reason.STORAGE);
+        }
+
+        requireEmptyOrMissing(vaultRoot);
+
         byte[] registryKey = new byte[CryptoConstants.KEY_BYTES];
         RANDOM.nextBytes(registryKey);
         String vaultId = UUID.randomUUID().toString();
         String createdAt = Instant.now().toString();
-        VaultContext context = new VaultContext(
-                vaultRoot,
-                vaultId,
-                VaultRepository.FORMAT_VERSION,
-                createdAt,
-                SensitiveBytes.wrap(registryKey),
-                lock
+        Path staging = parent.resolve(
+                "." + vaultRoot.getFileName() + ".creating-" + UUID.randomUUID()
         );
+        boolean staged = false;
+        boolean published = false;
+        VaultContext context = null;
         boolean opened = false;
 
         try {
-            registryRepository.save(
-                    context,
-                    new UserRegistry(UserRegistryRepository.FORMAT_VERSION, new ArrayList<>())
-            );
-            // The header is written last: without it the folder is not a vault.
-            vaultRepository.writeHeader(
-                    vaultRoot,
-                    header(vaultId, createdAt, registryKey, vaultPassword)
-            );
+            Files.createDirectories(parent);
+            // Fails if the name exists, so everything under it was made by this call.
+            Files.createDirectory(staging);
+            staged = true;
+            createStructure(staging);
 
+            // Closed before the rename: Windows cannot move a folder that has open handles inside.
+            try (VaultContext building = new VaultContext(
+                    staging, vaultId, VaultRepository.FORMAT_VERSION, createdAt,
+                    SensitiveBytes.copyOf(registryKey), () -> { })) {
+                registryRepository.save(
+                        building,
+                        new UserRegistry(UserRegistryRepository.FORMAT_VERSION, new ArrayList<>())
+                );
+            }
+
+            // The header is written last: without it the folder is not a vault.
+            vaultRepository.writeHeader(staging, header(vaultId, createdAt, registryKey, vaultPassword));
+            moveIntoPlace(staging, vaultRoot);
+            published = true;
+
+            // The vault is complete on disk from here on; a lock failure leaves a vault that opens normally.
+            VaultLockService.VaultLock lock = lockService.acquire(vaultRoot);
+            context = new VaultContext(
+                    vaultRoot, vaultId, VaultRepository.FORMAT_VERSION, createdAt,
+                    SensitiveBytes.copyOf(registryKey), lock
+            );
             VaultSessionService.open(context);
             opened = true;
             return context;
 
-        } catch (VaultStorageException e) {
+        } catch (IOException | VaultStorageException e) {
             throw new VaultException(VaultException.Reason.STORAGE, e);
         } finally {
-            if (!opened) {
+            Arrays.fill(registryKey, (byte) 0);
+
+            if (context != null && !opened) {
                 context.close();
             }
+
+            if (staged && !published) {
+                deleteStaging(staging);
+            }
+        }
+    }
+
+    /**
+     * Publishes the finished vault with one rename onto a missing or empty
+     * folder. Only an empty folder is ever replaced; it is given back if the
+     * rename fails.
+     */
+    void moveIntoPlace(Path staging, Path target) throws IOException {
+        boolean replacedEmptyFolder = false;
+
+        if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+            // On Windows the rename below would silently replace a file.
+            if (!Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS)) {
+                throw new FileAlreadyExistsException(target.toString());
+            }
+
+            // Files.delete refuses a folder that is not empty.
+            Files.delete(target);
+            replacedEmptyFolder = true;
+        }
+
+        try {
+            Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException e) {
+            if (replacedEmptyFolder) {
+                try {
+                    Files.createDirectory(target);
+                } catch (IOException ignored) {
+                    // Best effort: the folder the user chose was empty.
+                }
+            }
+
+            throw e;
+        }
+    }
+
+    /** Removes a staging folder this call created; best effort. */
+    private static void deleteStaging(Path staging) {
+        try (Stream<Path> paths = Files.walk(staging)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        } catch (IOException ignored) {
+            // A leftover ".<name>.creating-<id>" folder holds only unreadable ciphertext.
         }
     }
 
@@ -280,15 +360,15 @@ public final class VaultService {
         }
     }
 
-    private static void createStructure(Path vaultRoot) throws VaultException {
-        Path metaDir = VaultRepository.metaDir(vaultRoot);
+    private static void createStructure(Path folder) throws VaultException {
+        Path metaDir = VaultRepository.metaDir(folder);
 
         try {
             Files.createDirectories(metaDir.resolve(VaultRepository.MANIFESTS_DIR));
             Files.createDirectories(metaDir
                     .resolve(VaultRepository.BACKUPS_DIR)
                     .resolve(VaultRepository.MANIFESTS_DIR));
-            Files.createDirectories(vaultRoot.resolve(VaultRepository.BLOBS_DIR));
+            Files.createDirectories(folder.resolve(VaultRepository.BLOBS_DIR));
 
         } catch (IOException e) {
             throw new VaultException(VaultException.Reason.STORAGE, e);
