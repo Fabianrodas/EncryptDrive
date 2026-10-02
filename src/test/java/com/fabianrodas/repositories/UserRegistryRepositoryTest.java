@@ -18,6 +18,7 @@ import com.fabianrodas.security.SensitiveBytes;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -194,6 +196,47 @@ class UserRegistryRepositoryTest {
 
         assertEquals(VaultStorageException.Reason.TOO_LARGE, error.getReason());
         assertArrayEquals(before, Files.readAllBytes(usersFile()));
+    }
+
+    @Test
+    void structurallyInvalidRegistriesAreRejected() throws Exception {
+        UserRecord valid = record();
+        List<List<UserRecord>> registries = List.of(
+                List.of(withIds("not-a-uuid", valid.getManifestId(), "exampleuser")),
+                List.of(withIds(USER_ID, "not-a-uuid", "exampleuser")),
+                List.of(withIds(USER_ID, valid.getManifestId(), null)),
+                List.of(new UserRecord(USER_ID, "Example Person", "ExampleUser", "exampleuser",
+                        "2026-09-30T17:05:00Z", valid.getManifestId(), valid.getUserKdf(), null)),
+                List.of(valid, withIds("9a1b2c3d-4e5f-4061-8273-a4b5c6d7e8f9",
+                        "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f0", "exampleuser"))
+        );
+        Path backups = root.resolve(".encryptdrive").resolve("backups");
+
+        for (List<UserRecord> users : registries) {
+            repository.save(vault, new UserRegistry(1, new ArrayList<>(users)));
+            deleteBackups(backups);
+
+            VaultStorageException error = assertThrows(
+                    VaultStorageException.class, () -> repository.load(vault), users.toString()
+            );
+            assertEquals(VaultStorageException.Reason.CORRUPTED, error.getReason());
+        }
+    }
+
+    private static UserRecord withIds(String userId, String manifestId, String normalizedUsername) {
+        UserRecord valid = record();
+        return new UserRecord(userId, valid.getFullName(), valid.getUsername(), normalizedUsername,
+                valid.getCreatedAt(), manifestId, valid.getUserKdf(), valid.getWrappedUserMasterKey());
+    }
+
+    private static void deleteBackups(Path backups) throws IOException {
+        if (Files.isDirectory(backups)) {
+            try (Stream<Path> files = Files.list(backups)) {
+                for (Path file : files.filter(Files::isRegularFile).toList()) {
+                    Files.delete(file);
+                }
+            }
+        }
     }
 
     private VaultContext context(byte[] key) {

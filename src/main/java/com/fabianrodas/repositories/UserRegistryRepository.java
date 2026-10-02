@@ -1,5 +1,6 @@
 package com.fabianrodas.repositories;
 
+import com.fabianrodas.models.UserRecord;
 import com.fabianrodas.models.UserRegistry;
 import com.fabianrodas.models.VaultContext;
 import com.fabianrodas.security.Aad;
@@ -14,6 +15,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * {@code users.enc}: the whole registry encrypted under the registry
@@ -85,9 +88,7 @@ public final class UserRegistryRepository {
                     UserRegistry.class
             );
 
-            if (registry == null
-                    || registry.getFormatVersion() != FORMAT_VERSION
-                    || registry.getUsers() == null) {
+            if (!isWellFormed(registry)) {
                 throw new VaultStorageException(VaultStorageException.Reason.CORRUPTED);
             }
 
@@ -102,6 +103,38 @@ public final class UserRegistryRepository {
                 Arrays.fill(plaintext, (byte) 0);
             }
         }
+    }
+
+    /** Authentic content must still be shaped the way EncryptDrive writes it. */
+    private static boolean isWellFormed(UserRegistry registry) {
+        if (registry == null
+                || registry.getFormatVersion() != FORMAT_VERSION
+                || registry.getUsers() == null) {
+            return false;
+        }
+
+        Set<String> userIds = new HashSet<>();
+        Set<String> usernames = new HashSet<>();
+        Set<String> manifestIds = new HashSet<>();
+
+        for (UserRecord user : registry.getUsers()) {
+            if (user == null
+                    || !VaultRepository.isCanonicalUuid(user.getUserId())
+                    || !VaultRepository.isCanonicalUuid(user.getManifestId())
+                    || user.getFullName() == null
+                    || user.getUsername() == null
+                    || user.getNormalizedUsername() == null
+                    || user.getCreatedAt() == null
+                    || user.getUserKdf() == null
+                    || user.getWrappedUserMasterKey() == null
+                    || !userIds.add(user.getUserId())
+                    || !usernames.add(user.getNormalizedUsername())
+                    || !manifestIds.add(user.getManifestId())) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public void save(VaultContext vault, UserRegistry registry)

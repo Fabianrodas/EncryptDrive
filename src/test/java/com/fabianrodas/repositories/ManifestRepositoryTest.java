@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.fabianrodas.models.EncryptedPayload;
 import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.models.ManifestEntryKind;
 import com.fabianrodas.models.UserManifest;
@@ -20,6 +21,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +31,9 @@ import org.junit.jupiter.api.io.TempDir;
 class ManifestRepositoryTest {
 
     private static final String VAULT_ID = "6f1d2c3b-4a59-4687-9a0b-1c2d3e4f5a6b";
+    private static final EncryptedPayload WRAPPED
+            = new EncryptedPayload(1, "AES/GCM/NoPadding", "bm9uY2Vub25jZW5v", "d3JhcHBlZA==");
+    private static final String NONCE = Base64.getEncoder().encodeToString(new byte[12]);
 
     @TempDir
     Path root;
@@ -159,15 +164,67 @@ class ManifestRepositoryTest {
         assertArrayEquals(before, Files.readAllBytes(manifestFile()));
     }
 
+    @Test
+    void structurallyInvalidManifestsAreRejected() throws Exception {
+        List<Consumer<UserManifest>> damages = List.of(
+                manifest -> file(manifest).setContent(-1, UUID.randomUUID(), WRAPPED, NONCE),
+                manifest -> file(manifest).setContent(1, null, WRAPPED, NONCE),
+                manifest -> file(manifest).setContent(1, UUID.randomUUID(), null, NONCE),
+                manifest -> file(manifest).setContent(1, UUID.randomUUID(), WRAPPED,
+                        Base64.getEncoder().encodeToString(new byte[11])),
+                manifest -> manifest.getEntries().add(file(manifest)),
+                manifest -> folder(manifest).setParentId(UUID.randomUUID()),
+                manifest -> manifest.getEntries().add(new ManifestEntry(
+                        UUID.randomUUID(), ManifestEntryKind.FOLDER, null, "/", "2026-09-30T00:00:00Z")),
+                manifest -> folder(manifest).setParentId(file(manifest).getEntryId()),
+                manifest -> {
+                    ManifestEntry a = new ManifestEntry(UUID.randomUUID(), ManifestEntryKind.FOLDER,
+                            null, "a", "2026-09-30T00:00:00Z");
+                    ManifestEntry b = new ManifestEntry(UUID.randomUUID(), ManifestEntryKind.FOLDER,
+                            a.getEntryId(), "b", "2026-09-30T00:00:00Z");
+                    a.setParentId(b.getEntryId());
+                    manifest.getEntries().addAll(List.of(a, b));
+                }
+        );
+
+        for (int i = 0; i < damages.size(); i++) {
+            UUID freshId = UUID.randomUUID();   // no backups exist for this id, so nothing can be recovered
+            UserManifest manifest = manifestWithNames();
+            damages.get(i).accept(manifest);
+            repository.save(manifest, freshId, userMasterKey);
+            int damage = i;
+
+            VaultStorageException error = assertThrows(
+                    VaultStorageException.class,
+                    () -> repository.load(userId, freshId, userMasterKey),
+                    "damage " + damage
+            );
+            assertEquals(VaultStorageException.Reason.CORRUPTED, error.getReason(), "damage " + damage);
+        }
+    }
+
     private UserManifest manifestWithNames() throws Exception {
         UserManifest manifest = ManifestService.newManifest(userId);
         ManifestService service = new ManifestService(manifest);
         ManifestEntry folder = service.createFolder(manifest.getRootFolderId(), "Tax Returns 2025");
-        manifest.getEntries().add(new ManifestEntry(
+        ManifestEntry file = new ManifestEntry(
                 UUID.randomUUID(), ManifestEntryKind.FILE, folder.getEntryId(),
                 "budget.xlsx", "2026-09-30T00:00:00Z"
-        ));
+        );
+        file.setContent(12_345, UUID.randomUUID(), WRAPPED, NONCE);
+        manifest.getEntries().add(file);
         return manifest;
+    }
+
+    private static ManifestEntry file(UserManifest manifest) {
+        return manifest.getEntries().stream()
+                .filter(entry -> entry.getKind() == ManifestEntryKind.FILE).findFirst().orElseThrow();
+    }
+
+    private static ManifestEntry folder(UserManifest manifest) {
+        return manifest.getEntries().stream()
+                .filter(entry -> entry.getKind() == ManifestEntryKind.FOLDER && entry.getParentId() != null)
+                .findFirst().orElseThrow();
     }
 
     private Path manifestFile() {

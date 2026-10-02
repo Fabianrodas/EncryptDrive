@@ -1,9 +1,12 @@
 package com.fabianrodas.repositories;
 
+import com.fabianrodas.models.ManifestEntry;
+import com.fabianrodas.models.ManifestEntryKind;
 import com.fabianrodas.models.UserManifest;
 import com.fabianrodas.models.VaultContext;
 import com.fabianrodas.security.Aad;
 import com.fabianrodas.security.AesGcmService;
+import com.fabianrodas.security.CryptoConstants;
 import com.fabianrodas.security.CryptoException;
 import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
@@ -14,7 +17,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -95,11 +105,7 @@ public class ManifestRepository {
                     UserManifest.class
             );
 
-            if (manifest == null
-                    || manifest.getFormatVersion() != FORMAT_VERSION
-                    || !userId.equals(manifest.getUserId())
-                    || manifest.getRootFolderId() == null
-                    || manifest.getEntries() == null) {
+            if (!isWellFormed(manifest, userId)) {
                 throw new VaultStorageException(VaultStorageException.Reason.CORRUPTED);
             }
 
@@ -111,6 +117,85 @@ public class ManifestRepository {
             if (plaintext != null) {
                 Arrays.fill(plaintext, (byte) 0);
             }
+        }
+    }
+
+    /**
+     * Authentic content must still be a tree the way EncryptDrive writes it:
+     * unique ids, one root, every other entry under an existing folder and
+     * reachable from the root, and complete content fields on every file.
+     */
+    private static boolean isWellFormed(UserManifest manifest, UUID userId) {
+        if (manifest == null
+                || manifest.getFormatVersion() != FORMAT_VERSION
+                || !userId.equals(manifest.getUserId())
+                || manifest.getRootFolderId() == null
+                || manifest.getEntries() == null) {
+            return false;
+        }
+
+        Map<UUID, ManifestEntry> byId = new HashMap<>();
+
+        for (ManifestEntry entry : manifest.getEntries()) {
+            if (entry == null
+                    || entry.getEntryId() == null
+                    || entry.getKind() == null
+                    || entry.getName() == null
+                    || entry.getCreatedAt() == null
+                    || byId.put(entry.getEntryId(), entry) != null) {
+                return false;
+            }
+        }
+
+        ManifestEntry root = byId.get(manifest.getRootFolderId());
+
+        if (root == null || root.getKind() != ManifestEntryKind.FOLDER || root.getParentId() != null) {
+            return false;
+        }
+
+        Map<UUID, List<ManifestEntry>> children = new HashMap<>();
+
+        for (ManifestEntry entry : manifest.getEntries()) {
+            if (entry != root) {
+                ManifestEntry parent = entry.getParentId() == null ? null : byId.get(entry.getParentId());
+
+                if (parent == null || parent.getKind() != ManifestEntryKind.FOLDER) {
+                    return false;
+                }
+
+                children.computeIfAbsent(parent.getEntryId(), id -> new ArrayList<>()).add(entry);
+            }
+
+            if (entry.getKind() == ManifestEntryKind.FILE && !hasContent(entry)) {
+                return false;
+            }
+        }
+
+        // Entries caught in a parent cycle are never reached from the root.
+        int reached = 0;
+        Deque<ManifestEntry> pending = new ArrayDeque<>(List.of(root));
+
+        while (!pending.isEmpty()) {
+            reached++;
+            pending.addAll(children.getOrDefault(pending.pop().getEntryId(), List.of()));
+        }
+
+        return reached == manifest.getEntries().size();
+    }
+
+    private static boolean hasContent(ManifestEntry file) {
+        return file.getPlainSize() != null
+                && file.getPlainSize() >= 0
+                && file.getBlobId() != null
+                && file.getWrappedFileKey() != null
+                && decodedLength(file.getContentNonce()) == CryptoConstants.GCM_NONCE_BYTES;
+    }
+
+    private static int decodedLength(String base64) {
+        try {
+            return base64 == null ? -1 : Base64.getDecoder().decode(base64).length;
+        } catch (IllegalArgumentException e) {
+            return -1;
         }
     }
 
