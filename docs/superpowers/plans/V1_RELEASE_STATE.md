@@ -7,12 +7,12 @@ Updated after every task. Git history and test output are the record; this is th
 | Key | Value |
 |---|---|
 | branch | `feature/encryptdrive-1.0` (unpushed) |
-| maven version | `1.0-SNAPSHOT` (becomes `1.0.0-SNAPSHOT` in T3, `1.0.0` in T26) |
-| current phase | 01-foundation |
-| current task | T2 done (next: T3) |
-| last completed commit | `249ad04 docs: adopt the v1.0.0 release spec and plan` |
-| tests last run | `mvn -B clean verify` (2026-10-02, T2, 5 min 24 s) |
-| test result | BUILD SUCCESS — 166 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
+| current phase | 01-foundation done; next 02-storage-security |
+| current task | T3 done (next: T4) |
+| last completed commit | `2170deb chore: normalize line endings and tidy ignore rules` |
+| tests last run | `mvn -B clean verify` (2026-10-02, T3, 3 min 27 s) |
+| test result | BUILD SUCCESS — 168 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 
@@ -33,7 +33,7 @@ Updated after every task. Git history and test output are the record; this is th
 | Item | Status |
 |---|---|
 | 1 GiB streaming test (`-Xmx256m`) | not run in this workstream |
-| portable build | old app-image script only (`1.0-SNAPSHOT` jar name hard-coded) |
+| portable build | old app-image script only (jar name and app version now derived from the pom; replaced in T20) |
 | installer build | TODO — WiX not installed locally (.NET Framework 3.5 present; no-admin binaries planned in T20) |
 | WiX 3.14 binaries SHA-256 | (record at T20 Step 1) |
 | folder-import benchmark (1,000 × 4 KiB) | (record at T19) |

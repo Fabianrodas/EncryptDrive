@@ -3,8 +3,10 @@ package com.fabianrodas.encryptdrive;
 import com.fabianrodas.services.SessionService;
 import com.fabianrodas.services.VaultSessionService;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.Properties;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -74,6 +76,23 @@ public class App extends Application {
     static void closeVault() throws IOException {
         VaultSessionService.closeVault();
         setRoot("vault-selection");
+    }
+
+    /** The Maven project version, filtered into version.properties at build time. */
+    static String version() {
+        Properties properties = new Properties();
+
+        try (InputStream in = App.class.getResourceAsStream("version.properties")) {
+            if (in == null) {
+                return "unknown";
+            }
+
+            properties.load(in);
+        } catch (IOException e) {
+            return "unknown";
+        }
+
+        return properties.getProperty("version", "unknown");
     }
 
     static String openVaultName() {

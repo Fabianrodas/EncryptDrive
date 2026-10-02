@@ -35,6 +35,9 @@ public class VaultSettingsController implements Initializable {
     private Label createdLabel;
 
     @FXML
+    private Label appVersionLabel;
+
+    @FXML
     private PasswordField currentPasswordField;
 
     @FXML
@@ -53,6 +56,8 @@ public class VaultSettingsController implements Initializable {
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
+        appVersionLabel.setText(App.version());
+
         if (!VaultSessionService.isOpen()) {
             return;
         }

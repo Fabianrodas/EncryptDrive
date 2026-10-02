@@ -16,7 +16,8 @@ function Invoke-Checked([string] $what, [scriptblock] $command) {
 # dependencies to target/modules (see maven-dependency-plugin in pom.xml).
 Invoke-Checked "Maven build" { mvn -B clean verify }
 
-Copy-Item "target/EncryptDrive-1.0-SNAPSHOT.jar" "target/modules/" -Force
+$version = ([xml](Get-Content pom.xml)).project.version
+Copy-Item "target/EncryptDrive-$version.jar" "target/modules/" -Force
 Remove-Item "target/dist" -Recurse -Force -ErrorAction SilentlyContinue
 
 # Bouncy Castle ships as a signed modular JAR, which jlink refuses unless told
@@ -26,7 +27,7 @@ Invoke-Checked "jpackage" {
         --type app-image `
         --name EncryptDrive `
         --dest target/dist `
-        --app-version 1.0.0 `
+        --app-version ($version -replace '-SNAPSHOT$', '') `
         --vendor "Fabian Rodas" `
         --module-path target/modules `
         --module "com.fabianrodas.encryptdrive/com.fabianrodas.encryptdrive.App" `

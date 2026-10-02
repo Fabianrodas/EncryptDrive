@@ -62,6 +62,12 @@
                                styleClass="detail-value"
                                GridPane.columnIndex="1"
                                GridPane.rowIndex="3" />
+
+                        <Label styleClass="detail-label" text="APP VERSION" GridPane.rowIndex="4" />
+                        <Label fx:id="appVersionLabel"
+                               styleClass="detail-value"
+                               GridPane.columnIndex="1"
+                               GridPane.rowIndex="4" />
                     </children>
                 </GridPane>
 

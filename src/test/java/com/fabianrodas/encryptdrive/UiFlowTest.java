@@ -19,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import javafx.scene.Scene;
 import javafx.scene.control.ButtonBase;
+import javafx.scene.control.Labeled;
 import javafx.scene.control.TableView;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -118,6 +119,19 @@ class UiFlowTest {
         selectFirstRow(scene);
         FxTestSupport.fireAndAnswerPopup(scene, "#deleteButton", "Delete permanently");
         assertEquals(0, files.listTrash().size());
+    }
+
+    @Test
+    void vaultSettingsShowTheApplicationVersion() throws Exception {
+        Scene scene = FxTestSupport.showScreen("dashboard");
+
+        click(scene, "#settingsNavButton");
+
+        assertEquals(App.version(), FxTestSupport.onFxThread(() -> {
+            // The settings ScrollPane exposes its content only once its skin exists.
+            scene.getRoot().applyCss();
+            return ((Labeled) scene.getRoot().lookup("#appVersionLabel")).getText();
+        }));
     }
 
     private static void selectFirstRow(Scene scene) throws Exception {
