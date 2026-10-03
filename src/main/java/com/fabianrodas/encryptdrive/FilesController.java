@@ -333,14 +333,18 @@ public class FilesController implements Initializable {
         Background.read(files::activeFolders, folders -> {
             String what = selected.size() == 1 ? "\"" + selected.get(0).getName() + "\"" : selected.size() + " items";
 
-            DialogFactory.chooseFolder(
+            Optional<ManifestEntry> chosen = DialogFactory.chooseFolder(
                     window(), "Move", "Choose the folder to move " + what + " into.",
                     folderTree(folders, moving), "Move here"
-            ).ifPresent(folder -> change(() -> {
-                files.move(List.copyOf(moving), folder.getEntryId());
-                return null;
-            }, done -> showSuccess(what + (selected.size() == 1 ? " was" : " were") + " moved to "
-                    + (folder.getParentId() == null ? "My files" : "\"" + folder.getName() + "\"") + ".")));
+            );
+
+            // The folder everything already lives in: nothing to save, nothing to announce.
+            chosen.filter(folder -> !selected.stream().allMatch(entry -> folder.getEntryId().equals(entry.getParentId())))
+                    .ifPresent(folder -> change(() -> {
+                        files.move(List.copyOf(moving), folder.getEntryId());
+                        return null;
+                    }, done -> showSuccess(what + (selected.size() == 1 ? " was" : " were") + " moved to "
+                            + (folder.getParentId() == null ? "My files" : "\"" + folder.getName() + "\"") + ".")));
         }, failure -> showError(describe(failure)));
     }
 

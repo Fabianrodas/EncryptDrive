@@ -1,5 +1,6 @@
 package com.fabianrodas.encryptdrive;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -177,6 +178,30 @@ class UiFlowTest {
         });
 
         FxTestSupport.waitUntil(() -> files.listChildren(target.getEntryId()).size() == 1);
+    }
+
+    @Test
+    void movingIntoTheFolderTheItemsAreInDoesNothing() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        files.importFile(Files.writeString(tempDir.resolve("stay.txt"), "x"), files.rootFolderId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#filesNavButton");
+        waitForRows(scene);
+        selectFirstRow(scene);
+        Path manifest = vault.root().resolve(".encryptdrive").resolve("manifests")
+                .resolve(SessionService.identity().manifestId() + ".enc");
+        byte[] before = Files.readAllBytes(manifest);
+
+        FxTestSupport.fireAndAnswer(scene, "#moveButton", popup -> {
+            ((TreeView<?>) popup.getScene().getRoot().lookup("#folderTree")).getSelectionModel().select(0);
+            FxTestSupport.clickButton(popup, "Move here");
+        });
+        // The popup is answered while the button handler is still running: let it finish.
+        FxTestSupport.onFxThread(() -> null);
+        FxTestSupport.waitUntil(() -> !Background.isBusy());
+
+        assertArrayEquals(before, Files.readAllBytes(manifest), "the manifest was saved again");
+        assertEquals("", FxTestSupport.onFxThread(() -> text(scene, "#feedbackLabel")));
     }
 
     @Test

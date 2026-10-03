@@ -26,14 +26,13 @@
             </children>
         </VBox>
 
-        <HBox alignment="CENTER_LEFT" spacing="8.0">
-            <children>
-                <HBox fx:id="breadcrumbBar"
-                      alignment="CENTER_LEFT"
-                      minWidth="0.0"
-                      spacing="2.0"
-                      HBox.hgrow="ALWAYS" />
+        <HBox fx:id="breadcrumbBar"
+              alignment="CENTER_LEFT"
+              minWidth="0.0"
+              spacing="2.0" />
 
+        <HBox alignment="CENTER_RIGHT" spacing="8.0">
+            <children>
                 <Button fx:id="newFolderButton"
                         minWidth="-Infinity"
                         mnemonicParsing="false"

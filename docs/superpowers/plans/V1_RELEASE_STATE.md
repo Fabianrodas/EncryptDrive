@@ -10,9 +10,9 @@ Updated after every task. Git history and test output are the record; this is th
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 03-file-manager |
 | current task | T14 done (next: T15) |
-| last completed commit | `e3d0072 feat: rename files and folders` |
-| tests last run | `mvn -B clean verify` (2026-10-03, T14, 1 min 49 s) |
-| test result | BUILD SUCCESS — 304 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| last completed commit | `2892791 feat: move files and folders` |
+| tests last run | `mvn -B clean verify` (2026-10-03, T14 fix round 1, 1 min 38 s) |
+| test result | BUILD SUCCESS — 309 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 

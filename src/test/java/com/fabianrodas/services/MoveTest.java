@@ -91,6 +91,32 @@ class MoveTest {
     }
 
     @Test
+    void aCycleLaterInTheSelectionMovesNothing() throws Exception {
+        ManifestEntry file = vault.importText(files, "a.txt", root);
+        ManifestEntry docs = files.createFolder("Docs", root);
+        ManifestEntry inner = files.createFolder("Inner", docs.getEntryId());
+
+        assertReason(FileServiceException.Reason.INVALID_MOVE,
+                () -> files.move(List.of(file.getEntryId(), docs.getEntryId()), inner.getEntryId()));
+
+        assertEquals(List.of("Docs", "a.txt"), names(files.listChildren(root)));
+        assertEquals(List.of("Inner"), names(files.listChildren(docs.getEntryId())));
+        assertEquals(List.of(), files.listChildren(inner.getEntryId()));
+    }
+
+    @Test
+    void aSelectionHoldingItsOwnDestinationMovesNothing() throws Exception {
+        ManifestEntry a = files.createFolder("A", root);
+        ManifestEntry b = files.createFolder("B", root);
+
+        assertReason(FileServiceException.Reason.INVALID_MOVE,
+                () -> files.move(List.of(a.getEntryId(), b.getEntryId()), a.getEntryId()));
+
+        assertEquals(List.of("A", "B"), names(files.listChildren(root)));
+        assertEquals(List.of(), files.listChildren(a.getEntryId()));
+    }
+
+    @Test
     void theRootCannotBeMoved() throws Exception {
         ManifestEntry docs = files.createFolder("Docs", root);
 
