@@ -33,6 +33,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -169,6 +170,58 @@ public final class FileService {
                 .listChildren(folderId, false).stream()
                 .sorted(FOLDERS_THEN_NAME)
                 .toList());
+    }
+
+    /** A search hit and the folders leading to it (below the root, outermost first). */
+    public record SearchResult(ManifestEntry entry, List<String> folders) {
+    }
+
+    /**
+     * Active entries whose name contains {@code query}, ignoring case,
+     * anywhere in the signed-in user's tree, folders first, then by name. Only
+     * the decrypted manifest in memory is used; nothing is indexed or written.
+     * Entries below a trashed folder never match, whatever their own state.
+     */
+    public List<SearchResult> search(String query) throws FileServiceException {
+        String needle = query == null ? "" : query.strip().toLowerCase(Locale.ROOT);
+
+        if (needle.isEmpty()) {
+            return List.of();
+        }
+
+        return withUserMasterKey(key -> {
+            UserManifest manifest = load(key);
+            // One lookup table: a manifest holds up to 64 MiB of entries, too many to scan per hit.
+            Map<UUID, ManifestEntry> byId = manifest.getEntries().stream()
+                    .collect(Collectors.toMap(ManifestEntry::getEntryId, entry -> entry));
+            List<SearchResult> results = new ArrayList<>();
+
+            for (ManifestEntry entry : manifest.getEntries()) {
+                if (entry.getDeletedAt() != null
+                        || entry.getEntryId().equals(manifest.getRootFolderId())
+                        || !entry.getName().toLowerCase(Locale.ROOT).contains(needle)) {
+                    continue;
+                }
+
+                // The repository only returns trees, so this walk ends at the root.
+                LinkedList<String> folders = new LinkedList<>();
+                boolean trashed = false;
+
+                for (ManifestEntry folder = byId.get(entry.getParentId());
+                        !folder.getEntryId().equals(manifest.getRootFolderId());
+                        folder = byId.get(folder.getParentId())) {
+                    trashed |= folder.getDeletedAt() != null;
+                    folders.addFirst(folder.getName());
+                }
+
+                if (!trashed) {
+                    results.add(new SearchResult(entry, folders));
+                }
+            }
+
+            results.sort(Comparator.comparing(SearchResult::entry, FOLDERS_THEN_NAME));
+            return results;
+        });
     }
 
     /** Entries the user moved to the trash, newest first. */

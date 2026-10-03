@@ -7,6 +7,7 @@
 <?import javafx.scene.control.ProgressBar?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
 
@@ -19,14 +20,34 @@
       fx:controller="com.fabianrodas.encryptdrive.FilesController">
 
     <children>
-        <VBox spacing="5.0">
+        <HBox alignment="CENTER_LEFT" spacing="10.0">
             <children>
-                <Label styleClass="page-title" text="Files" />
+                <VBox spacing="5.0" HBox.hgrow="ALWAYS">
+                    <children>
+                        <Label styleClass="page-title" text="Files" />
 
-                <Label styleClass="page-subtitle"
-                       text="Every file is encrypted with its own key before it is stored." />
+                        <Label styleClass="page-subtitle"
+                               text="Every file is encrypted with its own key before it is stored." />
+                    </children>
+                </VBox>
+
+                <TextField fx:id="searchField"
+                           onAction="#search"
+                           prefWidth="240.0"
+                           promptText="Search your files"
+                           styleClass="profile-input-field" />
+
+                <Button fx:id="clearSearchButton"
+                        managed="false"
+                        minWidth="-Infinity"
+                        mnemonicParsing="false"
+                        onAction="#clearSearch"
+                        prefHeight="36.0"
+                        styleClass="secondary-button"
+                        text="Clear"
+                        visible="false" />
             </children>
-        </VBox>
+        </HBox>
 
         <HBox fx:id="breadcrumbBar"
               alignment="CENTER_LEFT"
@@ -115,10 +136,11 @@
                 <TableColumn fx:id="typeColumn" prefWidth="120.0" sortable="false" text="TYPE" />
                 <TableColumn fx:id="sizeColumn" prefWidth="100.0" sortable="false" text="SIZE" />
                 <TableColumn fx:id="modifiedColumn" prefWidth="150.0" sortable="false" text="MODIFIED" />
+                <TableColumn fx:id="locationColumn" prefWidth="200.0" sortable="false" text="LOCATION" visible="false" />
             </columns>
 
             <placeholder>
-                <Label text="This folder is empty. Import files or create a folder." />
+                <Label fx:id="placeholderLabel" text="This folder is empty. Import files or create a folder." />
             </placeholder>
         </TableView>
     </children>

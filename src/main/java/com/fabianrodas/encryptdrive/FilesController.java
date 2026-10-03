@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +37,7 @@ import javafx.scene.control.SelectionMode;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
 import javafx.scene.control.TreeItem;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -53,11 +55,19 @@ import javafx.stage.Window;
 
 public class FilesController implements Initializable {
 
+    private static final String EMPTY_FOLDER = "This folder is empty. Import files or create a folder.";
+
     @FXML
     private VBox root;
 
     @FXML
     private HBox breadcrumbBar;
+
+    @FXML
+    private TextField searchField;
+
+    @FXML
+    private Button clearSearchButton;
 
     @FXML
     private Button newFolderButton;
@@ -104,12 +114,27 @@ public class FilesController implements Initializable {
     @FXML
     private TableColumn<ManifestEntry, String> modifiedColumn;
 
+    @FXML
+    private TableColumn<ManifestEntry, String> locationColumn;
+
+    @FXML
+    private Label placeholderLabel;
+
     private FileService files;
     private UUID currentFolderId;
     private boolean busy = false;
 
-    /** Results of older folder loads are dropped when they arrive late. */
+    /** Results of older folder loads and searches are dropped when they arrive late. */
     private int viewRequest;
+
+    /** The query whose results the table shows, or null while it shows a folder. */
+    private String searchQuery;
+
+    /** Where each search result lives; only filled while the table shows results. */
+    private final Map<UUID, String> locations = new HashMap<>();
+
+    /** A file to select once the folder it was found in is shown. */
+    private UUID selectAfterLoad;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -122,6 +147,7 @@ public class FilesController implements Initializable {
                 ? Formats.bytes(entry.getPlainSize())
                 : "—");
         column(modifiedColumn, entry -> Formats.dateTime(entry.getModifiedAt()));
+        column(locationColumn, entry -> locations.getOrDefault(entry.getEntryId(), ""));
 
         table.setRowFactory(view -> {
             TableRow<ManifestEntry> row = new TableRow<>();
@@ -548,7 +574,14 @@ public class FilesController implements Initializable {
     }
 
     private void open(ManifestEntry entry) {
-        if (entry.getKind() == ManifestEntryKind.FOLDER) {
+        boolean folder = entry.getKind() == ManifestEntryKind.FOLDER;
+
+        if (searchQuery != null) {
+            // A result opens the folder it is, or the folder it was found in with the file selected.
+            exitSearch();
+            selectAfterLoad = folder ? null : entry.getEntryId();
+            navigateTo(folder ? entry.getEntryId() : entry.getParentId());
+        } else if (folder) {
             navigateTo(entry.getEntryId());
         } else {
             showSuccess("Use Export to save a decrypted copy of \"" + entry.getName() + "\".");
@@ -563,6 +596,12 @@ public class FilesController implements Initializable {
 
     private void refresh() {
         if (files == null) {
+            return;
+        }
+
+        if (searchQuery != null) {
+            // After a change made among the results, show them again.
+            runSearch(searchQuery);
             return;
         }
 
@@ -585,6 +624,17 @@ public class FilesController implements Initializable {
         table.getItems().setAll(view.children());
         renderBreadcrumbs(view.path());
 
+        if (selectAfterLoad != null) {
+            view.children().stream()
+                    .filter(child -> child.getEntryId().equals(selectAfterLoad))
+                    .findFirst()
+                    .ifPresent(found -> {
+                        table.getSelectionModel().select(found);
+                        table.scrollTo(found);
+                    });
+            selectAfterLoad = null;
+        }
+
         // A view the user already left must leave the one-shot notice for the visible one.
         if (root.getScene() != null && RecoveryService.takeRecoveryNotice()) {
             feedbackLabel.getStyleClass().remove("success");
@@ -593,6 +643,69 @@ public class FilesController implements Initializable {
         }
 
         updateActions();
+    }
+
+    @FXML
+    private void search() {
+        String query = searchField.getText().strip();
+
+        if (query.isEmpty()) {
+            clearSearch();
+        } else {
+            runSearch(query);
+        }
+    }
+
+    private void runSearch(String query) {
+        int request = ++viewRequest;
+
+        Background.read(() -> files.search(query), results -> {
+            if (request == viewRequest) {
+                showResults(query, results);
+            }
+        }, failure -> {
+            if (request == viewRequest) {
+                showError(describe(failure));
+            }
+        });
+    }
+
+    private void showResults(String query, List<FileService.SearchResult> results) {
+        searchQuery = query;
+        locations.clear();
+        results.forEach(result -> locations.put(result.entry().getEntryId(), location(result.folders())));
+        table.getItems().setAll(results.stream().map(FileService.SearchResult::entry).toList());
+        locationColumn.setVisible(true);
+        clearSearchButton.setVisible(true);
+        clearSearchButton.setManaged(true);
+        placeholderLabel.setText("Nothing in your files matches \"" + query + "\".");
+
+        Label title = new Label("Search results for \"" + query + "\" (" + results.size() + ")");
+        title.getStyleClass().add("breadcrumb-current");
+        breadcrumbBar.getChildren().setAll(title);
+        updateActions();
+    }
+
+    @FXML
+    private void clearSearch() {
+        exitSearch();
+        refresh();
+    }
+
+    /** Back to showing a folder; the caller loads it, which also drops a search still running. */
+    private void exitSearch() {
+        searchQuery = null;
+        locations.clear();
+        searchField.clear();
+        locationColumn.setVisible(false);
+        clearSearchButton.setVisible(false);
+        clearSearchButton.setManaged(false);
+        placeholderLabel.setText(EMPTY_FOLDER);
+    }
+
+    /** Where a search result lives, as the folders leading to it below "My files". */
+    static String location(List<String> folders) {
+        return folders.isEmpty() ? "My files" : "My files › " + String.join(" › ", folders);
     }
 
     private void renderBreadcrumbs(List<ManifestEntry> path) {
@@ -620,12 +733,13 @@ public class FilesController implements Initializable {
     }
 
     private void updateActions() {
-        // Until the first folder view arrives there is no folder to act in.
-        boolean unavailable = busy || files == null || currentFolderId == null;
+        boolean unavailable = busy || files == null;
+        // Before the first folder view and among search results there is no folder to add to.
+        boolean noFolder = currentFolderId == null || searchQuery != null;
         boolean nothingSelected = table.getSelectionModel().getSelectedItems().isEmpty();
 
-        newFolderButton.setDisable(unavailable);
-        importMenu.setDisable(unavailable);
+        newFolderButton.setDisable(unavailable || noFolder);
+        importMenu.setDisable(unavailable || noFolder);
         exportButton.setDisable(unavailable || nothingSelected);
         renameButton.setDisable(unavailable || table.getSelectionModel().getSelectedItems().size() != 1);
         moveButton.setDisable(unavailable || nothingSelected);

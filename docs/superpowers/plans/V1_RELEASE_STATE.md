@@ -9,10 +9,10 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 03-file-manager |
-| current task | T16 done (next: T17) |
-| last completed commit | `a7bb1c6 fix: refuse to export plaintext into the vault folder` |
-| tests last run | `mvn -B clean verify` (2026-10-03, T16 follow-up, 1 min 48 s) |
-| test result | BUILD SUCCESS — 335 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| current task | T17 done (next: T18) |
+| last completed commit | `166ccc9 fix: refuse export folders that resolve into the vault` |
+| tests last run | `mvn -B clean verify` (2026-10-03, T17, 1 min 55 s) |
+| test result | BUILD SUCCESS — 346 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 

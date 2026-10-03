@@ -31,12 +31,19 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import javafx.event.ActionEvent;
+import javafx.event.Event;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.ButtonBase;
 import javafx.scene.control.Labeled;
+import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TreeView;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.HBox;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -205,6 +212,75 @@ class UiFlowTest {
     }
 
     @Test
+    void searchShowsMatchesFromEveryFolderAndClearReturns() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        ManifestEntry docs = files.createFolder("Docs", files.rootFolderId());
+        files.importFile(Files.writeString(tempDir.resolve("invoice.pdf"), "x"), docs.getEntryId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#filesNavButton");
+        waitForRows(scene);
+
+        search(scene, "INVOICE");
+
+        FxTestSupport.waitUntil(() -> rows(scene).size() == 1 && rows(scene).get(0).getName().equals("invoice.pdf"));
+        assertEquals("My files › Docs", FxTestSupport.onFxThread(() -> locationOfFirstRow(scene)));
+        // Search results have no current folder to create or import into.
+        assertTrue(FxTestSupport.onFxThread(() -> ((Node) scene.getRoot().lookup("#newFolderButton")).isDisable()));
+        assertTrue(FxTestSupport.onFxThread(() -> ((Node) scene.getRoot().lookup("#importMenu")).isDisable()));
+
+        click(scene, "#clearSearchButton");
+
+        FxTestSupport.waitUntil(() -> rows(scene).size() == 1 && rows(scene).get(0).getName().equals("Docs"));
+        assertEquals("", FxTestSupport.onFxThread(() -> ((TextField) scene.getRoot().lookup("#searchField")).getText()));
+        assertFalse(FxTestSupport.onFxThread(() -> ((Node) scene.getRoot().lookup("#newFolderButton")).isDisable()));
+        assertFalse(FxTestSupport.onFxThread(() -> ((Node) scene.getRoot().lookup("#importMenu")).isDisable()));
+    }
+
+    @Test
+    void openingAResultGoesToItsFolderAndSelectsIt() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        ManifestEntry docs = files.createFolder("Docs", files.rootFolderId());
+        files.importFile(Files.writeString(tempDir.resolve("invoice.pdf"), "x"), docs.getEntryId());
+        files.importFile(Files.writeString(tempDir.resolve("other.txt"), "x"), docs.getEntryId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#filesNavButton");
+        waitForRows(scene);
+        search(scene, "invoice");
+        FxTestSupport.waitUntil(() -> rows(scene).size() == 1);
+
+        FxTestSupport.waitUntil(() -> doubleClickRow(scene, "invoice.pdf"));
+
+        FxTestSupport.waitUntil(() -> rows(scene).size() == 2);
+        assertEquals(List.of("invoice.pdf"), FxTestSupport.onFxThread(() -> ((TableView<?>) scene.getRoot()
+                .lookup("#table")).getSelectionModel().getSelectedItems().stream()
+                .map(item -> ((ManifestEntry) item).getName()).toList()));
+        assertEquals("", FxTestSupport.onFxThread(() -> ((TextField) scene.getRoot().lookup("#searchField")).getText()));
+        assertFalse(FxTestSupport.onFxThread(() -> ((Node) scene.getRoot().lookup("#clearSearchButton")).isVisible()));
+        assertEquals(List.of("My files", "›", "Docs"), FxTestSupport.onFxThread(() -> ((HBox) scene.getRoot()
+                .lookup("#breadcrumbBar")).getChildren().stream().map(node -> ((Labeled) node).getText()).toList()));
+    }
+
+    @Test
+    void aChangeMadeInTheResultsRerunsTheSearch() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        ManifestEntry docs = files.createFolder("Docs", files.rootFolderId());
+        files.importFile(Files.writeString(tempDir.resolve("invoice-a.pdf"), "x"), docs.getEntryId());
+        files.importFile(Files.writeString(tempDir.resolve("invoice-b.pdf"), "x"), files.rootFolderId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#filesNavButton");
+        waitForRows(scene);
+        search(scene, "invoice");
+        FxTestSupport.waitUntil(() -> rows(scene).size() == 2);
+        selectFirstRow(scene);
+
+        click(scene, "#trashButton");
+
+        FxTestSupport.waitUntil(() -> rows(scene).size() == 1);
+        assertEquals(1, files.listTrash().size());
+        assertTrue(FxTestSupport.onFxThread(() -> ((Node) scene.getRoot().lookup("#clearSearchButton")).isVisible()));
+    }
+
+    @Test
     void overviewRetriesDeletionsInterruptedEarlier() throws Exception {
         ManifestEntry orphan = queueAsInterruptedDelete("orphan.txt");
         Path blob = new BlobRepository().blobPath(vault.root(), orphan.getBlobId());
@@ -320,6 +396,52 @@ class UiFlowTest {
 
     private static void waitForRows(Scene scene) throws Exception {
         FxTestSupport.waitUntil(() -> !((TableView<?>) scene.getRoot().lookup("#table")).getItems().isEmpty());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<ManifestEntry> rows(Scene scene) {
+        return ((TableView<ManifestEntry>) scene.getRoot().lookup("#table")).getItems();
+    }
+
+    /** Types the query and presses Enter, the way a user searches. */
+    private static void search(Scene scene, String query) throws Exception {
+        FxTestSupport.onFxThread(() -> {
+            TextField search = (TextField) scene.getRoot().lookup("#searchField");
+            search.setText(query);
+            search.fireEvent(new ActionEvent());
+            return null;
+        });
+    }
+
+    /** The LOCATION cell of the first row; call on the JavaFX thread. */
+    @SuppressWarnings("unchecked")
+    private static String locationOfFirstRow(Scene scene) {
+        TableView<ManifestEntry> table = (TableView<ManifestEntry>) scene.getRoot().lookup("#table");
+        return (String) table.getColumns().get(table.getColumns().size() - 1).getCellData(0);
+    }
+
+    /**
+     * Double-clicks the row showing the named entry. A table that is not in a
+     * showing window only updates its rows when laid out, so this is false
+     * until a layout has brought that row up; call on the JavaFX thread.
+     */
+    private static boolean doubleClickRow(Scene scene, String name) {
+        scene.getRoot().applyCss();
+        scene.getRoot().layout();
+
+        for (Node node : scene.getRoot().lookupAll(".table-row-cell")) {
+            if (node instanceof TableRow<?> row
+                    && row.getItem() instanceof ManifestEntry entry
+                    && entry.getName().equals(name)) {
+                Event.fireEvent(row, new MouseEvent(
+                        MouseEvent.MOUSE_CLICKED, 0, 0, 0, 0, MouseButton.PRIMARY, 2,
+                        false, false, false, false, true, false, false, true, false, true, null
+                ));
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void selectFirstRow(Scene scene) throws Exception {
