@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.fabianrodas.models.EncryptedFileDescriptor;
 import com.fabianrodas.models.ManifestEntry;
@@ -328,14 +329,70 @@ class FileServiceTest {
         ManifestEntry question = files.createFolder("a?b", files.rootFolderId());
         ManifestEntry report = files.importFile(source("report.pdf", new byte[3]), files.rootFolderId());
         Path directory = tempDir.resolve("export");
+        // Targets are built from the resolved directory (8.3 temp names expanded).
+        Path resolved = tempDir.toRealPath().resolve("export");
 
         assertEquals(
-                List.of(directory.resolve("a_b"), directory.resolve("a_b (2)"), directory.resolve("report.pdf")),
+                List.of(resolved.resolve("a_b"), resolved.resolve("a_b (2)"), resolved.resolve("report.pdf")),
                 files.exportTargets(
                         List.of(colon.getEntryId(), question.getEntryId(), report.getEntryId()),
                         directory
                 )
         );
+    }
+
+    @Test
+    void exportIntoTheVaultIsRefused() throws Exception {
+        FileService files = files(alice);
+        ManifestEntry entry = files.importFile(source("secret.txt", "plain".getBytes(UTF_8)), files.rootFolderId());
+        ManifestEntry folder = files.createFolder("Docs", files.rootFolderId());
+
+        for (Path target : List.of(
+                vault.root().resolve("secret.txt"),
+                vault.root().resolve("storage").resolve("blobs").resolve("secret.txt"),
+                vault.root().resolve("storage").resolve("not-written-yet.txt"))) {
+            assertReason(FileServiceException.Reason.INSIDE_VAULT, () -> files.exportEntry(entry.getEntryId(), target));
+            assertFalse(Files.exists(target));
+        }
+
+        Path folderTarget = vault.root().resolve("Docs");
+        assertReason(FileServiceException.Reason.INSIDE_VAULT,
+                () -> files.exportEntry(folder.getEntryId(), folderTarget));
+        assertFalse(Files.exists(folderTarget));
+
+        assertReason(FileServiceException.Reason.INSIDE_VAULT,
+                () -> files.exportTargets(List.of(entry.getEntryId()), vault.root()));
+        assertReason(FileServiceException.Reason.INSIDE_VAULT,
+                () -> files.exportTargets(List.of(entry.getEntryId()), vault.root().resolve("storage")));
+
+        Path beside = vault.root().resolveSibling("exported.txt");
+        files.exportEntry(entry.getEntryId(), beside);
+        assertEquals("plain", Files.readString(beside));
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void exportThroughAShareAliasOfTheVaultIsRefused() throws Exception {
+        // \\localhost\C$\... names the same folder as C:\..., and its real path keeps the share form.
+        Path vaultRoot = vault.root().toRealPath();
+        String drive = vaultRoot.getRoot().toString();
+        assumeTrue(drive.matches("[A-Za-z]:\\\\"), "the vault is not on a lettered drive");
+        Path alias = Path.of("\\\\localhost\\" + drive.charAt(0) + "$")
+                .resolve(vaultRoot.getRoot().relativize(vaultRoot));
+        assumeTrue(Files.isDirectory(alias), "the administrative share of the drive is not reachable");
+        FileService files = files(alice);
+        ManifestEntry entry = files.importFile(source("secret.txt", "plain".getBytes(UTF_8)), files.rootFolderId());
+
+        for (Path target : List.of(
+                alias.resolve("secret.txt"),
+                alias.resolve("storage").resolve("not-written-yet.txt"))) {
+            assertReason(FileServiceException.Reason.INSIDE_VAULT, () -> files.exportEntry(entry.getEntryId(), target));
+        }
+
+        assertReason(FileServiceException.Reason.INSIDE_VAULT,
+                () -> files.exportTargets(List.of(entry.getEntryId()), alias));
+        assertFalse(Files.exists(vaultRoot.resolve("secret.txt")));
+        assertFalse(Files.exists(vaultRoot.resolve("storage").resolve("not-written-yet.txt")));
     }
 
     @Test

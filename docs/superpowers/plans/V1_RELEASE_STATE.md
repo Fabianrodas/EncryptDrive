@@ -9,10 +9,10 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 03-file-manager |
-| current task | T15 done (next: T16) |
-| last completed commit | `d4bfe94 feat: import folders recursively without following links` |
-| tests last run | `mvn -B clean verify` (2026-10-03, T15 fix round 1, 1 min 46 s) |
-| test result | BUILD SUCCESS — 331 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| current task | T16 done (next: T17) |
+| last completed commit | `4bd84d4 fix: harden folder import against link swaps and vault path aliases` |
+| tests last run | `mvn -B clean verify` (2026-10-03, T16, 1 min 50 s) |
+| test result | BUILD SUCCESS — 333 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 

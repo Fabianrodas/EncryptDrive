@@ -455,9 +455,12 @@ public final class FileService {
      * folder a directory holding its active descendants. Existing files at the
      * destination are replaced, so callers confirm overwrites first. Each file
      * is decrypted to a partial file that is renamed only after the GCM tag
-     * verifies.
+     * verifies. Destinations inside the vault folder are refused.
      */
     public void exportEntry(UUID entryId, Path destination) throws FileServiceException {
+        // Resolved once, so the check and the writes look at the same place.
+        Path resolved = requireOutsideVault(destination, false);
+
         withUserMasterKey(key -> {
             ManifestService rules = new ManifestService(load(key));
             ManifestEntry entry = rules.find(entryId);
@@ -466,7 +469,7 @@ public final class FileService {
                 throw new FileServiceException(FileServiceException.Reason.NOT_FOUND);
             }
 
-            export(rules, entry, destination.toAbsolutePath().normalize(), key);
+            export(rules, entry, resolved, key);
             return null;
         });
     }
@@ -474,9 +477,12 @@ public final class FileService {
     /**
      * Where {@link #exportEntry} should write each entry inside
      * {@code directory}: Windows-safe names, made unique among themselves.
+     * A directory inside the vault folder is refused.
      */
     public List<Path> exportTargets(List<UUID> entryIds, Path directory)
             throws FileServiceException {
+
+        Path resolved = requireOutsideVault(directory, false);
 
         return withUserMasterKey(key -> {
             ManifestService rules = new ManifestService(load(key));
@@ -490,7 +496,7 @@ public final class FileService {
                     throw new FileServiceException(FileServiceException.Reason.NOT_FOUND);
                 }
 
-                targets.add(directory.resolve(uniqueSafeName(entry, usedNames)));
+                targets.add(resolved.resolve(uniqueSafeName(entry, usedNames)));
             }
 
             return targets;
