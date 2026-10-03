@@ -6,6 +6,7 @@ import com.fabianrodas.models.UserManifest;
 import com.fabianrodas.repositories.ManifestRepository;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -137,5 +138,67 @@ public final class ManifestService {
     public void rename(UUID entryId, String newName) throws FileServiceException {
         ManifestEntry entry = requireMovable(entryId);
         entry.setName(requireAvailableName(entry.getParentId(), newName, entry));
+    }
+
+    /**
+     * Moves active entries into an active folder. Everything is checked before
+     * anything changes: the root, moves of a folder into itself or below it,
+     * and names already used in the destination are refused.
+     */
+    public void move(List<UUID> entryIds, UUID destinationId) throws FileServiceException {
+        ManifestEntry destination = find(destinationId);
+
+        if (destination == null || destination.getDeletedAt() != null) {
+            throw new FileServiceException(FileServiceException.Reason.NOT_FOUND);
+        }
+
+        if (destination.getKind() != ManifestEntryKind.FOLDER) {
+            throw new FileServiceException(FileServiceException.Reason.NOT_A_FOLDER);
+        }
+
+        List<ManifestEntry> moving = new ArrayList<>();
+
+        for (UUID entryId : new LinkedHashSet<>(entryIds)) {
+            ManifestEntry entry = requireMovable(entryId);
+
+            if (isSelfOrAncestor(entry, destination)) {
+                throw new FileServiceException(FileServiceException.Reason.INVALID_MOVE);
+            }
+
+            if (destinationId.equals(entry.getParentId())) {
+                continue;
+            }
+
+            if (nameTaken(destinationId, entry.getName())
+                    || moving.stream().anyMatch(other -> other.getName().equalsIgnoreCase(entry.getName()))) {
+                throw new FileServiceException(FileServiceException.Reason.DUPLICATE_NAME);
+            }
+
+            moving.add(entry);
+        }
+
+        for (ManifestEntry entry : moving) {
+            entry.setParentId(destinationId);
+        }
+    }
+
+    /** True if {@code candidate} is {@code folder} itself or one of its ancestors. */
+    private boolean isSelfOrAncestor(ManifestEntry candidate, ManifestEntry folder) {
+        int steps = 0;
+
+        for (ManifestEntry current = folder;
+                current != null && steps++ <= manifest.getEntries().size();
+                current = current.getParentId() == null ? null : find(current.getParentId())) {
+            if (current == candidate) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean nameTaken(UUID folderId, String name) {
+        return listChildren(folderId, false).stream()
+                .anyMatch(sibling -> sibling.getName().equalsIgnoreCase(name));
     }
 }

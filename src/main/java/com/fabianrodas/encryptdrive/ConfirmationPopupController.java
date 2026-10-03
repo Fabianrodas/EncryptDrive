@@ -1,5 +1,6 @@
 package com.fabianrodas.encryptdrive;
 
+import com.fabianrodas.models.ManifestEntry;
 import java.net.URL;
 import java.util.ResourceBundle;
 import javafx.application.Platform;
@@ -8,6 +9,9 @@ import javafx.fxml.Initializable;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TreeCell;
+import javafx.scene.control.TreeItem;
+import javafx.scene.control.TreeView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
@@ -37,6 +41,9 @@ public class ConfirmationPopupController implements Initializable {
 
     @FXML
     private TextField inputField;
+
+    @FXML
+    private TreeView<ManifestEntry> folderTree;
 
     private boolean confirmed = false;
     private double xOffset = 0;
@@ -87,6 +94,29 @@ public class ConfirmationPopupController implements Initializable {
 
     String getInput() {
         return inputField.getText();
+    }
+
+    /** Shows a folder tree; Confirm stays disabled until a folder is selected. */
+    void setFolderChoice(TreeItem<ManifestEntry> root) {
+        iconLabel.setText("→");
+        iconBadge.getStyleClass().add("info");
+        folderTree.setRoot(root);
+        folderTree.setCellFactory(view -> new TreeCell<>() {
+            @Override
+            protected void updateItem(ManifestEntry folder, boolean empty) {
+                super.updateItem(folder, empty);
+                setText(empty || folder == null ? null
+                        : folder.getParentId() == null ? "My files" : folder.getName());
+            }
+        });
+        folderTree.setVisible(true);
+        folderTree.setManaged(true);
+        confirmButton.disableProperty().bind(folderTree.getSelectionModel().selectedItemProperty().isNull());
+    }
+
+    ManifestEntry getChosenFolder() {
+        TreeItem<ManifestEntry> item = folderTree.getSelectionModel().getSelectedItem();
+        return item == null ? null : item.getValue();
     }
 
     BorderPane root() {

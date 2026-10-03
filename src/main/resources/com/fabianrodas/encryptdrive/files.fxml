@@ -68,6 +68,15 @@
                         styleClass="secondary-button"
                         text="Rename" />
 
+                <Button fx:id="moveButton"
+                        disable="true"
+                        minWidth="-Infinity"
+                        mnemonicParsing="false"
+                        onAction="#move"
+                        prefHeight="36.0"
+                        styleClass="secondary-button"
+                        text="Move" />
+
                 <Button fx:id="trashButton"
                         disable="true"
                         minWidth="-Infinity"

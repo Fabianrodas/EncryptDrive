@@ -7,6 +7,7 @@ public final class FileServiceException extends Exception {
         DUPLICATE_NAME,
         NOT_FOUND,
         NOT_A_FOLDER,
+        INVALID_MOVE,
         PROTECTED,
         NOT_IN_TRASH,
         SOURCE_UNREADABLE,

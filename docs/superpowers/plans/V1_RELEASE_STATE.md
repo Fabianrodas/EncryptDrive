@@ -9,10 +9,10 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 03-file-manager |
-| current task | T13 done (next: T14) |
-| last completed commit | `2d9cda2 fix: retry pending deletions once per overview and keep recovery notices for the visible view` |
-| tests last run | `mvn -B clean verify` (2026-10-02, T13, 2 min 09 s) |
-| test result | BUILD SUCCESS — 292 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| current task | T14 done (next: T15) |
+| last completed commit | `e3d0072 feat: rename files and folders` |
+| tests last run | `mvn -B clean verify` (2026-10-03, T14, 1 min 49 s) |
+| test result | BUILD SUCCESS — 304 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 

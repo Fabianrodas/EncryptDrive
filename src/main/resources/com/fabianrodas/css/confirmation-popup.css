@@ -87,6 +87,13 @@
     -fx-border-color: #2563EB;
 }
 
+.popup-tree {
+    -fx-background-color: #F8FAFC;
+    -fx-background-radius: 8;
+    -fx-border-color: #CBD5E1;
+    -fx-border-radius: 8;
+}
+
 .popup-title {
     -fx-alignment: center;
     -fx-text-fill: #0F172A;

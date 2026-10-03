@@ -1,10 +1,12 @@
 package com.fabianrodas.encryptdrive;
 
+import com.fabianrodas.models.ManifestEntry;
 import java.io.IOException;
 import java.util.Optional;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.TreeItem;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
@@ -76,6 +78,25 @@ final class DialogFactory {
         popup.setPrompt(initialValue);
         stage(owner, popup).showAndWait();
         return popup.isConfirmed() ? Optional.of(popup.getInput()) : Optional.empty();
+    }
+
+    /** Returns the folder the user picked, or empty when cancelled. */
+    static Optional<ManifestEntry> chooseFolder(
+            Window owner,
+            String title,
+            String message,
+            TreeItem<ManifestEntry> root,
+            String confirmText
+    ) {
+        ConfirmationPopupController popup = open(title, message, confirmText);
+
+        if (popup == null) {
+            return Optional.empty();
+        }
+
+        popup.setFolderChoice(root);
+        stage(owner, popup).showAndWait();
+        return popup.isConfirmed() ? Optional.ofNullable(popup.getChosenFolder()) : Optional.empty();
     }
 
     private static ConfirmationPopupController open(

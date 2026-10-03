@@ -300,6 +300,21 @@ public final class FileService {
         });
     }
 
+    /** Moves active entries into an active folder; metadata only, blobs are untouched. */
+    public void move(List<UUID> entryIds, UUID destinationFolderId) throws FileServiceException {
+        modify(manifest -> {
+            new ManifestService(manifest).move(entryIds, destinationFolderId);
+            return null;
+        });
+    }
+
+    /** Every active folder, the root included, for choosing a move destination. */
+    public List<ManifestEntry> activeFolders() throws FileServiceException {
+        return withUserMasterKey(key -> load(key).getEntries().stream()
+                .filter(entry -> entry.getKind() == ManifestEntryKind.FOLDER && entry.getDeletedAt() == null)
+                .toList());
+    }
+
     /** Soft delete: only the encrypted manifest changes. */
     public void moveToTrash(UUID entryId) throws FileServiceException {
         modify(manifest -> {

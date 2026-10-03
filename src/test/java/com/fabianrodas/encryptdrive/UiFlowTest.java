@@ -35,6 +35,7 @@ import javafx.scene.control.ButtonBase;
 import javafx.scene.control.Labeled;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TreeView;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -154,6 +155,28 @@ class UiFlowTest {
         });
 
         FxTestSupport.waitUntil(() -> files.listChildren(files.rootFolderId()).get(0).getName().equals("new.txt"));
+    }
+
+    @Test
+    void moveThroughTheFolderPicker() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        ManifestEntry target = files.createFolder("Target", files.rootFolderId());
+        files.importFile(Files.writeString(tempDir.resolve("moved.txt"), "x"), files.rootFolderId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#filesNavButton");
+        waitForRows(scene);
+        FxTestSupport.onFxThread(() -> {
+            ((TableView<?>) scene.getRoot().lookup("#table")).getSelectionModel().select(1);
+            return null;
+        });
+
+        FxTestSupport.fireAndAnswer(scene, "#moveButton", popup -> {
+            TreeView<?> tree = (TreeView<?>) popup.getScene().getRoot().lookup("#folderTree");
+            tree.getSelectionModel().select(1);
+            FxTestSupport.clickButton(popup, "Move here");
+        });
+
+        FxTestSupport.waitUntil(() -> files.listChildren(target.getEntryId()).size() == 1);
     }
 
     @Test

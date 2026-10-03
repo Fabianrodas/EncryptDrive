@@ -12,13 +12,17 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.ResourceBundle;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.collections.ListChangeListener;
 import javafx.concurrent.Task;
@@ -31,6 +35,7 @@ import javafx.scene.control.SelectionMode;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TreeItem;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
@@ -64,6 +69,9 @@ public class FilesController implements Initializable {
 
     @FXML
     private Button renameButton;
+
+    @FXML
+    private Button moveButton;
 
     @FXML
     private Button trashButton;
@@ -313,6 +321,60 @@ public class FilesController implements Initializable {
     }
 
     @FXML
+    private void move() {
+        List<ManifestEntry> selected = List.copyOf(table.getSelectionModel().getSelectedItems());
+
+        if (selected.isEmpty()) {
+            return;
+        }
+
+        Set<UUID> moving = selected.stream().map(ManifestEntry::getEntryId).collect(Collectors.toSet());
+
+        Background.read(files::activeFolders, folders -> {
+            String what = selected.size() == 1 ? "\"" + selected.get(0).getName() + "\"" : selected.size() + " items";
+
+            DialogFactory.chooseFolder(
+                    window(), "Move", "Choose the folder to move " + what + " into.",
+                    folderTree(folders, moving), "Move here"
+            ).ifPresent(folder -> change(() -> {
+                files.move(List.copyOf(moving), folder.getEntryId());
+                return null;
+            }, done -> showSuccess(what + (selected.size() == 1 ? " was" : " were") + " moved to "
+                    + (folder.getParentId() == null ? "My files" : "\"" + folder.getName() + "\"") + ".")));
+        }, failure -> showError(describe(failure)));
+    }
+
+    /** Active folders as a tree, leaving out the folders being moved and everything inside them. */
+    static TreeItem<ManifestEntry> folderTree(List<ManifestEntry> folders, Set<UUID> moving) {
+        Map<UUID, List<ManifestEntry>> children = folders.stream()
+                .filter(folder -> folder.getParentId() != null)
+                .collect(Collectors.groupingBy(ManifestEntry::getParentId));
+        ManifestEntry root = folders.stream()
+                .filter(folder -> folder.getParentId() == null)
+                .findFirst()
+                .orElseThrow();
+
+        return treeItem(root, children, moving);
+    }
+
+    // ponytail: recursion depth equals folder depth; fine below thousands of levels.
+    private static TreeItem<ManifestEntry> treeItem(
+            ManifestEntry folder,
+            Map<UUID, List<ManifestEntry>> children,
+            Set<UUID> moving
+    ) {
+        TreeItem<ManifestEntry> item = new TreeItem<>(folder);
+        item.setExpanded(true);
+
+        children.getOrDefault(folder.getEntryId(), List.of()).stream()
+                .filter(child -> !moving.contains(child.getEntryId()))
+                .sorted(Comparator.comparing(ManifestEntry::getName, String.CASE_INSENSITIVE_ORDER))
+                .forEach(child -> item.getChildren().add(treeItem(child, children, moving)));
+
+        return item;
+    }
+
+    @FXML
     private void moveToTrash() {
         List<ManifestEntry> selected = List.copyOf(table.getSelectionModel().getSelectedItems());
 
@@ -343,6 +405,7 @@ public class FilesController implements Initializable {
             case DUPLICATE_NAME -> "An item with that name already exists in this folder.";
             case NOT_FOUND -> "The item no longer exists.";
             case NOT_A_FOLDER -> "Items can only be placed inside folders.";
+            case INVALID_MOVE -> "A folder cannot be moved into itself or one of its subfolders.";
             case PROTECTED -> "Your top-level folder cannot be removed.";
             case NOT_IN_TRASH -> "Only items in the trash can be deleted permanently.";
             case SOURCE_UNREADABLE -> "The selected file could not be read.";
@@ -487,6 +550,7 @@ public class FilesController implements Initializable {
         importButton.setDisable(unavailable);
         exportButton.setDisable(unavailable || nothingSelected);
         renameButton.setDisable(unavailable || table.getSelectionModel().getSelectedItems().size() != 1);
+        moveButton.setDisable(unavailable || nothingSelected);
         trashButton.setDisable(unavailable || nothingSelected);
     }
 
