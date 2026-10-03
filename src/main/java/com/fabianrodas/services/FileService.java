@@ -802,21 +802,23 @@ public final class FileService {
     private void export(
             ManifestService rules,
             ManifestEntry entry,
-            Path target,
+            Path requested,
             byte[] key
     ) throws FileServiceException {
 
         if (entry.getKind() == ManifestEntryKind.FILE) {
-            exportFile(entry, target, key);
+            exportFile(entry, requested, key);
             return;
         }
 
         try {
-            Files.createDirectories(target);
+            Files.createDirectories(requested);
         } catch (IOException e) {
             throw new FileServiceException(FileServiceException.Reason.STORAGE, e);
         }
 
+        // A folder that already existed may be a junction or link into the vault.
+        Path target = requireOutsideVault(requested, false);
         Set<String> usedNames = new HashSet<>();
 
         for (ManifestEntry child : rules.listChildren(entry.getEntryId(), false).stream()

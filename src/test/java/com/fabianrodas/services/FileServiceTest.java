@@ -396,6 +396,44 @@ class FileServiceTest {
     }
 
     @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void aFolderExportDoesNotWriteThroughAJunctionIntoTheVault() throws Exception {
+        FileService files = files(alice);
+        ManifestEntry docs = files.createFolder("Docs", files.rootFolderId());
+        ManifestEntry sub = files.createFolder("Sub", docs.getEntryId());
+        files.importFile(source("b.txt", "inner".getBytes(UTF_8)), sub.getEntryId());
+        files.importFile(source("top.txt", "outer".getBytes(UTF_8)), docs.getEntryId());
+        Path leak = Files.createDirectories(vault.root().resolve("storage").resolve("leak"));
+        Path target = Files.createDirectories(tempDir.resolve("out").resolve("Docs"));
+        junction(target.resolve("Sub"), leak);
+
+        assertReason(FileServiceException.Reason.INSIDE_VAULT, () -> files.exportEntry(docs.getEntryId(), target));
+
+        assertEquals(List.of(), names(leak));
+        // Folders are exported before files, so the refusal left nothing but what was already there.
+        assertEquals(List.of("Sub"), names(target));
+        try (Stream<Path> paths = Files.walk(tempDir.resolve("out"))) {
+            assertEquals(List.of(), paths.filter(path -> path.toString().endsWith(".part")).toList());
+        }
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void aFolderExportStillFollowsAJunctionToAnotherFolderOutsideTheVault() throws Exception {
+        FileService files = files(alice);
+        ManifestEntry docs = files.createFolder("Docs", files.rootFolderId());
+        ManifestEntry sub = files.createFolder("Sub", docs.getEntryId());
+        files.importFile(source("b.txt", "inner".getBytes(UTF_8)), sub.getEntryId());
+        Path elsewhere = Files.createDirectories(tempDir.resolve("elsewhere"));
+        Path target = Files.createDirectories(tempDir.resolve("out").resolve("Docs"));
+        junction(target.resolve("Sub"), elsewhere);
+
+        files.exportEntry(docs.getEntryId(), target);
+
+        assertEquals("inner", Files.readString(elsewhere.resolve("b.txt"), UTF_8));
+    }
+
+    @Test
     void importReportsProgressUpToTheFileSize() throws Exception {
         FileService files = files(alice);
         List<Long> reported = new java.util.ArrayList<>();
@@ -613,6 +651,12 @@ class FileServiceTest {
         try (Stream<Path> paths = Files.walk(vault.root().resolve("storage"))) {
             return paths.filter(Files::isRegularFile).toList();
         }
+    }
+
+    private static void junction(Path link, Path target) throws Exception {
+        Process process = new ProcessBuilder("cmd", "/c", "mklink", "/J", link.toString(), target.toString())
+                .redirectErrorStream(true).start();
+        assertEquals(0, process.waitFor(), new String(process.getInputStream().readAllBytes()));
     }
 
     private static List<String> names(Path directory) throws IOException {
