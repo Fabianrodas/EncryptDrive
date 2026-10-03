@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.models.ManifestEntryKind;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -24,6 +25,14 @@ class FilesControllerTest {
 
         assertSame(root, tree.getValue());
         assertEquals(List.of(c), tree.getChildren().stream().map(TreeItem::getValue).toList());
+    }
+
+    @Test
+    void aDriveRootIsShownByItsPathBecauseItHasNoName() {
+        Path driveRoot = Path.of("x").toAbsolutePath().getRoot();
+
+        assertEquals("Photos", FilesController.displayName(driveRoot.resolve("input").resolve("Photos")));
+        assertEquals(driveRoot.toString(), FilesController.displayName(driveRoot));
     }
 
     private static ManifestEntry folder(ManifestEntry parent, String name) {

@@ -230,10 +230,85 @@ class FolderImportTest {
 
     @Test
     @EnabledOnOs(OS.WINDOWS)
+    void theVaultReachedThroughAShareAliasIsStillRefused() throws Exception {
+        // \\localhost\C$\... names the same folder as C:\..., and its real path keeps the share form.
+        Path vaultRoot = vault.vault.root().toRealPath();
+        String drive = vaultRoot.getRoot().toString();
+        assumeTrue(drive.matches("[A-Za-z]:\\\\"), "the vault is not on a lettered drive");
+        Path alias = Path.of("\\\\localhost\\" + drive.charAt(0) + "$")
+                .resolve(vaultRoot.getRoot().relativize(vaultRoot));
+        assumeTrue(Files.isDirectory(alias), "the administrative share of the drive is not reachable");
+
+        for (Path overlapping : List.of(
+                alias,
+                alias.resolve("storage"),
+                alias.resolve("storage").resolve("not-written-yet.txt"),
+                alias.getParent())) {
+            assertReason(FileServiceException.Reason.INSIDE_VAULT,
+                    () -> files.importFolder(overlapping, root, (a, b, c, d) -> { }));
+        }
+
+        assertEquals(List.of(), files.listChildren(root));
+        assertEquals(List.of(), vault.blobFiles());
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void aSourceWhoseRealLocationCannotBeResolvedIsRefused() throws Exception {
+        // A junction whose target is gone exists, but has no real path to check against the vault.
+        Path target = Files.createDirectories(tempDir.resolve("gone"));
+        Path dangling = tempDir.resolve("dangling");
+        junction(dangling, target);
+        Files.delete(target);
+
+        for (Path unresolvable : List.of(dangling, dangling.resolve("below"))) {
+            assertReason(FileServiceException.Reason.STORAGE,
+                    () -> files.importFolder(unresolvable, root, (a, b, c, d) -> { }));
+        }
+
+        assertEquals(List.of(), files.listChildren(root));
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void aFolderSwappedForAJunctionAfterTheScanIsNotFollowed() throws Exception {
+        write("a.txt", "a");
+        Path sub = write("sub/b.txt", "inside the tree").getParent();
+        Path outside = Files.createDirectories(tempDir.resolve("outside"));
+        Files.writeString(outside.resolve("b.txt"), "outside the tree");
+        boolean[] swapped = new boolean[1];
+
+        FileService.FolderImport result = files.importFolder(source, root, (done, total, bytes, totalBytes) -> {
+            // Once a.txt is in, and before anything of "sub" is read.
+            if (done == 1 && !swapped[0]) {
+                swapped[0] = true;
+
+                try {
+                    Files.delete(sub.resolve("b.txt"));
+                    Files.delete(sub);
+                    junction(sub, outside);
+                } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                }
+            }
+        });
+
+        assertTrue(swapped[0]);
+        assertEquals(1, result.filesImported());
+        assertFalse(result.stopped());
+        assertEquals(List.of(new FileService.ImportFailure(
+                Path.of("Photos", "sub", "b.txt").toString(), FileServiceException.Reason.SOURCE_UNREADABLE)),
+                result.failures());
+        assertEquals(Map.of("Photos", "FOLDER", "Photos/a.txt", "FILE", "Photos/sub", "FOLDER"), tree());
+        assertEquals(1, vault.blobFiles().size());
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
     void namesThatClashInsideTheTreeSkipOnlyTheClashingItem() throws Exception {
-        // NTFS keeps "key" and "Key" (Kelvin sign) apart; EncryptDrive compares names ignoring case and treats them as equal.
+        // NTFS keeps "key" and "\u212Aey" (Kelvin sign) apart; EncryptDrive compares names ignoring case and treats them as equal.
         write("key.txt", "plain k");
-        write("Key.txt", "kelvin k");
+        write("\u212Aey.txt", "kelvin k");
 
         FileService.FolderImport result = files.importFolder(source, root, (a, b, c, d) -> { });
 
@@ -247,8 +322,8 @@ class FolderImportTest {
     @EnabledOnOs(OS.WINDOWS)
     void aFolderThatClashesInsideTheTreeIsSkippedWithEverythingBelowIt() throws Exception {
         write("key/first.txt", "1");
-        write("Key/second.txt", "22");
-        write("Key/deeper/third.txt", "333");
+        write("\u212Aey/second.txt", "22");
+        write("\u212Aey/deeper/third.txt", "333");
         write("z.txt", "4444");
         List<long[]> updates = new ArrayList<>();
 
@@ -259,7 +334,7 @@ class FolderImportTest {
         assertEquals(2, result.filesImported());
         assertFalse(result.stopped());
         assertEquals(List.of(new FileService.ImportFailure(
-                Path.of("Photos", "Key").toString(), FileServiceException.Reason.DUPLICATE_NAME)),
+                Path.of("Photos", "\u212Aey").toString(), FileServiceException.Reason.DUPLICATE_NAME)),
                 result.failures());
         assertEquals(Map.of("Photos", "FOLDER", "Photos/key", "FOLDER",
                 "Photos/key/first.txt", "FILE", "Photos/z.txt", "FILE"), tree());

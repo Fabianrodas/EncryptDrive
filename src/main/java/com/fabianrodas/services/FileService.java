@@ -18,6 +18,7 @@ import com.fabianrodas.security.SensitiveBytes;
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.SecureRandom;
@@ -278,8 +279,9 @@ public final class FileService {
     public FolderImport importFolder(Path source, UUID parentFolderId, ImportProgress progress)
             throws FileServiceException {
 
-        requireOutsideVault(source, true);
-        SourceTree tree = SourceTree.scan(source);
+        // Resolved once, so the overlap check and the scan look at the same place.
+        Path real = requireOutsideVault(source, true);
+        SourceTree tree = SourceTree.scan(real);
         // Fails before anything is created; checked again when the folder is committed.
         withUserMasterKey(key -> new ManifestService(load(key))
                 .requireAvailableName(parentFolderId, tree.root().name()));
@@ -293,34 +295,61 @@ public final class FileService {
      * Imports must not read the vault itself, and exports must not write
      * plaintext into it (it may be a synced folder). With
      * {@code refuseAncestors}, a path that contains the vault is refused too.
+     * A path whose real location cannot be determined is refused with
+     * {@code STORAGE}. Returns the resolved path that was checked, which is
+     * the one the caller should go on to use.
      */
-    private void requireOutsideVault(Path path, boolean refuseAncestors) throws FileServiceException {
-        Path vaultRoot = canonical(vault.root());
-        Path candidate = canonical(path);
+    private Path requireOutsideVault(Path path, boolean refuseAncestors) throws FileServiceException {
+        try {
+            Path vaultRoot = canonical(vault.root());
+            Path candidate = canonical(path);
 
-        if (candidate.startsWith(vaultRoot) || (refuseAncestors && vaultRoot.startsWith(candidate))) {
-            throw new FileServiceException(FileServiceException.Reason.INSIDE_VAULT);
+            if (candidate.startsWith(vaultRoot)
+                    || within(candidate, vaultRoot)
+                    || (refuseAncestors && (vaultRoot.startsWith(candidate) || within(vaultRoot, candidate)))) {
+                throw new FileServiceException(FileServiceException.Reason.INSIDE_VAULT);
+            }
+
+            return candidate;
+
+        } catch (IOException e) {
+            throw new FileServiceException(FileServiceException.Reason.STORAGE, e);
         }
     }
 
-    /** The real path of the nearest existing ancestor, with the rest appended. */
-    private static Path canonical(Path path) {
+    /**
+     * Whether {@code path} or one of its existing ancestors is the same folder
+     * as {@code container} under another spelling. A share alias of a local
+     * drive (\\localhost\C$) keeps its own form in real paths, so comparing
+     * prefixes is not enough.
+     */
+    private static boolean within(Path path, Path container) throws IOException {
+        if (!Files.exists(container)) {
+            return false;
+        }
+
+        for (Path ancestor = path; ancestor != null; ancestor = ancestor.getParent()) {
+            if (Files.exists(ancestor) && Files.isSameFile(ancestor, container)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The real path of the nearest existing ancestor, with the rest appended.
+     * A link whose target is missing exists but has no real path, and throws.
+     */
+    private static Path canonical(Path path) throws IOException {
         Path absolute = path.toAbsolutePath().normalize();
         Path existing = absolute;
 
-        while (existing != null && !Files.exists(existing)) {
+        while (existing != null && !Files.exists(existing, LinkOption.NOFOLLOW_LINKS)) {
             existing = existing.getParent();
         }
 
-        if (existing == null) {
-            return absolute;
-        }
-
-        try {
-            return existing.toRealPath().resolve(existing.relativize(absolute));
-        } catch (IOException e) {
-            return absolute;
-        }
+        return existing == null ? absolute : existing.toRealPath().resolve(existing.relativize(absolute));
     }
 
     /** One folder import; per-item failures are collected instead of thrown. */
@@ -373,6 +402,12 @@ public final class FileService {
             long before = bytesDone;
 
             try {
+                // The tree can change after the scan. A swap in the instant between
+                // this check and the open inside importFile would still be followed.
+                if (!SourceTree.isUnlinkedFile(file.path())) {
+                    throw new FileServiceException(FileServiceException.Reason.SOURCE_UNREADABLE);
+                }
+
                 importFile(file.path(), folderId, bytes ->
                         progress.update(filesDone, tree.fileCount(), before + bytes, tree.totalBytes()));
                 files++;

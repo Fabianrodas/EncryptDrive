@@ -34,16 +34,11 @@ final class SourceTree {
         this.root = root;
     }
 
-    /** Scans the directory the user selected (resolved to its real location). */
-    static SourceTree scan(Path source) throws FileServiceException {
-        Path real;
-
-        try {
-            real = source.toRealPath();
-        } catch (IOException e) {
-            throw new FileServiceException(FileServiceException.Reason.SOURCE_UNREADABLE, e);
-        }
-
+    /**
+     * Scans the directory the user selected. {@code real} is its real path,
+     * resolved once by the caller, which checked that same path against the vault.
+     */
+    static SourceTree scan(Path real) throws FileServiceException {
         if (!Files.isDirectory(real)) {
             throw new FileServiceException(FileServiceException.Reason.SOURCE_UNREADABLE);
         }
@@ -109,18 +104,40 @@ final class SourceTree {
         return new Node(directory, name, true, 0, children);
     }
 
+    /**
+     * The attributes of an entry that is where it appears to be, or null for
+     * a link: a symbolic link, or a path whose real location is elsewhere
+     * because it or one of its ancestors is a junction or mount point.
+     */
+    static BasicFileAttributes unlinked(Path entry) throws IOException {
+        BasicFileAttributes attributes
+                = Files.readAttributes(entry, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+
+        return attributes.isSymbolicLink() || !entry.toRealPath().equals(entry) ? null : attributes;
+    }
+
+    /** Whether {@code file} is, as when it was scanned, a regular file reached without any link. */
+    static boolean isUnlinkedFile(Path file) {
+        try {
+            BasicFileAttributes attributes = unlinked(file);
+            return attributes != null && attributes.isRegularFile();
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     private Node node(Path entry) {
         BasicFileAttributes attributes;
 
         try {
-            attributes = Files.readAttributes(entry, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-
-            if (attributes.isSymbolicLink() || !entry.toRealPath().equals(entry)) {
-                linksSkipped++;
-                return null;
-            }
+            attributes = unlinked(entry);
         } catch (IOException e) {
             unreadable.add(entry);
+            return null;
+        }
+
+        if (attributes == null) {
+            linksSkipped++;
             return null;
         }
 

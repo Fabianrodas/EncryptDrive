@@ -10,9 +10,9 @@ Updated after every task. Git history and test output are the record; this is th
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 03-file-manager |
 | current task | T15 done (next: T16) |
-| last completed commit | `85d1ee4 fix: give the breadcrumb its own row in the files view` |
-| tests last run | `mvn -B clean verify` (2026-10-03, T15, 1 min 46 s) |
-| test result | BUILD SUCCESS — 327 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| last completed commit | `d4bfe94 feat: import folders recursively without following links` |
+| tests last run | `mvn -B clean verify` (2026-10-03, T15 fix round 1, 1 min 46 s) |
+| test result | BUILD SUCCESS — 331 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 
@@ -37,7 +37,7 @@ Updated after every task. Git history and test output are the record; this is th
 | installer build | TODO — WiX not installed locally (.NET Framework 3.5 present; no-admin binaries planned in T20) |
 | WiX 3.14 binaries SHA-256 | (record at T20 Step 1) |
 | folder-import benchmark (1,000 × 4 KiB) | (record at T19) |
-| folder-import link/lock tests (T15) | all ran, none skipped, on Windows 11 / NTFS / JDK 21.0.2: junction (outside the tree and a loop back into it), symbolic link (file and directory — created because the build shell was elevated; Developer Mode is off, so a non-elevated run skips this one test), locked file, Kelvin-sign clash (file and folder), differently-cased vault path |
+| folder-import link/lock tests (T15) | all ran, none skipped, on Windows 11 / NTFS / JDK 21.0.2: junction (outside the tree and a loop back into it), symbolic link (file and directory — created because the build shell was elevated; Developer Mode is off, so a non-elevated run skips this one test), locked file, Kelvin-sign clash (file and folder), differently-cased vault path. Fix round 1, also all ran: vault reached through the `\\localhost\C$` share alias (reachable here; skips cleanly where the administrative share is not), folder swapped for a junction after the scan, source that is a junction with a missing target |
 | history cleanup (`data/users.json`) | local copy deleted; still in history and in origin/main tip — decision at H2 |
 | current RC tag | none |
 | USB validation (H4) | TODO |

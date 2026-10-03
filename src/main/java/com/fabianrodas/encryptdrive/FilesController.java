@@ -234,7 +234,7 @@ public class FilesController implements Initializable {
         Task<FileService.FolderImport> task = new Task<>() {
             @Override
             protected FileService.FolderImport call() throws FileServiceException {
-                updateMessage("Scanning " + source.getFileName() + "...");
+                updateMessage("Scanning " + displayName(source) + "...");
 
                 return files.importFolder(source, target, (done, total, bytes, totalBytes) -> {
                     updateMessage("Encrypting file " + Math.min(done + 1, total) + " of " + total + "...");
@@ -253,7 +253,7 @@ public class FilesController implements Initializable {
 
     private void showFolderImport(Path source, FileService.FolderImport result) {
         String summary = count(result.filesImported(), "file") + " and " + count(result.foldersCreated(), "folder")
-                + " imported from \"" + source.getFileName() + "\".";
+                + " imported from \"" + displayName(source) + "\".";
 
         if (result.linksSkipped() > 0) {
             summary += " " + count(result.linksSkipped(), "link") + " (symbolic links or junctions) skipped.";
@@ -273,6 +273,11 @@ public class FilesController implements Initializable {
                 + (result.stopped() ? " The import stopped early." : "")
                 + " Not imported: " + failed
                 + (result.failures().size() > 5 ? " and " + (result.failures().size() - 5) + " more." : "."));
+    }
+
+    /** The folder's name, or the whole path for a drive root, which has no name. */
+    static String displayName(Path folder) {
+        return String.valueOf(folder.getFileName() != null ? folder.getFileName() : folder);
     }
 
     private static String count(int n, String noun) {
