@@ -29,6 +29,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -42,6 +43,8 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -222,6 +225,36 @@ class FileServiceTest {
 
         assertEquals(List.of(), files(alice).listChildren(files.rootFolderId()));
         assertEquals(List.of(), blobFiles());
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void aLockedSourceIsUnreadableNotAStorageFailure() throws Exception {
+        Path locked = source("locked.txt", "data".getBytes(UTF_8));
+        FileService files = files(alice);
+
+        try (FileChannel channel = FileChannel.open(locked, StandardOpenOption.READ, StandardOpenOption.WRITE);
+                FileLock lock = channel.lock()) {
+            assertReason(FileServiceException.Reason.SOURCE_UNREADABLE,
+                    () -> files.importFile(locked, files.rootFolderId()));
+        }
+
+        assertEquals(List.of(), blobFiles());
+    }
+
+    @Test
+    void anEmptyFileImportsAndTheManifestStillLoads() throws Exception {
+        FileService files = files(alice);
+
+        ManifestEntry entry = files.importFile(source("empty.bin", new byte[0]), files.rootFolderId());
+
+        // A fresh service reads the manifest back from disk through the validator.
+        ManifestEntry loaded = files(alice).listChildren(files.rootFolderId()).get(0);
+        assertEquals(entry.getEntryId(), loaded.getEntryId());
+        assertEquals(0L, loaded.getPlainSize());
+        Path exported = tempDir.resolve("empty-out.bin");
+        files.exportEntry(entry.getEntryId(), exported);
+        assertEquals(0L, Files.size(exported));
     }
 
     @Test

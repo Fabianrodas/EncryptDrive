@@ -245,6 +245,176 @@ public final class FileService {
         });
     }
 
+    /** A file or folder of a folder import that was not imported, and why. */
+    public record ImportFailure(String path, FileServiceException.Reason reason) {
+    }
+
+    /** What a folder import did; {@code stopped} means the vault could not be written and the rest was skipped. */
+    public record FolderImport(
+            int foldersCreated,
+            int filesImported,
+            int linksSkipped,
+            List<ImportFailure> failures,
+            boolean stopped
+    ) {
+    }
+
+    /** Folder-import progress: files finished and source bytes encrypted so far. */
+    @FunctionalInterface
+    public interface ImportProgress {
+        void update(int filesDone, int filesTotal, long bytesDone, long bytesTotal);
+    }
+
+    /**
+     * Imports the directory tree at {@code source} as a new folder with the
+     * same name under {@code parentFolderId}, including empty folders. The
+     * tree is scanned first without following links ({@link SourceTree}). A
+     * name already used in the destination aborts before anything is
+     * imported; a name that clashes inside the tree skips only that item.
+     * Folders and files are committed one manifest change at a time, so an
+     * interruption leaves a valid, partly imported tree and never a
+     * referenced partial blob. The source is never modified.
+     */
+    public FolderImport importFolder(Path source, UUID parentFolderId, ImportProgress progress)
+            throws FileServiceException {
+
+        requireOutsideVault(source, true);
+        SourceTree tree = SourceTree.scan(source);
+        // Fails before anything is created; checked again when the folder is committed.
+        withUserMasterKey(key -> new ManifestService(load(key))
+                .requireAvailableName(parentFolderId, tree.root().name()));
+
+        FolderImportRun run = new FolderImportRun(tree, progress);
+        run.importDirectory(tree.root(), parentFolderId);
+        return run.result();
+    }
+
+    /**
+     * Imports must not read the vault itself, and exports must not write
+     * plaintext into it (it may be a synced folder). With
+     * {@code refuseAncestors}, a path that contains the vault is refused too.
+     */
+    private void requireOutsideVault(Path path, boolean refuseAncestors) throws FileServiceException {
+        Path vaultRoot = canonical(vault.root());
+        Path candidate = canonical(path);
+
+        if (candidate.startsWith(vaultRoot) || (refuseAncestors && vaultRoot.startsWith(candidate))) {
+            throw new FileServiceException(FileServiceException.Reason.INSIDE_VAULT);
+        }
+    }
+
+    /** The real path of the nearest existing ancestor, with the rest appended. */
+    private static Path canonical(Path path) {
+        Path absolute = path.toAbsolutePath().normalize();
+        Path existing = absolute;
+
+        while (existing != null && !Files.exists(existing)) {
+            existing = existing.getParent();
+        }
+
+        if (existing == null) {
+            return absolute;
+        }
+
+        try {
+            return existing.toRealPath().resolve(existing.relativize(absolute));
+        } catch (IOException e) {
+            return absolute;
+        }
+    }
+
+    /** One folder import; per-item failures are collected instead of thrown. */
+    private final class FolderImportRun {
+
+        private final SourceTree tree;
+        private final ImportProgress progress;
+        private final List<ImportFailure> failures = new ArrayList<>();
+        private int folders;
+        private int files;
+        private int filesDone;
+        private long bytesDone;
+        private boolean stopped;
+
+        FolderImportRun(SourceTree tree, ImportProgress progress) {
+            this.tree = tree;
+            this.progress = progress;
+
+            for (String path : tree.unreadable()) {
+                failures.add(new ImportFailure(path, FileServiceException.Reason.SOURCE_UNREADABLE));
+            }
+        }
+
+        void importDirectory(SourceTree.Node directory, UUID parentId) {
+            ManifestEntry folder;
+
+            try {
+                folder = createFolder(directory.name(), parentId);
+                folders++;
+            } catch (FileServiceException e) {
+                fail(directory, e);
+                skip(directory);
+                return;
+            }
+
+            for (SourceTree.Node child : directory.children()) {
+                if (stopped) {
+                    return;
+                }
+
+                if (child.directory()) {
+                    importDirectory(child, folder.getEntryId());
+                } else {
+                    importOne(child, folder.getEntryId());
+                }
+            }
+        }
+
+        private void importOne(SourceTree.Node file, UUID folderId) {
+            long before = bytesDone;
+
+            try {
+                importFile(file.path(), folderId, bytes ->
+                        progress.update(filesDone, tree.fileCount(), before + bytes, tree.totalBytes()));
+                files++;
+            } catch (FileServiceException e) {
+                fail(file, e);
+            }
+
+            filesDone++;
+            bytesDone = before + file.size();
+            progress.update(filesDone, tree.fileCount(), bytesDone, tree.totalBytes());
+        }
+
+        /** Counts the files of a skipped subtree as done, so progress still reaches the total. */
+        private void skip(SourceTree.Node directory) {
+            for (SourceTree.Node child : directory.children()) {
+                if (child.directory()) {
+                    skip(child);
+                } else {
+                    filesDone++;
+                    bytesDone += child.size();
+                }
+            }
+
+            progress.update(filesDone, tree.fileCount(), bytesDone, tree.totalBytes());
+        }
+
+        private void fail(SourceTree.Node node, FileServiceException e) {
+            failures.add(new ImportFailure(tree.display(node.path()), e.getReason()));
+
+            // A problem with one source item skips that item; anything else
+            // means the vault cannot be written, so the import stops.
+            stopped |= switch (e.getReason()) {
+                case SOURCE_UNREADABLE, DUPLICATE_NAME, INVALID_NAME -> false;
+                default -> true;
+            };
+        }
+
+        FolderImport result() {
+            return new FolderImport(folders, files, tree.linksSkipped(), List.copyOf(failures), stopped);
+        }
+    }
+
     /**
      * Writes plaintext to {@code destination}: the file itself, or for a
      * folder a directory holding its active descendants. Existing files at the
@@ -572,6 +742,9 @@ public final class FileService {
             blobRepository.commit(vault.root(), blobId);
             return plainSize;
 
+        } catch (StreamingFileCryptoService.SourceReadException e) {
+            deleteQuietly(part);
+            throw new FileServiceException(FileServiceException.Reason.SOURCE_UNREADABLE, e);
         } catch (IOException e) {
             deleteQuietly(part);
             throw new FileServiceException(

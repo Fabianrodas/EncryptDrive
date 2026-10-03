@@ -30,6 +30,7 @@ import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuButton;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.TableColumn;
@@ -62,7 +63,7 @@ public class FilesController implements Initializable {
     private Button newFolderButton;
 
     @FXML
-    private Button importButton;
+    private MenuButton importMenu;
 
     @FXML
     private Button exportButton;
@@ -213,6 +214,69 @@ public class FilesController implements Initializable {
                         + "Not imported: " + String.join("; ", failures));
             }
         });
+    }
+
+    @FXML
+    private void importFolder() {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Import a folder into EncryptDrive");
+        File chosen = chooser.showDialog(window());
+
+        if (chosen != null) {
+            importFolder(chosen.toPath());
+        }
+    }
+
+    /** Encrypts a copy of the folder tree into the current folder; the source is left untouched. */
+    private void importFolder(Path source) {
+        UUID target = currentFolderId;
+
+        Task<FileService.FolderImport> task = new Task<>() {
+            @Override
+            protected FileService.FolderImport call() throws FileServiceException {
+                updateMessage("Scanning " + source.getFileName() + "...");
+
+                return files.importFolder(source, target, (done, total, bytes, totalBytes) -> {
+                    updateMessage("Encrypting file " + Math.min(done + 1, total) + " of " + total + "...");
+
+                    if (totalBytes > 0) {
+                        updateProgress(bytes, totalBytes);
+                    } else {
+                        updateProgress(done, Math.max(1, total));
+                    }
+                });
+            }
+        };
+
+        runWithProgress(task, result -> showFolderImport(source, result));
+    }
+
+    private void showFolderImport(Path source, FileService.FolderImport result) {
+        String summary = count(result.filesImported(), "file") + " and " + count(result.foldersCreated(), "folder")
+                + " imported from \"" + source.getFileName() + "\".";
+
+        if (result.linksSkipped() > 0) {
+            summary += " " + count(result.linksSkipped(), "link") + " (symbolic links or junctions) skipped.";
+        }
+
+        if (result.failures().isEmpty()) {
+            showSuccess(summary);
+            return;
+        }
+
+        String failed = result.failures().stream()
+                .limit(5)
+                .map(failure -> failure.path() + " (" + describe(failure.reason()) + ")")
+                .collect(Collectors.joining("; "));
+
+        showError(summary
+                + (result.stopped() ? " The import stopped early." : "")
+                + " Not imported: " + failed
+                + (result.failures().size() > 5 ? " and " + (result.failures().size() - 5) + " more." : "."));
+    }
+
+    private static String count(int n, String noun) {
+        return n + " " + noun + (n == 1 ? "" : "s");
     }
 
     @FXML
@@ -404,7 +468,11 @@ public class FilesController implements Initializable {
     }
 
     static String describe(FileServiceException e) {
-        return switch (e.getReason()) {
+        return describe(e.getReason());
+    }
+
+    static String describe(FileServiceException.Reason reason) {
+        return switch (reason) {
             case INVALID_NAME -> "Names cannot be empty, \".\" or \"..\", or longer than 255 characters.";
             case DUPLICATE_NAME -> "An item with that name already exists in this folder.";
             case NOT_FOUND -> "The item no longer exists.";
@@ -412,7 +480,8 @@ public class FilesController implements Initializable {
             case INVALID_MOVE -> "A folder cannot be moved into itself or one of its subfolders.";
             case PROTECTED -> "Your top-level folder cannot be removed.";
             case NOT_IN_TRASH -> "Only items in the trash can be deleted permanently.";
-            case SOURCE_UNREADABLE -> "The selected file could not be read.";
+            case SOURCE_UNREADABLE -> "The file or folder could not be read.";
+            case INSIDE_VAULT -> "Choose a location outside the vault folder.";
             case INTEGRITY -> "The encrypted data failed verification, so nothing was exported.";
             case CORRUPTED -> "Your encrypted file list could not be read.";
             case STORAGE -> "The vault or destination folder could not be written.";
@@ -551,7 +620,7 @@ public class FilesController implements Initializable {
         boolean nothingSelected = table.getSelectionModel().getSelectedItems().isEmpty();
 
         newFolderButton.setDisable(unavailable);
-        importButton.setDisable(unavailable);
+        importMenu.setDisable(unavailable);
         exportButton.setDisable(unavailable || nothingSelected);
         renameButton.setDisable(unavailable || table.getSelectionModel().getSelectedItems().size() != 1);
         moveButton.setDisable(unavailable || nothingSelected);

@@ -32,6 +32,14 @@ public class StreamingFileCryptoService {
 
     private static final int BUFFER_BYTES = 64 * 1024;
 
+    /** Reading the input failed, as opposed to writing the output. */
+    public static final class SourceReadException extends IOException {
+
+        SourceReadException(IOException cause) {
+            super(cause.getMessage(), cause);
+        }
+    }
+
     public EncryptedFileDescriptor encrypt(
             Path source,
             Path destinationPart,
@@ -94,7 +102,7 @@ public class StreamingFileCryptoService {
         long consumed = 0;
         boolean complete = false;
 
-        try (InputStream source = Files.newInputStream(input);
+        try (InputStream source = open(input);
                 FileChannel target = FileChannel.open(
                         outputPart,
                         StandardOpenOption.CREATE,
@@ -104,7 +112,7 @@ public class StreamingFileCryptoService {
 
             int read;
 
-            while ((read = source.read(in)) != -1) {
+            while ((read = read(source, in)) != -1) {
                 consumed += read;
                 write(target, out, cipher.processBytes(in, 0, read, out, 0));
                 progress.accept(consumed);
@@ -122,6 +130,22 @@ public class StreamingFileCryptoService {
             if (!complete) {
                 Files.deleteIfExists(outputPart);
             }
+        }
+    }
+
+    private static InputStream open(Path input) throws SourceReadException {
+        try {
+            return Files.newInputStream(input);
+        } catch (IOException e) {
+            throw new SourceReadException(e);
+        }
+    }
+
+    private static int read(InputStream source, byte[] buffer) throws SourceReadException {
+        try {
+            return source.read(buffer);
+        } catch (IOException e) {
+            throw new SourceReadException(e);
         }
     }
 

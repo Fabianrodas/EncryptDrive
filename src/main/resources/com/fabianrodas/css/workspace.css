@@ -258,6 +258,15 @@
     -fx-background-color: #1D4ED8;
 }
 
+/* A primary MenuButton (Import): the default theme colours its label and arrow separately. */
+.primary-button > .label {
+    -fx-text-fill: white;
+}
+
+.primary-button > .arrow-button > .arrow {
+    -fx-background-color: white;
+}
+
 .secondary-button {
     -fx-background-color: white;
     -fx-background-radius: 8;

@@ -11,6 +11,7 @@ public final class FileServiceException extends Exception {
         PROTECTED,
         NOT_IN_TRASH,
         SOURCE_UNREADABLE,
+        INSIDE_VAULT,
         INTEGRITY,
         CORRUPTED,
         STORAGE,
