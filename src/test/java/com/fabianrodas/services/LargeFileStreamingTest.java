@@ -4,6 +4,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fabianrodas.models.ManifestEntry;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -21,7 +22,9 @@ import org.junit.jupiter.api.io.TempDir;
  *
  *   mvn -Dtest=LargeFileStreamingTest -Dencryptdrive.largeFileCheck=true -DargLine=-Xmx256m test
  *
- * A 1 GiB file must round-trip through a 256 MiB heap.
+ * A 1 GiB file must round-trip through a 256 MiB heap, through the crypto
+ * service alone and through the whole vault (import, then export). Mandatory
+ * before every release-candidate tag (spec 21.7), optional in routine CI.
  */
 @EnabledIfSystemProperty(named = "encryptdrive.largeFileCheck", matches = "true")
 class LargeFileStreamingTest {
@@ -39,22 +42,42 @@ class LargeFileStreamingTest {
         new SecureRandom().nextBytes(nonce);
         byte[] aad = "EncryptDrive|file|v1|vault|user|large".getBytes(UTF_8);
 
-        Path source = dir.resolve("large.bin");
-        Random random = new Random(42);
-        byte[] chunk = new byte[1024 * 1024];
-
-        try (OutputStream out = Files.newOutputStream(source)) {
-            for (long written = 0; written < ONE_GIB; written += chunk.length) {
-                random.nextBytes(chunk);
-                out.write(chunk);
-            }
-        }
+        Path source = randomFile(dir.resolve("large.bin"), ONE_GIB);
 
         StreamingFileCryptoService crypto = new StreamingFileCryptoService();
         crypto.encrypt(source, dir.resolve("large.edv"), fileKey, nonce, aad);
         crypto.decrypt(dir.resolve("large.edv"), dir.resolve("large.out"), fileKey, nonce, aad);
 
         assertArrayEquals(sha256(source), sha256(dir.resolve("large.out")));
+    }
+
+    @Test
+    void oneGibibyteRoundTripsThroughTheVaultWithinASmallHeap(@TempDir Path dir) throws Exception {
+        assertTrue(Runtime.getRuntime().maxMemory() <= 300L * 1024 * 1024, "run with -DargLine=-Xmx256m");
+        Path source = randomFile(dir.resolve("large.bin"), ONE_GIB);
+
+        try (TestVault vault = new TestVault(dir)) {
+            FileService files = vault.files(vault.register("alice"));
+            ManifestEntry entry = files.importFile(source, files.rootFolderId());
+            Path out = dir.resolve("large.out");
+            files.exportEntry(entry.getEntryId(), out);
+
+            assertArrayEquals(sha256(source), sha256(out));
+        }
+    }
+
+    private static Path randomFile(Path file, long size) throws Exception {
+        Random random = new Random(42);
+        byte[] chunk = new byte[1024 * 1024];
+
+        try (OutputStream out = Files.newOutputStream(file)) {
+            for (long written = 0; written < size; written += chunk.length) {
+                random.nextBytes(chunk);
+                out.write(chunk);
+            }
+        }
+
+        return file;
     }
 
     private static byte[] sha256(Path file) throws Exception {
