@@ -20,7 +20,8 @@ import java.util.UUID;
 /**
  * Runs a file of the given size through FileService import and export in a
  * JVM started with a small heap (see StreamingMemoryTest). Avoids Argon2 so
- * the heap only has to hold streaming buffers. Prints MATCH on success.
+ * the heap only has to hold streaming buffers. Prints MATCH and exits 0 when
+ * the export equals the source; prints MISMATCH and exits 1 otherwise.
  * Runs on the classpath, so it must not touch JavaFX.
  */
 public final class StreamingMemoryProbe {
@@ -63,7 +64,9 @@ public final class StreamingMemoryProbe {
         Path exported = dir.resolve("large.out");
         files.exportEntry(entry.getEntryId(), exported);
 
-        System.out.print(Arrays.equals(sha256(source), sha256(exported)) ? "MATCH" : "MISMATCH");
+        boolean match = Arrays.equals(sha256(source), sha256(exported));
+        System.out.println(match ? "MATCH" : "MISMATCH");
+        System.exit(match ? 0 : 1);
     }
 
     static byte[] sha256(Path file) throws Exception {

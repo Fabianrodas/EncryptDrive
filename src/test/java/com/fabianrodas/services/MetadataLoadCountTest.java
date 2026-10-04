@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
@@ -57,10 +58,15 @@ class MetadataLoadCountTest {
     void everyOperationDecryptsTheManifestOnce() throws Exception {
         ManifestEntry docs = files.createFolder("Docs", root);
         ManifestEntry file = vault.importText(files, "a.txt", root);
+        ManifestEntry second = vault.importText(files, "s.txt", root);
         ManifestEntry toRestore = trashed("t.txt");
-        ManifestEntry toDelete = trashed("d.txt");
+        // Bulk operations get two or more entries, so a load or save per selected entry shows up as a count.
+        ManifestEntry deleteA = trashed("d1.txt");
+        ManifestEntry deleteB = trashed("d2.txt");
         trashed("e.txt"); // left for emptyTrash
-        ManifestEntry toTrash = vault.importText(files, "x.txt", root);
+        ManifestEntry single = vault.importText(files, "x.txt", root);
+        ManifestEntry selectedA = vault.importText(files, "y1.txt", root);
+        ManifestEntry selectedB = vault.importText(files, "y2.txt", root);
 
         Map<String, Executable> operations = new LinkedHashMap<>();
         operations.put("folderView", () -> files.folderView(docs.getEntryId()));
@@ -71,13 +77,16 @@ class MetadataLoadCountTest {
         operations.put("activeFolders", () -> files.activeFolders());
         operations.put("createFolder", () -> files.createFolder("New", root));
         operations.put("rename", () -> files.rename(file.getEntryId(), "b.txt"));
-        operations.put("move", () -> files.move(List.of(file.getEntryId()), docs.getEntryId()));
-        operations.put("moveToTrash", () -> files.moveToTrash(toTrash.getEntryId()));
+        operations.put("move", () -> files.move(
+                List.of(file.getEntryId(), second.getEntryId()), docs.getEntryId()));
+        operations.put("moveToTrash", () -> files.moveToTrash(single.getEntryId()));
+        operations.put("moveToTrashSelection", () -> files.moveToTrash(
+                List.of(selectedA.getEntryId(), selectedB.getEntryId())));
         operations.put("restore", () -> files.restore(toRestore.getEntryId()));
-        // The blob stays queued, so the next operation has a non-empty queue to work through.
+        // Both blobs stay queued, so the next operation has a non-empty queue to work through.
         operations.put("permanentlyDelete", () -> {
             blobDeletesFail.set(true);
-            assertEquals(1, files.permanentlyDelete(List.of(toDelete.getEntryId())));
+            assertEquals(2, files.permanentlyDelete(List.of(deleteA.getEntryId(), deleteB.getEntryId())));
         });
         operations.put("resumePendingDeletions", () -> {
             blobDeletesFail.set(false);
@@ -85,13 +94,20 @@ class MetadataLoadCountTest {
         });
         operations.put("emptyTrash", () -> files.emptyTrash());
         operations.put("exportEntry", () -> files.exportEntry(file.getEntryId(), tempDir.resolve("out.txt")));
-        operations.put("exportTargets", () -> files.exportTargets(List.of(file.getEntryId()), tempDir));
+        operations.put("exportTargets", () -> files.exportTargets(
+                List.of(file.getEntryId(), second.getEntryId()), tempDir));
+
+        // A read must not rewrite the manifest.
+        Set<String> readOnly = Set.of("folderView", "listChildren", "search", "stats", "listTrash",
+                "activeFolders", "exportEntry", "exportTargets");
 
         // Collected, not thrown at the first miss, so one failure shows every operation's count.
         Map<String, Integer> notOnce = new LinkedHashMap<>();
+        Map<String, Integer> readsThatSaved = new LinkedHashMap<>();
 
         for (Map.Entry<String, Executable> operation : operations.entrySet()) {
             counting.loads.set(0);
+            counting.saves.set(0);
 
             try {
                 operation.getValue().execute();
@@ -102,9 +118,14 @@ class MetadataLoadCountTest {
             if (counting.loads.get() != 1) {
                 notOnce.put(operation.getKey(), counting.loads.get());
             }
+
+            if (readOnly.contains(operation.getKey()) && counting.saves.get() != 0) {
+                readsThatSaved.put(operation.getKey(), counting.saves.get());
+            }
         }
 
         assertEquals(Map.of(), notOnce, "operations that did not decrypt the manifest exactly once");
+        assertEquals(Map.of(), readsThatSaved, "read-only operations that saved the manifest");
     }
 
     @Test
