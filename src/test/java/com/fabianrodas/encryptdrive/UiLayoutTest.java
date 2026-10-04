@@ -3,6 +3,7 @@ package com.fabianrodas.encryptdrive;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.models.UserLoginResult;
 import com.fabianrodas.models.VaultContext;
 import com.fabianrodas.services.AuthService;
@@ -14,6 +15,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
@@ -21,13 +23,19 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.ButtonBase;
 import javafx.scene.control.Labeled;
+import javafx.scene.control.OverrunStyle;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TableCell;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /*
@@ -55,7 +63,9 @@ class UiLayoutTest {
         SessionService.start(login.identity(), login.userMasterKey());
 
         FileService files = FileService.forCurrentSession();
-        files.createFolder("Documents", files.rootFolderId());
+        ManifestEntry documents = files.createFolder("Documents", files.rootFolderId());
+        ManifestEntry projects = files.createFolder("Projects 2026", documents.getEntryId());
+        files.createFolder("Quarterly planning", projects.getEntryId());
     }
 
     @AfterAll
@@ -70,6 +80,84 @@ class UiLayoutTest {
     })
     void workspaceViewsFit(String navigationButton) throws Exception {
         assertFits("dashboard", root -> fire(root, navigationButton));
+    }
+
+    /** Search results add a LOCATION column and a Clear button: they must still fit the window. */
+    @ParameterizedTest
+    @CsvSource({"1000,600", "1920,1040"})
+    void filesWithSearchResultsFit(double width, double height) throws Exception {
+        Parent root = FxTestSupport.onFxThread(() -> {
+            Parent dashboard = FXMLLoader.load(App.class.getResource("dashboard.fxml"));
+            new Scene(dashboard, width, height);
+            fire(dashboard, "#filesNavButton");
+            return dashboard;
+        });
+        FxTestSupport.waitUntil(() -> !table(root).getItems().isEmpty());
+        FxTestSupport.onFxThread(() -> {
+            TextField field = (TextField) root.lookup("#searchField");
+            field.setText("planning");
+            field.fireEvent(new ActionEvent());
+            return null;
+        });
+        FxTestSupport.waitUntil(() -> root.lookup("#clearSearchButton").isVisible());
+        // A table outside a showing window only brings up its rows when laid out.
+        FxTestSupport.waitUntil(() -> {
+            root.resize(width, height);
+            root.applyCss();
+            root.layout();
+            return !locationCells(root).isEmpty();
+        });
+
+        List<String> problems = FxTestSupport.onFxThread(() -> {
+            List<String> found = new ArrayList<>();
+            collectOutside(root, width, height, found);
+            TableView<?> table = table(root);
+            double columns = table.getVisibleLeafColumns().stream().mapToDouble(TableColumn::getWidth).sum();
+            double location = table.getColumns().get(table.getColumns().size() - 1).getWidth();
+
+            if (columns > table.getWidth() + 0.5) {
+                found.add("the columns are " + columns + " wide in a table " + table.getWidth() + " wide");
+            }
+
+            if (location < 120) {
+                found.add("the LOCATION column is only " + location + " wide");
+            }
+
+            // A path that does not fit loses its start, so the folder the file is in stays visible.
+            for (TableCell<?, ?> cell : locationCells(root)) {
+                if (cell.getTextOverrun() != OverrunStyle.LEADING_ELLIPSIS) {
+                    found.add("LOCATION cell \"" + cell.getText() + "\" shortens with " + cell.getTextOverrun());
+                }
+            }
+
+            return found;
+        });
+
+        assertEquals(List.of(), problems, "Files with search results at " + width + "x" + height);
+    }
+
+    /** The LOCATION cells that show a path; call on the JavaFX thread. */
+    private static List<TableCell<?, ?>> locationCells(Parent root) {
+        TableView<?> table = table(root);
+        TableColumn<?, ?> location = table.getColumns().get(table.getColumns().size() - 1);
+        List<TableCell<?, ?>> cells = new ArrayList<>();
+
+        for (Node node : root.lookupAll(".table-cell")) {
+            if (node instanceof TableCell<?, ?> cell
+                    && cell.getTableColumn() == location
+                    && !cell.isEmpty()
+                    && cell.getText() != null
+                    && !cell.getText().isEmpty()) {
+                cells.add(cell);
+            }
+        }
+
+        return cells;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static TableView<ManifestEntry> table(Parent root) {
+        return (TableView<ManifestEntry>) root.lookup("#table");
     }
 
     @Test

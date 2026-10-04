@@ -281,6 +281,51 @@ class UiFlowTest {
     }
 
     @Test
+    void aFolderAndAFileInsideItCanBeTrashedTogetherFromTheResults() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        ManifestEntry year = files.createFolder("2025 report folder", files.rootFolderId());
+        files.importFile(Files.writeString(tempDir.resolve("report.pdf"), "x"), year.getEntryId());
+        files.importFile(Files.writeString(tempDir.resolve("report.txt"), "x"), files.rootFolderId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#filesNavButton");
+        waitForRows(scene);
+        search(scene, "report");
+        FxTestSupport.waitUntil(() -> rows(scene).size() == 3);
+        FxTestSupport.onFxThread(() -> {
+            ((TableView<?>) scene.getRoot().lookup("#table")).getSelectionModel().selectAll();
+            return null;
+        });
+
+        click(scene, "#trashButton");
+
+        FxTestSupport.waitUntil(() -> rows(scene).isEmpty());
+        assertEquals("3 items moved to the trash.", FxTestSupport.onFxThread(() -> text(scene, "#feedbackLabel")));
+        assertEquals(List.of("2025 report folder", "report.txt"),
+                files.listTrash().stream().map(ManifestEntry::getName).sorted().toList());
+    }
+
+    @Test
+    void aSearchStillRunningWhenTheViewRefreshesIsNotDropped() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        ManifestEntry docs = files.createFolder("Docs", files.rootFolderId());
+        files.importFile(Files.writeString(tempDir.resolve("invoice.pdf"), "x"), docs.getEntryId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#filesNavButton");
+        waitForRows(scene);
+        FxTestSupport.waitUntil(() -> doubleClickRow(scene, "Docs"));
+        FxTestSupport.waitUntil(() -> ((HBox) scene.getRoot().lookup("#breadcrumbBar")).getChildren().size() == 3);
+
+        try (ManifestLockProbe blocked = new ManifestLockProbe()) {
+            search(scene, "invoice");               // waits for the manifest lock
+            click(scene, ".breadcrumb-button");     // reloads the view meanwhile
+        }
+
+        // The Docs folder shows the same file, so only the Clear button tells results from that folder.
+        FxTestSupport.waitUntil(() -> ((Node) scene.getRoot().lookup("#clearSearchButton")).isVisible());
+        assertEquals(List.of("invoice.pdf"), FxTestSupport.onFxThread(() -> rows(scene).stream().map(ManifestEntry::getName).toList()));
+    }
+
+    @Test
     void overviewRetriesDeletionsInterruptedEarlier() throws Exception {
         ManifestEntry orphan = queueAsInterruptedDelete("orphan.txt");
         Path blob = new BlobRepository().blobPath(vault.root(), orphan.getBlobId());

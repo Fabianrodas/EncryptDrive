@@ -32,8 +32,10 @@ import javafx.fxml.Initializable;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
+import javafx.scene.control.OverrunStyle;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.SelectionMode;
+import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
@@ -130,11 +132,11 @@ public class FilesController implements Initializable {
     /** The query whose results the table shows, or null while it shows a folder. */
     private String searchQuery;
 
+    /** The query of a search still running, or null: the view the user asked for last. */
+    private String pendingQuery;
+
     /** Where each search result lives; only filled while the table shows results. */
     private final Map<UUID, String> locations = new HashMap<>();
-
-    /** A file to select once the folder it was found in is shown. */
-    private UUID selectAfterLoad;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -148,6 +150,18 @@ public class FilesController implements Initializable {
                 : "—");
         column(modifiedColumn, entry -> Formats.dateTime(entry.getModifiedAt()));
         column(locationColumn, entry -> locations.getOrDefault(entry.getEntryId(), ""));
+        // A path that does not fit keeps its end, the folder the file is in, and loses its start.
+        locationColumn.setCellFactory(column -> new TableCell<>() {
+            {
+                setTextOverrun(OverrunStyle.LEADING_ELLIPSIS);
+            }
+
+            @Override
+            protected void updateItem(String location, boolean empty) {
+                super.updateItem(location, empty);
+                setText(empty ? null : location);
+            }
+        });
 
         table.setRowFactory(view -> {
             TableRow<ManifestEntry> row = new TableRow<>();
@@ -481,11 +495,10 @@ public class FilesController implements Initializable {
             return;
         }
 
-        change(() -> {
-            for (ManifestEntry entry : selected) {
-                files.moveToTrash(entry.getEntryId());
-            }
+        List<UUID> ids = selected.stream().map(ManifestEntry::getEntryId).toList();
 
+        change(() -> {
+            files.moveToTrash(ids);
             return null;
         }, done -> showSuccess(selected.size() == 1
                 ? "\"" + selected.get(0).getName() + "\" moved to the trash."
@@ -579,8 +592,7 @@ public class FilesController implements Initializable {
         if (searchQuery != null) {
             // A result opens the folder it is, or the folder it was found in with the file selected.
             exitSearch();
-            selectAfterLoad = folder ? null : entry.getEntryId();
-            navigateTo(folder ? entry.getEntryId() : entry.getParentId());
+            navigateTo(folder ? entry.getEntryId() : entry.getParentId(), folder ? null : entry.getEntryId());
         } else if (folder) {
             navigateTo(entry.getEntryId());
         } else {
@@ -589,19 +601,34 @@ public class FilesController implements Initializable {
     }
 
     private void navigateTo(UUID folderId) {
+        navigateTo(folderId, null);
+    }
+
+    /** Shows the folder and selects {@code select} in it, if it is there. */
+    private void navigateTo(UUID folderId, UUID select) {
         currentFolderId = folderId;
         feedbackLabel.setText("");
-        refresh();
+        refresh(select);
     }
 
     private void refresh() {
+        refresh(null);
+    }
+
+    /**
+     * Reloads what the user is looking at: the search they asked for last, or
+     * else the current folder. The selection is only ever applied to the load
+     * it was asked for, so a load that fails or is replaced drops it.
+     */
+    private void refresh(UUID select) {
         if (files == null) {
             return;
         }
 
-        if (searchQuery != null) {
-            // After a change made among the results, show them again.
-            runSearch(searchQuery);
+        String query = pendingQuery != null ? pendingQuery : searchQuery;
+
+        if (query != null) {
+            runSearch(query);
             return;
         }
 
@@ -610,7 +637,7 @@ public class FilesController implements Initializable {
 
         Background.read(() -> files.folderView(folderId), view -> {
             if (request == viewRequest) {
-                show(view);
+                show(view, select);
             }
         }, failure -> {
             if (request == viewRequest) {
@@ -619,21 +646,18 @@ public class FilesController implements Initializable {
         });
     }
 
-    private void show(FileService.FolderView view) {
+    private void show(FileService.FolderView view, UUID select) {
         currentFolderId = view.folderId();
         table.getItems().setAll(view.children());
         renderBreadcrumbs(view.path());
 
-        if (selectAfterLoad != null) {
-            view.children().stream()
-                    .filter(child -> child.getEntryId().equals(selectAfterLoad))
-                    .findFirst()
-                    .ifPresent(found -> {
-                        table.getSelectionModel().select(found);
-                        table.scrollTo(found);
-                    });
-            selectAfterLoad = null;
-        }
+        view.children().stream()
+                .filter(child -> child.getEntryId().equals(select))
+                .findFirst()
+                .ifPresent(found -> {
+                    table.getSelectionModel().select(found);
+                    table.scrollTo(found);
+                });
 
         // A view the user already left must leave the one-shot notice for the visible one.
         if (root.getScene() != null && RecoveryService.takeRecoveryNotice()) {
@@ -658,13 +682,16 @@ public class FilesController implements Initializable {
 
     private void runSearch(String query) {
         int request = ++viewRequest;
+        pendingQuery = query;
 
         Background.read(() -> files.search(query), results -> {
             if (request == viewRequest) {
+                pendingQuery = null;
                 showResults(query, results);
             }
         }, failure -> {
             if (request == viewRequest) {
+                pendingQuery = null;
                 showError(describe(failure));
             }
         });
@@ -695,6 +722,7 @@ public class FilesController implements Initializable {
     /** Back to showing a folder; the caller loads it, which also drops a search still running. */
     private void exitSearch() {
         searchQuery = null;
+        pendingQuery = null;
         locations.clear();
         searchField.clear();
         locationColumn.setVisible(false);

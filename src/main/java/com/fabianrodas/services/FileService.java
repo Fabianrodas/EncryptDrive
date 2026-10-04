@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
@@ -581,15 +582,51 @@ public final class FileService {
 
     /** Soft delete: only the encrypted manifest changes. */
     public void moveToTrash(UUID entryId) throws FileServiceException {
+        moveToTrash(List.of(entryId));
+    }
+
+    /**
+     * Moves a whole selection to the trash as one manifest change: every entry
+     * is checked first (the root, unknown and already trashed entries are
+     * refused) and nothing changes if one fails. A selected entry that lies
+     * inside another selected entry goes with it and is not a trash root of
+     * its own, so restoring the outer entry brings it back.
+     */
+    public void moveToTrash(List<UUID> entryIds) throws FileServiceException {
+        if (entryIds.isEmpty()) {
+            return;
+        }
+
         modify(manifest -> {
             ManifestService rules = new ManifestService(manifest);
-            ManifestEntry entry = rules.requireMovable(entryId);
-            String deletedAt = Instant.now().toString();
-            entry.setOriginalParentId(entry.getParentId());
+            List<ManifestEntry> selected = new ArrayList<>();
 
-            for (ManifestEntry item : subtree(rules, entry)) {
-                if (item.getDeletedAt() == null) {
-                    item.setDeletedAt(deletedAt);
+            for (UUID entryId : entryIds) {
+                selected.add(rules.requireMovable(entryId));
+            }
+
+            Map<UUID, List<ManifestEntry>> subtrees = new HashMap<>();
+            Set<UUID> inside = new HashSet<>();
+
+            for (ManifestEntry entry : selected) {
+                List<ManifestEntry> subtree = subtree(rules, entry);
+                subtrees.put(entry.getEntryId(), subtree);
+                subtree.stream().skip(1).forEach(item -> inside.add(item.getEntryId()));
+            }
+
+            String deletedAt = Instant.now().toString();
+
+            for (ManifestEntry entry : selected) {
+                if (inside.contains(entry.getEntryId())) {
+                    continue;
+                }
+
+                entry.setOriginalParentId(entry.getParentId());
+
+                for (ManifestEntry item : subtrees.get(entry.getEntryId())) {
+                    if (item.getDeletedAt() == null) {
+                        item.setDeletedAt(deletedAt);
+                    }
                 }
             }
 
