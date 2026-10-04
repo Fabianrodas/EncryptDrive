@@ -7,7 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fabianrodas.models.EncryptedPayload;
 import com.fabianrodas.models.ManifestEntry;
+import com.fabianrodas.models.ManifestEntryKind;
 import com.fabianrodas.models.PendingDeletion;
 import com.fabianrodas.models.UserManifest;
 import com.fabianrodas.repositories.BlobRepository;
@@ -22,6 +24,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -348,6 +351,105 @@ class PermanentDeleteTest {
         assertEquals(List.of(doomed.getEntryId()), ids(files.listTrash()));
     }
 
+
+    @Test
+    void emptyTrashDeletesEveryTrashedEntryThroughTheSameEngine() throws Exception {
+        ManifestEntry kept = vault.importText(files, "kept.txt", files.rootFolderId());
+        ManifestEntry first = trashed("first.txt");
+        ManifestEntry folder = files.createFolder("Old", files.rootFolderId());
+        ManifestEntry inner = vault.importText(files, "inner.txt", folder.getEntryId());
+        files.moveToTrash(folder.getEntryId());
+        List<Boolean> blobsPresentAtFirstCheckpoint = new ArrayList<>();
+        ManifestRepository watching = new ManifestRepository(vault.vault) {
+            @Override
+            public void saveCheckpoint(UserManifest manifest, UUID manifestId, byte[] key)
+                    throws VaultStorageException {
+                if (blobsPresentAtFirstCheckpoint.isEmpty()) {
+                    blobsPresentAtFirstCheckpoint.add(Files.exists(vault.blob(first)) && Files.exists(vault.blob(inner)));
+                }
+                super.saveCheckpoint(manifest, manifestId, key);
+            }
+        };
+
+        assertEquals(0, vault.files(alice, watching).emptyTrash());
+
+        assertEquals(List.of(true), blobsPresentAtFirstCheckpoint);
+        assertEquals(List.of(), files.listTrash());
+        assertEquals(List.of(kept.getEntryId()), ids(files.listChildren(files.rootFolderId())));
+        assertEquals(List.of(vault.blob(kept)), vault.blobFiles());
+        assertBackupsForget(first, true);
+        assertBackupsForget(inner, true);
+    }
+
+    @Test
+    void emptyTrashAlsoRetriesEarlierQueuedBlobs() throws Exception {
+        ManifestEntry stuck = trashed("stuck.txt");
+        Path obstacle = blockReplacing(vault.blob(stuck));
+        assertEquals(1, files.permanentlyDelete(List.of(stuck.getEntryId())));
+        deleteRecursively(obstacle);
+
+        assertEquals(0, files.emptyTrash());
+        assertTrue(vault.manifest(alice).getPendingDeletions().isEmpty());
+    }
+
+    /** The trash view lists trash roots; an entry trashed inside a selected folder is not one. */
+    @Test
+    void emptyTrashAlsoRemovesEntriesTrashedInsideASelectedFolder() throws Exception {
+        ManifestEntry folder = files.createFolder("Old", files.rootFolderId());
+        ManifestEntry inner = vault.importText(files, "inner.txt", folder.getEntryId());
+        files.moveToTrash(List.of(folder.getEntryId(), inner.getEntryId()));
+        assertEquals(List.of(folder.getEntryId()), ids(files.listTrash()));
+
+        assertEquals(0, files.emptyTrash());
+
+        assertEquals(1, vault.manifest(alice).getEntries().size(), "only the root folder is left");
+        assertEquals(List.of(), vault.blobFiles());
+    }
+
+    @Test
+    void emptyTrashRemovesThousandsOfEntriesAndLeavesAnEmptyJournal() throws Exception {
+        ManifestEntry kept = vault.importText(files, "kept.txt", files.rootFolderId());
+        trashWithoutBlobs(20, 150, 2_000);
+
+        assertEquals(0, files.emptyTrash());
+
+        assertEquals(List.of(), files.listTrash());
+        assertEquals(List.of(kept.getEntryId()), ids(files.listChildren(files.rootFolderId())));
+        UserManifest manifest = vault.manifest(alice);
+        assertEquals(2, manifest.getEntries().size(), "the root folder and the kept file");
+        assertTrue(manifest.getPendingDeletions().isEmpty());
+    }
+
+    @Test
+    void emptyTrashOfThousandsKeepsExactlyTheBlobsThatCouldNotBeRemoved() throws Exception {
+        List<UUID> blobs = trashWithoutBlobs(20, 150, 2_000);
+        Set<UUID> locked = new HashSet<>();
+
+        for (int i = 0; i < blobs.size(); i += 5) {
+            locked.add(blobs.get(i));
+        }
+
+        BlobRepository failing = new BlobRepository() {
+            @Override
+            public void delete(Path vaultRoot, UUID blobId) throws IOException {
+                if (locked.contains(blobId)) {
+                    throw new IOException("locked");
+                }
+
+                super.delete(vaultRoot, blobId);
+            }
+        };
+
+        assertEquals(locked.size(),
+                vault.files(alice, new ManifestRepository(vault.vault), failing).emptyTrash());
+
+        assertEquals(List.of(), files.listTrash());
+        assertEquals(locked, Set.copyOf(blobIds(vault.manifest(alice).getPendingDeletions())));
+
+        assertEquals(0, files.resumePendingDeletions());
+        assertTrue(vault.manifest(alice).getPendingDeletions().isEmpty());
+    }
+
     // ------------------------------------------------------------ helpers
 
     /** A repository that notes, at every checkpoint, whether the blob still exists. */
@@ -360,6 +462,50 @@ class PermanentDeleteTest {
                 super.saveCheckpoint(manifest, manifestId, key);
             }
         };
+    }
+
+    /**
+     * Writes trashed entries straight into the manifest: {@code folders} folders with {@code perFolder}
+     * files each (only the folders are trash roots) and {@code loose} trashed files. The blob ids point
+     * at nothing, which counts as already deleted. Returns every blob id.
+     */
+    private List<UUID> trashWithoutBlobs(int folders, int perFolder, int loose) throws Exception {
+        UserManifest manifest = vault.manifest(alice);
+        UUID root = manifest.getRootFolderId();
+        String deletedAt = Instant.now().toString();
+        String nonce = Base64.getEncoder().encodeToString(new byte[12]);
+        List<UUID> blobs = new ArrayList<>();
+
+        for (int i = 0; i < folders + loose; i++) {
+            boolean folder = i < folders;
+            ManifestEntry entry = new ManifestEntry(UUID.randomUUID(),
+                    folder ? ManifestEntryKind.FOLDER : ManifestEntryKind.FILE, root, "trashed " + i, deletedAt);
+            entry.setDeletedAt(deletedAt);
+            entry.setOriginalParentId(root);
+            manifest.getEntries().add(entry);
+
+            if (!folder) {
+                blobs.add(fakeContent(entry, nonce));
+                continue;
+            }
+
+            for (int j = 0; j < perFolder; j++) {
+                ManifestEntry inner = new ManifestEntry(UUID.randomUUID(),
+                        ManifestEntryKind.FILE, entry.getEntryId(), "inside " + j, deletedAt);
+                inner.setDeletedAt(deletedAt);
+                manifest.getEntries().add(inner);
+                blobs.add(fakeContent(inner, nonce));
+            }
+        }
+
+        new ManifestRepository(vault.vault).save(manifest, alice.identity().manifestId(), alice.userMasterKey());
+        return blobs;
+    }
+
+    private static UUID fakeContent(ManifestEntry file, String nonce) {
+        UUID blobId = UUID.randomUUID();
+        file.setContent(1, blobId, new EncryptedPayload(1, "AES-256-GCM", nonce, "AA=="), nonce);
+        return blobId;
     }
 
     private ManifestEntry trashed(String name) throws Exception {

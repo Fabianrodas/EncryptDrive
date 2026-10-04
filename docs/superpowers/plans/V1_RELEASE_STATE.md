@@ -9,10 +9,10 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 03-file-manager |
-| current task | T17 done (next: T18) |
-| last completed commit | `b97fff3 feat: search active files across folders` |
-| tests last run | `mvn -B clean verify` (2026-10-04, T17 fix round 1, 3 min 44 s) |
-| test result | BUILD SUCCESS — 358 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
+| current task | T18 done (next: T19) |
+| last completed commit | `56c6d85 fix: trash a whole selection in one change and keep search results consistent` |
+| tests last run | `mvn -B clean verify` (2026-10-04, T18, 4 min 18 s) |
+| test result | BUILD SUCCESS — 366 run, 0 failures, 0 errors, 1 skipped (opt-in LargeFileStreamingTest) |
 
 ## Release states
 

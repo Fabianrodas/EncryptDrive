@@ -33,6 +33,9 @@ public class TrashController implements Initializable {
     private VBox root;
 
     @FXML
+    private Button emptyTrashButton;
+
+    @FXML
     private Button restoreButton;
 
     @FXML
@@ -65,6 +68,7 @@ public class TrashController implements Initializable {
         column(deletedColumn, entry -> Formats.dateTime(entry.getDeletedAt()));
 
         if (!SessionService.isActive()) {
+            emptyTrashButton.setDisable(true);
             restoreButton.setDisable(true);
             deleteButton.setDisable(true);
             return;
@@ -73,6 +77,7 @@ public class TrashController implements Initializable {
         files = FileService.forCurrentSession();
         BooleanBinding unavailable = Bindings.isEmpty(table.getSelectionModel().getSelectedItems())
                 .or(Background.busyProperty());
+        emptyTrashButton.disableProperty().bind(Bindings.isEmpty(table.getItems()).or(Background.busyProperty()));
         restoreButton.disableProperty().bind(unavailable);
         deleteButton.disableProperty().bind(unavailable);
         table.disableProperty().bind(Background.busyProperty());
@@ -128,6 +133,30 @@ public class TrashController implements Initializable {
                     ? "\"" + selected.get(0).getName() + "\" was deleted permanently."
                     : selected.size() + " items were deleted permanently.")
                     + (pending > 0 ? " " + Formats.CLEANUP_PENDING : ""));
+        }, failure -> {
+            refresh();
+            showError(FilesController.describe(failure));
+        });
+    }
+
+    @FXML
+    private void emptyTrash() {
+        // The trash view lists the items the user trashed; what lies inside a trashed folder is not counted.
+        int count = table.getItems().size();
+
+        if (count == 0 || !DialogFactory.confirmDestructive(
+                root.getScene() == null ? null : root.getScene().getWindow(),
+                "Empty the trash?",
+                "Permanently delete all " + count + (count == 1 ? " item" : " items")
+                        + " in the trash? Recovery through EncryptDrive will no longer be possible.",
+                "Empty Trash"
+        )) {
+            return;
+        }
+
+        Background.run(files::emptyTrash, pending -> {
+            refresh();
+            showSuccess("The trash was emptied." + (pending > 0 ? " " + Formats.CLEANUP_PENDING : ""));
         }, failure -> {
             refresh();
             showError(FilesController.describe(failure));

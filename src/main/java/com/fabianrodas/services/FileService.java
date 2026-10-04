@@ -605,11 +605,12 @@ public final class FileService {
                 selected.add(rules.requireMovable(entryId));
             }
 
+            Map<UUID, List<ManifestEntry>> children = childrenByParent(manifest);
             Map<UUID, List<ManifestEntry>> subtrees = new HashMap<>();
             Set<UUID> inside = new HashSet<>();
 
             for (ManifestEntry entry : selected) {
-                List<ManifestEntry> subtree = subtree(rules, entry);
+                List<ManifestEntry> subtree = subtree(children, entry);
                 subtrees.put(entry.getEntryId(), subtree);
                 subtree.stream().skip(1).forEach(item -> inside.add(item.getEntryId()));
             }
@@ -656,7 +657,7 @@ public final class FileService {
                     : manifest.getRootFolderId();
             String deletedAt = entry.getDeletedAt();
 
-            for (ManifestEntry item : subtree(rules, entry)) {
+            for (ManifestEntry item : subtree(childrenByParent(manifest), entry)) {
                 if (deletedAt.equals(item.getDeletedAt())) {
                     item.setDeletedAt(null);
                 }
@@ -703,15 +704,38 @@ public final class FileService {
         }
     }
 
+    /**
+     * Permanently deletes everything in the trash through {@link #permanentlyDelete}'s
+     * sequence, retrying any blobs still queued from earlier. Returns how many
+     * blobs are still queued.
+     */
+    public int emptyTrash() throws FileServiceException {
+        synchronized (MANIFEST_LOCK) {
+            return withUserMasterKey(key -> {
+                UserManifest manifest = load(key);
+                // Trash roots are enough: the engine takes in everything below each of them.
+                List<UUID> trash = manifest.getEntries().stream()
+                        .filter(FileService::isTrashRoot)
+                        .map(ManifestEntry::getEntryId)
+                        .toList();
+
+                return deletePermanently(manifest, trash, key);
+            });
+        }
+    }
+
     /** Spec 9.2: steps 1-5 here, steps 6-9 in {@link #purge}. */
     private int deletePermanently(UserManifest manifest, Collection<UUID> entryIds, byte[] key)
             throws FileServiceException {
 
-        ManifestService rules = new ManifestService(manifest);
+        // Both tables are built once: a trash can hold more entries than a scan per entry could cover.
+        Map<UUID, ManifestEntry> byId = new HashMap<>();
+        manifest.getEntries().forEach(entry -> byId.put(entry.getEntryId(), entry));
+        Map<UUID, List<ManifestEntry>> children = childrenByParent(manifest);
         Set<ManifestEntry> doomed = new LinkedHashSet<>();
 
         for (UUID entryId : entryIds) {
-            ManifestEntry entry = rules.find(entryId);
+            ManifestEntry entry = byId.get(entryId);
 
             if (entry == null) {
                 throw new FileServiceException(FileServiceException.Reason.NOT_FOUND);
@@ -721,7 +745,7 @@ public final class FileService {
                 throw new FileServiceException(FileServiceException.Reason.NOT_IN_TRASH);
             }
 
-            doomed.addAll(subtree(rules, entry));
+            doomed.addAll(subtree(children, entry));
         }
 
         queueBlobs(manifest, doomed);
@@ -756,7 +780,8 @@ public final class FileService {
         }
 
         int recorded = pending.size();
-        pending.retainAll(remaining);
+        pending.clear();
+        pending.addAll(remaining);
 
         try {
             checkpoint(manifest, key);
@@ -1063,8 +1088,21 @@ public final class FileService {
         );
     }
 
-    /** The entry and all of its descendants, trashed or not. */
-    private static List<ManifestEntry> subtree(ManifestService rules, ManifestEntry top) {
+    /** Every entry's children (trashed or not) by parent id, from one pass over the manifest. */
+    private static Map<UUID, List<ManifestEntry>> childrenByParent(UserManifest manifest) {
+        Map<UUID, List<ManifestEntry>> children = new HashMap<>();
+
+        for (ManifestEntry entry : manifest.getEntries()) {
+            if (entry.getParentId() != null) {
+                children.computeIfAbsent(entry.getParentId(), id -> new ArrayList<>()).add(entry);
+            }
+        }
+
+        return children;
+    }
+
+    /** The entry and all of its descendants, trashed or not; {@code children} is {@link #childrenByParent}. */
+    private static List<ManifestEntry> subtree(Map<UUID, List<ManifestEntry>> children, ManifestEntry top) {
         List<ManifestEntry> result = new ArrayList<>();
         Set<UUID> visited = new HashSet<>();
         LinkedList<ManifestEntry> pending = new LinkedList<>(List.of(top));
@@ -1074,7 +1112,7 @@ public final class FileService {
 
             if (visited.add(entry.getEntryId())) {
                 result.add(entry);
-                pending.addAll(rules.listChildren(entry.getEntryId(), true));
+                pending.addAll(children.getOrDefault(entry.getEntryId(), List.of()));
             }
         }
 

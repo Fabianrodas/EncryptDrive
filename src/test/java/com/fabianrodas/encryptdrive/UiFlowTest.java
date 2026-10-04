@@ -28,6 +28,7 @@ import com.google.gson.JsonParser;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -146,6 +147,92 @@ class UiFlowTest {
         selectFirstRow(scene);
         FxTestSupport.fireAndAnswerPopup(scene, "#deleteButton", "Delete permanently");
         FxTestSupport.waitUntil(() -> files.listTrash().isEmpty());
+    }
+
+    @Test
+    void emptyTrashStatesTheCountAndNeedsConfirmation() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        for (String name : List.of("a.txt", "b.txt")) {
+            files.moveToTrash(files.importFile(Files.writeString(tempDir.resolve(name), name), files.rootFolderId()).getEntryId());
+        }
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#trashNavButton");
+        waitForRows(scene);
+        List<String> messages = new ArrayList<>();
+
+        FxTestSupport.fireAndAnswer(scene, "#emptyTrashButton", popup -> {
+            messages.add(((Labeled) popup.getScene().getRoot().lookup(".popup-message")).getText());
+            FxTestSupport.clickButton(popup, "Cancel");
+        });
+        // The popup is answered while the button handler is still running: let it finish.
+        FxTestSupport.onFxThread(() -> null);
+        assertTrue(messages.get(0).contains("all 2 items"), messages.get(0));
+        assertEquals(2, files.listTrash().size());
+
+        FxTestSupport.fireAndAnswer(scene, "#emptyTrashButton", popup -> FxTestSupport.clickButton(popup, "Empty Trash"));
+        FxTestSupport.waitUntil(() -> files.listTrash().isEmpty());
+    }
+
+    @Test
+    void emptyTrashCountsTheItemsTheViewShowsAndRemovesWhatIsInsideThemToo() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        ManifestEntry folder = files.createFolder("Old", files.rootFolderId());
+        ManifestEntry inside = files.importFile(Files.writeString(tempDir.resolve("inside.txt"), "x"), folder.getEntryId());
+        ManifestEntry loose = files.importFile(Files.writeString(tempDir.resolve("loose.txt"), "x"), files.rootFolderId());
+        files.moveToTrash(List.of(folder.getEntryId(), inside.getEntryId()));
+        files.moveToTrash(loose.getEntryId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#trashNavButton");
+        waitForRows(scene);
+        List<String> messages = new ArrayList<>();
+
+        FxTestSupport.fireAndAnswer(scene, "#emptyTrashButton", popup -> {
+            messages.add(((Labeled) popup.getScene().getRoot().lookup(".popup-message")).getText());
+            FxTestSupport.clickButton(popup, "Empty Trash");
+        });
+        FxTestSupport.waitUntil(() -> files.listTrash().isEmpty());
+        FxTestSupport.waitUntil(() -> !Background.isBusy());
+
+        // Two rows in the view (the folder and the loose file), though three entries are trashed.
+        assertTrue(messages.get(0).contains("all 2 items"), messages.get(0));
+        assertFalse(Files.exists(new BlobRepository().blobPath(vault.root(), inside.getBlobId())));
+        assertFalse(Files.exists(new BlobRepository().blobPath(vault.root(), loose.getBlobId())));
+        assertTrue(pendingBlobIds().isEmpty());
+    }
+
+    @Test
+    void emptyTrashStaysUsableWhenABlobCannotBeRemovedYetAndRetriesItLater() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        ManifestEntry stuck = files.importFile(Files.writeString(tempDir.resolve("stuck.txt"), "x"), files.rootFolderId());
+        files.moveToTrash(stuck.getEntryId());
+        // A non-empty directory where the blob was: it cannot be deleted.
+        Path blob = new BlobRepository().blobPath(vault.root(), stuck.getBlobId());
+        Files.delete(blob);
+        Files.createDirectories(blob);
+        Files.writeString(blob.resolve("in-use"), "x");
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#trashNavButton");
+        waitForRows(scene);
+
+        FxTestSupport.fireAndAnswerPopup(scene, "#emptyTrashButton", "Empty Trash");
+
+        FxTestSupport.waitUntil(() -> text(scene, "#feedbackLabel").contains(Formats.CLEANUP_PENDING));
+        FxTestSupport.waitUntil(() -> rows(scene).isEmpty() && !Background.isBusy());
+        assertEquals(List.of(stuck.getBlobId()), pendingBlobIds());
+        assertFalse(FxTestSupport.onFxThread(() -> ((Node) scene.getRoot().lookup("#table")).isDisabled()));
+
+        // Once the blob can go, the next Empty Trash removes it with the new items.
+        Files.delete(blob.resolve("in-use"));
+        files.moveToTrash(files.importFile(Files.writeString(tempDir.resolve("next.txt"), "x"), files.rootFolderId()).getEntryId());
+        click(scene, "#trashNavButton");
+        waitForRows(scene);
+
+        FxTestSupport.fireAndAnswerPopup(scene, "#emptyTrashButton", "Empty Trash");
+
+        FxTestSupport.waitUntil(() -> files.listTrash().isEmpty());
+        FxTestSupport.waitUntil(() -> !Background.isBusy());
+        assertTrue(pendingBlobIds().isEmpty());
+        assertFalse(Files.exists(blob));
     }
 
     @Test

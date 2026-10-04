@@ -30,6 +30,15 @@
             <children>
                 <Region HBox.hgrow="ALWAYS" />
 
+                <Button fx:id="emptyTrashButton"
+                        disable="true"
+                        minWidth="-Infinity"
+                        mnemonicParsing="false"
+                        onAction="#emptyTrash"
+                        prefHeight="36.0"
+                        styleClass="danger-button"
+                        text="Empty Trash" />
+
                 <Button fx:id="restoreButton"
                         disable="true"
                         minWidth="-Infinity"
