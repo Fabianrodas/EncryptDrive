@@ -143,21 +143,23 @@ Run the vector test and related crypto/repository tests, then `mvn -B clean veri
 
 **Interfaces:** Logical hierarchy uses IDs such as `entryId`, `parentId`, and `blobId`; no runtime `Path` may be serialized. The compatibility document must say Java Desktop 1.x uses Format 1, the future Rust CLI is planned and versioned independently, and no unreleased OS/CLI target is currently supported.
 
-- [ ] **Step 1: Audit every persistent model and add a failing sentinel-path test**
+- [x] **Step 1: Audit every persistent model and add a sentinel-path test**
 
 Exercise vault/import paths with unique host-path sentinel components. Inspect decrypted registry and manifest models/JSON and prove the absolute host paths and sentinels are absent. Searching ciphertext alone does not satisfy this test.
 
-- [ ] **Step 2: Inspect current logical-name and collision semantics**
+The first run passed against the existing pathless persistent models. The audit found no serialized host paths, so no production change or format ruling was needed.
+
+- [x] **Step 2: Inspect current logical-name and collision semantics**
 
 Record the implemented behavior for Unicode normalization, case collisions, `/`, `\\`, `.`, `..`, controls, empty strings, trimming, trailing spaces/dots, Windows reserved names, and duplicate siblings. Do not silently substitute host-filesystem rules. If an incompatible behavior requires a Format 1 ruling, record the smallest ruling in the ledger and implement it test-first.
 
-- [ ] **Step 3: Write the compatibility contract**
+- [x] **Step 3: Write the compatibility contract**
 
 Distinguish EncryptDrive Desktop (Java reference implementation, v1.0.0 initially Windows), Vault Format 1 (independent version lifecycle), and the planned future Rust CLI (independent release lifecycle). State intended cross-version compatibility without claiming macOS, Linux, or CLI releases.
 
-- [ ] **Step 4: Run portability, logical-name, conformance, and full-suite tests; review and commit**
+- [x] **Step 4: Run portability, logical-name, conformance, and full-suite tests; review and commit**
 
-Run related tests and `mvn -B clean verify`. Commit separately as `docs/test: freeze cross-platform Vault Format 1 compatibility` using the repository's current trailer convention.
+Related portability, logical-name, and conformance tests passed. `mvn -B clean verify` passed on 2026-10-05: 404 tests, 0 failures, 0 errors, 3 opt-in skips, 2 min 26 s. The compatibility contract and persistence/name tests were reviewed; no production change or Format 1 ruling was needed. Commit separately as `docs/test: freeze cross-platform Vault Format 1 compatibility` using the repository's current trailer convention.
 
 **Acceptance:** Host paths remain runtime-only; the logical-name rules are explicit and test-backed; compatibility/version lifecycles are independent; full verification passes.
 

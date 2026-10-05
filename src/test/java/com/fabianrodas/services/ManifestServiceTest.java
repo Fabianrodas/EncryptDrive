@@ -66,6 +66,37 @@ class ManifestServiceTest {
     void namesMayContainPathSeparatorsBecauseTheyAreMetadata() throws Exception {
         assertNotNull(assertCreated("2025/2026 budget"));
         assertNotNull(assertCreated("C:\\legacy"));
+        assertEquals("a:b", assertCreated("a:b").getName());
+    }
+
+    @Test
+    void logicalNamesKeepTheReferenceWhitespaceAndUnicodeRules() throws Exception {
+        assertEquals("trimmed name", assertCreated("  trimmed name  ").getName());
+        assertEquals("trailing.", assertCreated("trailing.").getName());
+        assertEquals("CON", assertCreated("CON").getName());
+
+        String composed = "caf\u00e9";
+        String decomposed = "cafe\u0301";
+        assertEquals(composed, assertCreated(composed).getName());
+        assertEquals(decomposed, assertCreated(decomposed).getName());
+        assertEquals("ß", assertCreated("ß").getName());
+        assertEquals("SS", assertCreated("SS").getName());
+
+        String noBreakSpaces = "\u00a0name\u00a0";
+        assertEquals(noBreakSpaces, assertCreated(noBreakSpaces).getName());
+    }
+
+    @Test
+    void nulIsRejectedButOtherEmbeddedControlCharactersAreKept() throws Exception {
+        String embeddedControl = "left\u0001right";
+        assertEquals(embeddedControl, assertCreated(embeddedControl).getName());
+        assertEquals("tab\tinside", assertCreated("tab\tinside").getName());
+        assertEquals("trimmed", assertCreated("\ttrimmed\t").getName());
+
+        assertReason(
+                FileServiceException.Reason.INVALID_NAME,
+                () -> service.createFolder(service.rootFolderId(), "left\u0000right")
+        );
     }
 
     @Test
@@ -74,9 +105,17 @@ class ManifestServiceTest {
 
         assertReason(
                 FileServiceException.Reason.DUPLICATE_NAME,
-                () -> service.createFolder(service.rootFolderId(), "PHOTOS")
+                () -> service.createFolder(service.rootFolderId(), " PHOTOS ")
         );
         assertNotNull(service.createFolder(photos.getEntryId(), "photos"));
+    }
+
+    @Test
+    void deletedSiblingNamesCanBeReused() throws Exception {
+        ManifestEntry deleted = service.createFolder(service.rootFolderId(), "Archived");
+        deleted.setDeletedAt("2026-10-05T12:00:00Z");
+
+        assertNotNull(service.createFolder(service.rootFolderId(), "archived"));
     }
 
     @Test
