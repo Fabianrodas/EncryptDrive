@@ -87,13 +87,25 @@ public class OverviewController implements Initializable {
 
     /** Deletions that stopped earlier are retried after login; failures only warn. */
     private void resumePendingDeletions() {
-        Background.run(files::resumePendingDeletions, remaining -> {
-            if (remaining > 0) {
-                showFeedback(Formats.CLEANUP_PENDING);
-            }
+        // The recovery notice may already be showing; it must outlive the text that says why the sidebar is locked.
+        String earlier = feedbackLabel.isVisible() ? feedbackLabel.getText() : null;
 
+        showFeedback("Finishing an earlier deletion…");
+        Background.run(files::resumePendingDeletions, remaining -> {
+            showAfter(earlier, remaining > 0 ? Formats.CLEANUP_PENDING : null);
             loadStats(false);
-        }, failure -> showFeedback(Formats.CLEANUP_PENDING));
+        }, failure -> showAfter(earlier, Formats.CLEANUP_PENDING));
+    }
+
+    /** Replaces the progress text with what was showing before it and the outcome, if any; hides the label if neither. */
+    private void showAfter(String earlier, String outcome) {
+        String text = earlier == null ? outcome : outcome == null ? earlier : earlier + " " + outcome;
+
+        if (text == null) {
+            show(feedbackLabel, false);
+        } else {
+            showFeedback(text);
+        }
     }
 
     private void showFeedback(String message) {

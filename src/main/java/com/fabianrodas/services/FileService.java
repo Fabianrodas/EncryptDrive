@@ -248,15 +248,30 @@ public final class FileService {
         return importFile(source, parentFolderId, bytes -> { });
     }
 
-    /** Like {@link #importFile(Path, UUID)}, reporting source bytes encrypted so far. */
+    /**
+     * Like {@link #importFile(Path, UUID)}, reporting source bytes encrypted so far.
+     * A source inside the vault folder (its blobs and metadata) is refused.
+     */
     public ManifestEntry importFile(Path source, UUID parentFolderId, LongConsumer progress)
             throws FileServiceException {
 
+        // An unreadable source is reported first: a link without a target has no real path to check.
+        requireReadableFile(source);
+
+        // Resolved once, so the check and the read look at the same place; the name stays the one chosen.
+        return importChecked(
+                requireOutsideVault(source, false), source.getFileName().toString(), parentFolderId, progress);
+    }
+
+    private static void requireReadableFile(Path source) throws FileServiceException {
         if (!Files.isRegularFile(source) || !Files.isReadable(source)) {
             throw new FileServiceException(FileServiceException.Reason.SOURCE_UNREADABLE);
         }
+    }
 
-        String name = source.getFileName().toString();
+    /** The import itself, for a source that is already known to be a readable file outside the vault. */
+    private ManifestEntry importChecked(Path source, String name, UUID parentFolderId, LongConsumer progress)
+            throws FileServiceException {
 
         return withUserMasterKey(key -> {
             // Fail before encrypting; the name is checked again at commit time.
@@ -457,12 +472,14 @@ public final class FileService {
 
             try {
                 // The tree can change after the scan. A swap in the instant between
-                // this check and the open inside importFile would still be followed.
+                // this check and the open inside importChecked would still be followed.
+                // The folder's root was checked against the vault, so its files are not walked again.
                 if (!SourceTree.isUnlinkedFile(file.path())) {
                     throw new FileServiceException(FileServiceException.Reason.SOURCE_UNREADABLE);
                 }
 
-                importFile(file.path(), folderId, bytes ->
+                requireReadableFile(file.path());
+                importChecked(file.path(), file.name(), folderId, bytes ->
                         progress.update(filesDone, tree.fileCount(), before + bytes, tree.totalBytes()));
                 files++;
             } catch (FileServiceException e) {

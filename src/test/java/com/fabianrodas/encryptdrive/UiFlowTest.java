@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import javafx.event.ActionEvent;
 import javafx.event.Event;
 import javafx.scene.Node;
@@ -45,6 +46,7 @@ import javafx.scene.control.TreeView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
+import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -81,7 +83,9 @@ class UiFlowTest {
     }
 
     @AfterEach
-    void closeVault() {
+    void closeVault() throws Exception {
+        // A worker still running would hold files of the temporary directory open.
+        FxTestSupport.settleBackground();
         VaultSessionService.closeVault();
     }
 
@@ -299,6 +303,170 @@ class UiFlowTest {
     }
 
     @Test
+    void restoreSaysWhatItIsDoingUntilItIsDone() throws Exception {
+        Scene scene = showTrashWithOneItem("a.txt");
+
+        try (ManifestLockProbe blocked = new ManifestLockProbe()) {
+            click(scene, "#restoreButton");
+
+            assertEquals(List.of("Restoring…", true), whileInFlight(scene));
+        }
+
+        FxTestSupport.waitUntil(() -> "\"a.txt\" was restored.".equals(text(scene, "#feedbackLabel")));
+    }
+
+    @Test
+    void permanentDeleteSaysWhatItIsDoingUntilItIsDone() throws Exception {
+        Scene scene = showTrashWithOneItem("a.txt");
+
+        try (ManifestLockProbe blocked = new ManifestLockProbe()) {
+            FxTestSupport.fireAndAnswerPopup(scene, "#deleteButton", "Delete permanently");
+            // The popup is answered while the button handler is still running: let it finish.
+            FxTestSupport.onFxThread(() -> null);
+
+            assertEquals(List.of("Deleting permanently…", true), whileInFlight(scene));
+        }
+
+        FxTestSupport.waitUntil(() -> "\"a.txt\" was deleted permanently.".equals(text(scene, "#feedbackLabel")));
+    }
+
+    @Test
+    void emptyTrashSaysWhatItIsDoingUntilItIsDone() throws Exception {
+        Scene scene = showTrashWithOneItem("a.txt");
+
+        try (ManifestLockProbe blocked = new ManifestLockProbe()) {
+            FxTestSupport.fireAndAnswerPopup(scene, "#emptyTrashButton", "Empty Trash");
+            // The popup is answered while the button handler is still running: let it finish.
+            FxTestSupport.onFxThread(() -> null);
+
+            assertEquals(List.of("Emptying the trash…", true), whileInFlight(scene));
+        }
+
+        FxTestSupport.waitUntil(() -> "The trash was emptied.".equals(text(scene, "#feedbackLabel")));
+    }
+
+    @Test
+    void theLoginTimeCleanupSaysWhyTheSidebarIsLocked() throws Exception {
+        queueAsInterruptedDelete("orphan.txt");
+        AtomicReference<ManifestLockProbe> held = new AtomicReference<>();
+        Scene scene = FxTestSupport.showScreen("dashboard", loaded -> {
+            loaded.getRoot().applyCss();
+            ((Labeled) loaded.getRoot().lookup("#feedbackLabel")).textProperty().addListener((observable, before, shown) -> {
+                // The cleanup starts right after this text is set: hold the manifest so it stays in flight.
+                if (shown.equals("Finishing an earlier deletion…") && held.get() == null) {
+                    held.set(holdManifest());
+                }
+            });
+        });
+
+        try {
+            FxTestSupport.waitUntil(() -> held.get() != null && Background.isBusy());
+
+            assertEquals(List.of("Finishing an earlier deletion…", true), whileInFlight(scene));
+        } finally {
+            if (held.get() != null) {
+                held.get().close();
+            }
+        }
+
+        FxTestSupport.settleBackground();
+        assertFalse(FxTestSupport.onFxThread(() -> ((Node) scene.getRoot().lookup("#feedbackLabel")).isVisible()));
+        assertTrue(pendingBlobIds().isEmpty());
+    }
+
+    @Test
+    void aPermanentDeleteThatFailsAfterTheEntriesAreGoneSaysTheCleanupWillRetry() throws Exception {
+        Scene scene = showTrashWithOneItem("old.txt");
+        blockBackup(1);   // the manifest is written, then the backups cannot be replaced
+
+        FxTestSupport.fireAndAnswerPopup(scene, "#deleteButton", "Delete permanently");
+
+        assertEquals("\"old.txt\" was deleted permanently. " + Formats.CLEANUP_PENDING, outcome(scene));
+        assertTrue(FileService.forCurrentSession().listTrash().isEmpty());
+    }
+
+    @Test
+    void anEmptyTrashThatFailsAfterTheEntriesAreGoneSaysTheCleanupWillRetry() throws Exception {
+        Scene scene = showTrashWithOneItem("old.txt");
+        blockBackup(1);
+
+        FxTestSupport.fireAndAnswerPopup(scene, "#emptyTrashButton", "Empty Trash");
+
+        assertEquals("The trash was emptied. " + Formats.CLEANUP_PENDING, outcome(scene));
+        assertTrue(FileService.forCurrentSession().listTrash().isEmpty());
+    }
+
+    @Test
+    void renamingToTheSameNamePaddedWithSpacesDoesNothing() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        files.importFile(Files.writeString(tempDir.resolve("old.txt"), "x"), files.rootFolderId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#filesNavButton");
+        waitForRows(scene);
+        selectFirstRow(scene);
+        byte[] before = Files.readAllBytes(liveManifest());
+
+        FxTestSupport.fireAndAnswer(scene, "#renameButton", popup -> {
+            ((TextField) popup.getScene().getRoot().lookup(".popup-input")).setText("  old.txt ");
+            FxTestSupport.clickButton(popup, "Rename");
+        });
+        // The popup is answered while the button handler is still running: let it finish.
+        FxTestSupport.onFxThread(() -> null);
+        FxTestSupport.settleBackground();
+
+        assertArrayEquals(before, Files.readAllBytes(liveManifest()), "the manifest was saved again");
+        assertEquals("", FxTestSupport.onFxThread(() -> text(scene, "#feedbackLabel")));
+    }
+
+    @Test
+    void aMoveThatFinishesLoadingAfterTheUserLeftTheViewOpensNoPicker() throws Exception {
+        Scene scene = showFilesWithAFolderAndAFile();
+
+        try {
+            try (ManifestLockProbe blocked = new ManifestLockProbe()) {
+                click(scene, "#moveButton");         // its folder read waits for the lock
+                click(scene, "#profileNavButton");   // the Files view is replaced meanwhile
+            }
+
+            FxTestSupport.settleBackground();
+
+            assertEquals(0, FxTestSupport.onFxThread(() -> FxTestSupport.modalPopups().size()));
+        } finally {
+            closePopups();
+        }
+    }
+
+    @Test
+    void aSecondMoveWhileTheFoldersLoadOpensNoSecondPicker() throws Exception {
+        Scene scene = showFilesWithAFolderAndAFile();
+
+        try {
+            try (ManifestLockProbe blocked = new ManifestLockProbe()) {
+                FxTestSupport.onFxThread(() -> {
+                    ButtonBase move = (ButtonBase) scene.getRoot().lookup("#moveButton");
+                    move.fire();
+                    move.fire();
+                    return null;
+                });
+            }
+
+            FxTestSupport.waitUntil(() -> !FxTestSupport.modalPopups().isEmpty());
+            FxTestSupport.settleBackground();
+
+            assertEquals(1, FxTestSupport.onFxThread(() -> FxTestSupport.modalPopups().size()));
+
+            FxTestSupport.onFxThread(() -> {
+                FxTestSupport.clickButton(FxTestSupport.modalPopups().get(0), "Cancel");
+                return null;
+            });
+            // Closing the picker unlocks the view again.
+            FxTestSupport.waitUntil(() -> !((Node) scene.getRoot().lookup("#moveButton")).isDisable());
+        } finally {
+            closePopups();
+        }
+    }
+
+    @Test
     void searchShowsMatchesFromEveryFolderAndClearReturns() throws Exception {
         FileService files = FileService.forCurrentSession();
         ManifestEntry docs = files.createFolder("Docs", files.rootFolderId());
@@ -485,6 +653,72 @@ class UiFlowTest {
             scene.getRoot().applyCss();
             return ((Labeled) scene.getRoot().lookup("#appVersionLabel")).getText();
         }));
+    }
+
+    /** The Trash view listing one trashed file, with that row selected. */
+    private Scene showTrashWithOneItem(String name) throws Exception {
+        FileService files = FileService.forCurrentSession();
+        files.moveToTrash(files.importFile(Files.writeString(tempDir.resolve(name), "x"), files.rootFolderId()).getEntryId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#trashNavButton");
+        waitForRows(scene);
+        selectFirstRow(scene);
+        return scene;
+    }
+
+    /** The Files view with a folder and a file in the root, the folder's row selected. */
+    private Scene showFilesWithAFolderAndAFile() throws Exception {
+        FileService files = FileService.forCurrentSession();
+        files.createFolder("Target", files.rootFolderId());
+        files.importFile(Files.writeString(tempDir.resolve("moved.txt"), "x"), files.rootFolderId());
+        Scene scene = FxTestSupport.showScreen("dashboard");
+        click(scene, "#filesNavButton");
+        waitForRows(scene);
+        selectFirstRow(scene);
+        return scene;
+    }
+
+    /** The view's feedback text and whether a counted task is running, read together. */
+    private static List<Object> whileInFlight(Scene scene) throws Exception {
+        return FxTestSupport.onFxThread(() -> List.of(text(scene, "#feedbackLabel"), Background.isBusy()));
+    }
+
+    /** The first feedback text that is not a progress text (those end with an ellipsis). */
+    private static String outcome(Scene scene) throws Exception {
+        FxTestSupport.waitUntil(() -> {
+            String shown = text(scene, "#feedbackLabel");
+            return !shown.isEmpty() && !shown.endsWith("…");
+        });
+
+        return FxTestSupport.onFxThread(() -> text(scene, "#feedbackLabel"));
+    }
+
+    private static void closePopups() throws Exception {
+        FxTestSupport.onFxThread(() -> {
+            FxTestSupport.modalPopups().forEach(Stage::hide);
+            return null;
+        });
+    }
+
+    private static ManifestLockProbe holdManifest() {
+        try {
+            return new ManifestLockProbe();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private Path liveManifest() {
+        return vault.root().resolve(".encryptdrive").resolve("manifests")
+                .resolve(SessionService.identity().manifestId() + ".enc");
+    }
+
+    /** Puts a non-empty directory where a backup generation goes, so the backup cannot be replaced. */
+    private void blockBackup(int generation) throws Exception {
+        Path backup = vault.root().resolve(".encryptdrive").resolve("backups").resolve("manifests")
+                .resolve(SessionService.identity().manifestId() + ".enc." + generation);
+        Files.deleteIfExists(backup);
+        Files.createDirectories(backup.resolve("blocker"));
     }
 
     /** As if a permanent delete stopped after its manifest commit: entry gone, blob queued. */

@@ -1,6 +1,7 @@
 package com.fabianrodas.encryptdrive;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -45,11 +46,20 @@ final class FxTestSupport {
 
     /** Loads a screen into a new scene and makes it the scene App.setRoot navigates. */
     static Scene showScreen(String fxml) throws Exception {
+        return showScreen(fxml, scene -> { });
+    }
+
+    /**
+     * Like {@link #showScreen(String)}; {@code onLoaded} runs on the JavaFX thread right after the
+     * load, before the result of anything the screen started in the background can reach it.
+     */
+    static Scene showScreen(String fxml, Consumer<Scene> onLoaded) throws Exception {
         return onFxThread(() -> {
             Scene scene = new Scene(FXMLLoader.load(App.class.getResource(fxml + ".fxml")), 1000, 600);
             Field appScene = App.class.getDeclaredField("scene");
             appScene.setAccessible(true);
             appScene.set(null, scene);
+            onLoaded.accept(scene);
             return scene;
         });
     }
@@ -107,15 +117,28 @@ final class FxTestSupport {
 
     /** The showing application-modal popup, if any. */
     private static Stage modalPopup() {
-        for (Window window : Window.getWindows()) {
-            if (window instanceof Stage stage
-                    && stage.isShowing()
-                    && stage.getModality() == Modality.APPLICATION_MODAL) {
-                return stage;
-            }
-        }
+        return modalPopups().stream().findFirst().orElse(null);
+    }
 
-        return null;
+    /** Every showing application-modal popup; call on the JavaFX thread. */
+    static List<Stage> modalPopups() {
+        return Window.getWindows().stream()
+                .filter(window -> window instanceof Stage stage
+                        && stage.isShowing()
+                        && stage.getModality() == Modality.APPLICATION_MODAL)
+                .map(window -> (Stage) window)
+                .toList();
+    }
+
+    /**
+     * Waits until no background task is running, counted as busy or not, and the results of the
+     * finished ones have been handled on the JavaFX thread.
+     */
+    static void settleBackground() throws Exception {
+        waitUntil(() -> !Background.isBusy() && Thread.getAllStackTraces().keySet().stream()
+                .noneMatch(thread -> thread.isAlive() && "EncryptDrive worker".equals(thread.getName())));
+        // A finished task's result is queued before its thread ends: this call runs after it.
+        onFxThread(() -> null);
     }
 
     /** Clicks the button with the given text in a popup stage. */

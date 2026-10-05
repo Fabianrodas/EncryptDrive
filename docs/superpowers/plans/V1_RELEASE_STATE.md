@@ -8,11 +8,11 @@ Updated after every task. Git history and test output are the record; this is th
 |---|---|
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
-| current phase | 03-file-manager |
-| current task | T19 done (phase 03 tasks complete; next: phase 03 boundary, then T20) |
-| last completed commit | `1bb0572 test: guard streaming memory use and metadata reads` |
-| tests last run | `mvn -B clean verify` (2026-10-04, T19 fix round 1, 4 min 32 s) |
-| test result | BUILD SUCCESS — 371 run, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest ×2 and FolderImportBenchmarkTest) |
+| current phase | 03-file-manager done; next 04-packaging-ci |
+| current task | phase 03 complete (next: T20) |
+| last completed commit | `24d3c1c test: make the streaming and metadata guards discriminate` |
+| tests last run | `mvn -B clean verify` (2026-10-04, phase 03 boundary fixes, 6 min 02 s) |
+| test result | BUILD SUCCESS — 387 run, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest ×2 and FolderImportBenchmarkTest) |
 
 ## Release states
 

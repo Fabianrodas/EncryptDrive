@@ -2,12 +2,15 @@ package com.fabianrodas.encryptdrive;
 
 import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.services.FileService;
+import com.fabianrodas.services.FileServiceException;
 import com.fabianrodas.services.RecoveryService;
 import com.fabianrodas.services.SessionService;
 import java.net.URL;
+import java.util.Collection;
 import java.util.List;
 import java.util.ResourceBundle;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.BooleanBinding;
@@ -88,6 +91,7 @@ public class TrashController implements Initializable {
     private void restore() {
         List<ManifestEntry> selected = List.copyOf(table.getSelectionModel().getSelectedItems());
 
+        showWorking("Restoring…");
         Background.run(() -> {
             for (ManifestEntry entry : selected) {
                 files.restore(entry.getEntryId());
@@ -126,17 +130,15 @@ public class TrashController implements Initializable {
         }
 
         List<UUID> ids = selected.stream().map(ManifestEntry::getEntryId).toList();
+        String deleted = selected.size() == 1
+                ? "\"" + selected.get(0).getName() + "\" was deleted permanently."
+                : selected.size() + " items were deleted permanently.";
 
+        showWorking("Deleting permanently…");
         Background.run(() -> files.permanentlyDelete(ids), pending -> {
             refresh();
-            showSuccess((selected.size() == 1
-                    ? "\"" + selected.get(0).getName() + "\" was deleted permanently."
-                    : selected.size() + " items were deleted permanently.")
-                    + (pending > 0 ? " " + Formats.CLEANUP_PENDING : ""));
-        }, failure -> {
-            refresh();
-            showError(FilesController.describe(failure));
-        });
+            showSuccess(deleted + (pending > 0 ? " " + Formats.CLEANUP_PENDING : ""));
+        }, failure -> deleteFailed(failure, ids, deleted));
     }
 
     @FXML
@@ -154,13 +156,35 @@ public class TrashController implements Initializable {
             return;
         }
 
+        List<UUID> ids = table.getItems().stream().map(ManifestEntry::getEntryId).toList();
+
+        showWorking("Emptying the trash…");
         Background.run(files::emptyTrash, pending -> {
             refresh();
             showSuccess("The trash was emptied." + (pending > 0 ? " " + Formats.CLEANUP_PENDING : ""));
-        }, failure -> {
-            refresh();
-            showError(FilesController.describe(failure));
+        }, failure -> deleteFailed(failure, ids, "The trash was emptied."));
+    }
+
+    /**
+     * A delete that failed may still have removed the entries: the manifest is written first, then the
+     * backups, and only then the blobs. When the entries are gone, the user is told what is left to do
+     * instead of that the vault could not be written.
+     */
+    private void deleteFailed(Throwable failure, List<UUID> ids, String deleted) {
+        refresh(trash -> {
+            if (onlyCleanupLeft(failure, ids, trash)) {
+                showSuccess(deleted + " " + Formats.CLEANUP_PENDING);
+            } else {
+                showError(FilesController.describe(failure));
+            }
         });
+    }
+
+    /** A storage failure that left none of the targeted entries in the trash: only cleanup is left, and it retries. */
+    static boolean onlyCleanupLeft(Throwable failure, Collection<UUID> targeted, List<ManifestEntry> trash) {
+        return failure instanceof FileServiceException error
+                && error.getReason() == FileServiceException.Reason.STORAGE
+                && trash.stream().noneMatch(item -> targeted.contains(item.getEntryId()));
     }
 
     static String describeItems(List<ManifestEntry> items) {
@@ -180,8 +204,14 @@ public class TrashController implements Initializable {
     }
 
     private void refresh() {
+        refresh(items -> { });
+    }
+
+    /** Reloads the trash, then lets {@code then} look at what is listed now. */
+    private void refresh(Consumer<List<ManifestEntry>> then) {
         Background.read(files::listTrash, items -> {
             table.getItems().setAll(items);
+            then.accept(items);
 
             // A view the user already left must leave the one-shot notice for the visible one.
             if (root.getScene() != null && RecoveryService.takeRecoveryNotice()) {
@@ -194,6 +224,17 @@ public class TrashController implements Initializable {
 
     private void showError(String message) {
         feedbackLabel.getStyleClass().removeAll("success", "notice");
+        feedbackLabel.setText(message);
+    }
+
+    /** Says what the locked view is waiting for; the result of the operation replaces it. */
+    private void showWorking(String message) {
+        feedbackLabel.getStyleClass().remove("success");
+
+        if (!feedbackLabel.getStyleClass().contains("notice")) {
+            feedbackLabel.getStyleClass().add("notice");
+        }
+
         feedbackLabel.setText(message);
     }
 

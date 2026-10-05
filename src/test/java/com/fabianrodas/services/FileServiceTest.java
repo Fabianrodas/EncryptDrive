@@ -272,6 +272,23 @@ class FileServiceTest {
         );
     }
 
+    @Test
+    void aFileInsideTheVaultIsNotImported() throws Exception {
+        FileService files = files(alice);
+        ManifestEntry kept = files.importFile(source("kept.txt", "kept".getBytes(UTF_8)), files.rootFolderId());
+        List<Path> blobsBefore = blobFiles();
+
+        for (Path inside : List.of(
+                vault.root().resolve(".encryptdrive").resolve("vault.json"),
+                new BlobRepository().blobPath(vault.root(), kept.getBlobId()))) {
+            assertReason(FileServiceException.Reason.INSIDE_VAULT,
+                    () -> files.importFile(inside, files.rootFolderId()));
+        }
+
+        assertEquals(blobsBefore, blobFiles());
+        assertEquals(List.of(kept.getEntryId()), ids(files.listChildren(files.rootFolderId())));
+    }
+
     // ------------------------------------------------------------ folders
 
     @Test

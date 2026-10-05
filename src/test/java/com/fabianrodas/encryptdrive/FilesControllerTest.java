@@ -2,9 +2,12 @@ package com.fabianrodas.encryptdrive;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.models.ManifestEntryKind;
+import com.fabianrodas.services.FileService;
+import com.fabianrodas.services.FileServiceException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
@@ -33,6 +36,44 @@ class FilesControllerTest {
 
         assertEquals("Photos", FilesController.displayName(driveRoot.resolve("input").resolve("Photos")));
         assertEquals(driveRoot.toString(), FilesController.displayName(driveRoot));
+    }
+
+    @Test
+    void aTakenNameInAMoveNamesTheDestinationFolder() {
+        FileServiceException taken = new FileServiceException(FileServiceException.Reason.DUPLICATE_NAME);
+        FileServiceException invalid = new FileServiceException(FileServiceException.Reason.INVALID_MOVE);
+
+        assertEquals("An item with that name already exists in the destination folder.",
+                FilesController.describeMove(taken));
+        assertEquals(FilesController.describe(invalid), FilesController.describeMove(invalid));
+        assertEquals("An item with that name already exists in this folder.", FilesController.describe(taken));
+    }
+
+    @Test
+    void aSourceAroundOrInsideTheVaultIsDescribedAsASourceNotADestination() {
+        FileServiceException refused = new FileServiceException(FileServiceException.Reason.INSIDE_VAULT);
+        FileServiceException storage = new FileServiceException(FileServiceException.Reason.STORAGE);
+
+        assertEquals("Choose a folder that is not the vault folder or inside it, and does not contain it.",
+                FilesController.describeImport(refused, true));
+        assertEquals("Files inside the vault folder cannot be imported.", FilesController.describeImport(refused, false));
+        assertEquals("Choose a location outside the vault folder.", FilesController.describe(refused));
+        assertEquals(FilesController.describe(storage), FilesController.describeImport(storage, true));
+    }
+
+    @Test
+    void theFolderImportFailureListEndsEachReasonWithoutDoublingPunctuation() {
+        List<FileService.ImportFailure> failures = List.of(
+                new FileService.ImportFailure(Path.of("Photos", "a.txt").toString(),
+                        FileServiceException.Reason.SOURCE_UNREADABLE),
+                new FileService.ImportFailure("b.txt", FileServiceException.Reason.DUPLICATE_NAME));
+
+        assertEquals(Path.of("Photos", "a.txt") + " (The file or folder could not be read); "
+                + "b.txt (An item with that name already exists in this folder).",
+                FilesController.failureList(failures));
+
+        List<FileService.ImportFailure> many = java.util.Collections.nCopies(7, failures.get(0));
+        assertTrue(FilesController.failureList(many).endsWith("read) and 2 more."), FilesController.failureList(many));
     }
 
     private static ManifestEntry folder(ManifestEntry parent, String name) {

@@ -231,7 +231,7 @@ public class FilesController implements Initializable {
                     try {
                         files.importFile(source, target, bytes -> updateProgress(before + bytes, total));
                     } catch (FileServiceException e) {
-                        failures.add(source.getFileName() + " (" + describe(e) + ")");
+                        failures.add(source.getFileName() + " (" + inParentheses(describeImport(e, false)) + ")");
                     }
 
                     done = before + sizeOf(source);
@@ -251,9 +251,9 @@ public class FilesController implements Initializable {
                         : imported + " files imported and encrypted.");
             } else {
                 showError((imported > 0 ? imported + " imported. " : "")
-                        + "Not imported: " + String.join("; ", failures));
+                        + "Not imported: " + String.join("; ", failures) + ".");
             }
-        });
+        }, FilesController::describe);
     }
 
     @FXML
@@ -288,7 +288,7 @@ public class FilesController implements Initializable {
             }
         };
 
-        runWithProgress(task, result -> showFolderImport(source, result));
+        runWithProgress(task, result -> showFolderImport(source, result), failure -> describeImport(failure, true));
     }
 
     private void showFolderImport(Path source, FileService.FolderImport result) {
@@ -304,15 +304,9 @@ public class FilesController implements Initializable {
             return;
         }
 
-        String failed = result.failures().stream()
-                .limit(5)
-                .map(failure -> failure.path() + " (" + describe(failure.reason()) + ")")
-                .collect(Collectors.joining("; "));
-
         showError(summary
                 + (result.stopped() ? " The import stopped early." : "")
-                + " Not imported: " + failed
-                + (result.failures().size() > 5 ? " and " + (result.failures().size() - 5) + " more." : "."));
+                + " Not imported: " + failureList(result.failures()));
     }
 
     /** The folder's name, or the whole path for a drive root, which has no name. */
@@ -372,6 +366,11 @@ public class FilesController implements Initializable {
             List<Path> targets = files.exportTargets(ids, directory.toPath());
             return new Plan(targets, targets.stream().filter(Files::exists).count());
         }, plan -> {
+            // A view the user already left must not ask about, or start, an export.
+            if (root.getScene() == null) {
+                return;
+            }
+
             long existing = plan.existing();
 
             if (existing == 0 || DialogFactory.confirm(
@@ -405,7 +404,7 @@ public class FilesController implements Initializable {
 
         runWithProgress(task, done -> showSuccess(entries.size() == 1
                 ? "Decrypted copy saved to " + targets.get(0) + "."
-                : entries.size() + " items exported to " + targets.get(0).getParent() + "."));
+                : entries.size() + " items exported to " + targets.get(0).getParent() + "."), FilesController::describe);
     }
 
     @FXML
@@ -421,7 +420,8 @@ public class FilesController implements Initializable {
                 window(), "Rename", "Enter a new name for \"" + entry.getName() + "\".", entry.getName(), "Rename"
         );
 
-        if (name.isPresent() && !name.get().equals(entry.getName())) {
+        // The service strips the name, so the same name padded with spaces changes nothing.
+        if (name.isPresent() && !name.get().strip().equals(entry.getName())) {
             change(() -> {
                 files.rename(entry.getEntryId(), name.get());
                 return null;
@@ -439,13 +439,27 @@ public class FilesController implements Initializable {
 
         Set<UUID> moving = selected.stream().map(ManifestEntry::getEntryId).collect(Collectors.toSet());
 
+        // The folder read is not counted as busy, so the view locks itself until the picker is closed:
+        // a second click would open a second picker over the first.
+        setBusy(true);
+
         Background.read(files::activeFolders, folders -> {
             String what = selected.size() == 1 ? "\"" + selected.get(0).getName() + "\"" : selected.size() + " items";
+            Optional<ManifestEntry> chosen = Optional.empty();
 
-            Optional<ManifestEntry> chosen = DialogFactory.chooseFolder(
-                    window(), "Move", "Choose the folder to move " + what + " into.",
-                    folderTree(folders, moving), "Move here"
-            );
+            try {
+                // A view the user already left must not show the decrypted folder names over another screen.
+                if (root.getScene() == null) {
+                    return;
+                }
+
+                chosen = DialogFactory.chooseFolder(
+                        window(), "Move", "Choose the folder to move " + what + " into.",
+                        folderTree(folders, moving), "Move here"
+                );
+            } finally {
+                setBusy(false);
+            }
 
             // The folder everything already lives in: nothing to save, nothing to announce.
             chosen.filter(folder -> !selected.stream().allMatch(entry -> folder.getEntryId().equals(entry.getParentId())))
@@ -453,8 +467,12 @@ public class FilesController implements Initializable {
                         files.move(List.copyOf(moving), folder.getEntryId());
                         return null;
                     }, done -> showSuccess(what + (selected.size() == 1 ? " was" : " were") + " moved to "
-                            + (folder.getParentId() == null ? "My files" : "\"" + folder.getName() + "\"") + ".")));
-        }, failure -> showError(describe(failure)));
+                            + (folder.getParentId() == null ? "My files" : "\"" + folder.getName() + "\"") + "."),
+                            FilesController::describeMove));
+        }, failure -> {
+            setBusy(false);
+            showError(describe(failure));
+        });
     }
 
     /** Active folders as a tree, leaving out the folders being moved and everything inside them. */
@@ -505,6 +523,39 @@ public class FilesController implements Initializable {
                 : selected.size() + " items moved to the trash."));
     }
 
+    /** Like {@link #describe(Throwable)}, for a move: a taken name is one in the destination folder. */
+    static String describeMove(Throwable failure) {
+        return failure instanceof FileServiceException error
+                && error.getReason() == FileServiceException.Reason.DUPLICATE_NAME
+                ? "An item with that name already exists in the destination folder."
+                : describe(failure);
+    }
+
+    /** Like {@link #describe(Throwable)}, for an import: the vault is the source here, not a destination. */
+    static String describeImport(Throwable failure, boolean folder) {
+        return failure instanceof FileServiceException error
+                && error.getReason() == FileServiceException.Reason.INSIDE_VAULT
+                ? (folder
+                        ? "Choose a folder that is not the vault folder or inside it, and does not contain it."
+                        : "Files inside the vault folder cannot be imported.")
+                : describe(failure);
+    }
+
+    /** "path (reason); ..." for the first five failures and a count of the rest, ending with a period. */
+    static String failureList(List<FileService.ImportFailure> failures) {
+        String listed = failures.stream()
+                .limit(5)
+                .map(failure -> failure.path() + " (" + inParentheses(describe(failure.reason())) + ")")
+                .collect(Collectors.joining("; "));
+
+        return listed + (failures.size() > 5 ? " and " + (failures.size() - 5) + " more." : ".");
+    }
+
+    /** A sentence as a reason in parentheses: without its final period. */
+    private static String inParentheses(String sentence) {
+        return sentence.endsWith(".") ? sentence.substring(0, sentence.length() - 1) : sentence;
+    }
+
     static String describe(Throwable failure) {
         return failure instanceof FileServiceException error
                 ? describe(error)
@@ -535,6 +586,10 @@ public class FilesController implements Initializable {
 
     /** Runs a vault change in the background with the view locked, then reloads the folder. */
     private <T> void change(Callable<T> work, Consumer<T> onDone) {
+        change(work, onDone, FilesController::describe);
+    }
+
+    private <T> void change(Callable<T> work, Consumer<T> onDone, Function<Throwable, String> describeFailure) {
         setBusy(true);
         Background.run(work, result -> {
             setBusy(false);
@@ -543,11 +598,15 @@ public class FilesController implements Initializable {
         }, failure -> {
             setBusy(false);
             refresh();
-            showError(describe(failure));
+            showError(describeFailure.apply(failure));
         });
     }
 
-    private <T> void runWithProgress(Task<T> task, Consumer<T> onDone) {
+    private <T> void runWithProgress(
+            Task<T> task,
+            Consumer<T> onDone,
+            Function<Throwable, String> describeFailure
+    ) {
         setBusy(true);
         showProgress(true);
         progressBar.progressProperty().bind(task.progressProperty());
@@ -563,7 +622,7 @@ public class FilesController implements Initializable {
             showProgress(false);
             setBusy(false);
             refresh();
-            showError(describe(task.getException()));
+            showError(describeFailure.apply(task.getException()));
         });
 
         Background.start(task);
