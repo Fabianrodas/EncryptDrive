@@ -59,6 +59,7 @@ public final class FileService {
     private static final Object MANIFEST_LOCK = new Object();
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final int MAX_FOLDER_DEPTH = 10_000;
+    private static final int FOLDER_IMPORT_BATCH_MUTATIONS = 64;
 
     private static final Pattern UNSAFE_CHARACTERS
             = Pattern.compile("[<>:\"/\\\\|?*\\x00-\\x1F]");
@@ -341,7 +342,7 @@ public final class FileService {
      * tree is scanned first without following links ({@link SourceTree}). A
      * name already used in the destination aborts before anything is
      * imported; a name that clashes inside the tree skips only that item.
-     * Folders and files are committed one manifest change at a time, so an
+     * Folders and files are committed in bounded manifest batches, so an
      * interruption leaves a valid, partly imported tree and never a
      * referenced partial blob. The source is never modified.
      */
@@ -351,13 +352,19 @@ public final class FileService {
         // Resolved once, so the overlap check and the scan look at the same place.
         Path real = requireOutsideVault(source, true);
         SourceTree tree = SourceTree.scan(real);
-        // Fails before anything is created; checked again when the folder is committed.
-        withUserMasterKey(key -> new ManifestService(load(key))
-                .requireAvailableName(parentFolderId, tree.root().name()));
 
-        FolderImportRun run = new FolderImportRun(tree, progress);
-        run.importDirectory(tree.root(), parentFolderId);
-        return run.result();
+        synchronized (MANIFEST_LOCK) {
+            return withUserMasterKey(key -> {
+                UserManifest manifest = load(key);
+                // Fails before anything is created; the same in-memory manifest is used throughout.
+                new ManifestService(manifest).requireAvailableName(parentFolderId, tree.root().name());
+
+                FolderImportRun run = new FolderImportRun(tree, progress, manifest, key);
+                run.importDirectory(tree.root(), parentFolderId);
+                run.finish();
+                return run.result();
+            });
+        }
     }
 
     /**
@@ -426,16 +433,25 @@ public final class FileService {
 
         private final SourceTree tree;
         private final ImportProgress progress;
+        private final UserManifest manifest;
+        private final byte[] userMasterKey;
         private final List<ImportFailure> failures = new ArrayList<>();
+        private final List<UUID> uncommittedBlobIds = new ArrayList<>();
+        private int committedEntryCount;
+        private int pendingFolders;
+        private int pendingFiles;
         private int folders;
         private int files;
         private int filesDone;
         private long bytesDone;
         private boolean stopped;
 
-        FolderImportRun(SourceTree tree, ImportProgress progress) {
+        FolderImportRun(SourceTree tree, ImportProgress progress, UserManifest manifest, byte[] userMasterKey) {
             this.tree = tree;
             this.progress = progress;
+            this.manifest = manifest;
+            this.userMasterKey = userMasterKey;
+            committedEntryCount = manifest.getEntries().size();
 
             for (String path : tree.unreadable()) {
                 failures.add(new ImportFailure(path, FileServiceException.Reason.SOURCE_UNREADABLE));
@@ -446,8 +462,9 @@ public final class FileService {
             ManifestEntry folder;
 
             try {
-                folder = createFolder(directory.name(), parentId);
-                folders++;
+                folder = new ManifestService(manifest).createFolder(parentId, directory.name());
+                pendingFolders++;
+                flushWhenFull();
             } catch (FileServiceException e) {
                 fail(directory, e);
                 skip(directory);
@@ -479,9 +496,47 @@ public final class FileService {
                 }
 
                 requireReadableFile(file.path());
-                importChecked(file.path(), file.name(), folderId, bytes ->
-                        progress.update(filesDone, tree.fileCount(), before + bytes, tree.totalBytes()));
-                files++;
+                String name = new ManifestService(manifest).requireAvailableName(folderId, file.name());
+                UUID fileId = UUID.randomUUID();
+                UUID blobId = UUID.randomUUID();
+                byte[] fileKey = randomBytes(CryptoConstants.KEY_BYTES);
+                byte[] contentNonce = randomBytes(CryptoConstants.GCM_NONCE_BYTES);
+                boolean blobCommitted = false;
+                boolean blobQueued = false;
+
+                try {
+                    long plainSize = writeBlob(file.path(), blobId, fileId, fileKey, contentNonce, bytes ->
+                            progress.update(filesDone, tree.fileCount(), before + bytes, tree.totalBytes()));
+                    blobCommitted = true;
+
+                    ManifestEntry entry = new ManifestEntry(
+                            fileId,
+                            ManifestEntryKind.FILE,
+                            folderId,
+                            name,
+                            Instant.now().toString()
+                    );
+                    entry.setContent(
+                            plainSize,
+                            blobId,
+                            aes.wrapKey(fileKey, userMasterKey, Aad.fileKey(vaultId(), userId(), fileId.toString())),
+                            Base64.getEncoder().encodeToString(contentNonce)
+                    );
+                    uncommittedBlobIds.add(blobId);
+                    manifest.getEntries().add(entry);
+                    pendingFiles++;
+                    blobQueued = true;
+                    flushWhenFull();
+
+                } catch (FileServiceException | RuntimeException e) {
+                    if (blobCommitted && !blobQueued) {
+                        deleteBlobQuietly(blobId);
+                    }
+                    throw e;
+                } finally {
+                    Arrays.fill(fileKey, (byte) 0);
+                }
+
             } catch (FileServiceException e) {
                 fail(file, e);
             }
@@ -489,6 +544,59 @@ public final class FileService {
             filesDone++;
             bytesDone = before + file.size();
             progress.update(filesDone, tree.fileCount(), bytesDone, tree.totalBytes());
+        }
+
+        /** Saves a full batch once, after all its file blobs have been committed. */
+        private void flushWhenFull() throws FileServiceException {
+            if (pendingFolders + pendingFiles >= FOLDER_IMPORT_BATCH_MUTATIONS) {
+                flushBatch();
+            }
+        }
+
+        /** The pending entries are appended only; dropping them restores the last persisted in-memory state. */
+        private void flushBatch() throws FileServiceException {
+            if (pendingFolders + pendingFiles == 0) {
+                return;
+            }
+
+            try {
+                // Unlike saveCheckpoint, save rotates old recovery states before the atomic live-file replace.
+                manifestRepository.save(manifest, identity.manifestId(), userMasterKey);
+            } catch (VaultStorageException e) {
+                discardPendingBatch();
+                throw storageFailure(e);
+            }
+
+            folders += pendingFolders;
+            files += pendingFiles;
+            committedEntryCount = manifest.getEntries().size();
+            clearPendingBatch();
+        }
+
+        private void discardPendingBatch() {
+            List<ManifestEntry> entries = manifest.getEntries();
+            while (entries.size() > committedEntryCount) {
+                entries.remove(entries.size() - 1);
+            }
+            for (UUID blobId : uncommittedBlobIds) {
+                deleteBlobQuietly(blobId);
+            }
+            clearPendingBatch();
+        }
+
+        private void clearPendingBatch() {
+            uncommittedBlobIds.clear();
+            pendingFolders = 0;
+            pendingFiles = 0;
+        }
+
+        /** Flushes successful partial work even if a later source/storage error stopped traversal. */
+        void finish() {
+            try {
+                flushBatch();
+            } catch (FileServiceException e) {
+                fail(tree.root(), e);
+            }
         }
 
         /** Counts the files of a skipped subtree as done, so progress still reaches the total. */

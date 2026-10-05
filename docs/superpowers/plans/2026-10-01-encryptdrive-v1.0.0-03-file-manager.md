@@ -4,7 +4,7 @@
 
 **Goal:** Move all vault metadata work off the JavaFX thread, then add rename, move, recursive folder import, search and Empty Trash, refuse plaintext export into the vault, and add regression guards for streaming memory and metadata reads.
 
-**Architecture:** Every controller call into `FileService` goes through `Background` (`run` for changes — counted as busy so the close guard applies; `read` for read-only loads — not counted). Tree rules live in `ManifestService` (`requireMovable`, `rename`, `move`), orchestration in `FileService`. Folder import scans with `SourceTree` and then reuses the existing per-file `importFile` transaction. Rename/move/search never touch blobs.
+**Architecture at Phase 03 completion:** Every controller call into `FileService` goes through `Background` (`run` for changes — counted as busy so the close guard applies; `read` for read-only loads — not counted). Tree rules live in `ManifestService` (`requireMovable`, `rename`, `move`), orchestration in `FileService`. The original folder-import implementation reused the per-file `importFile` transaction; Phase 03A T19A supersedes that choice with bounded batches for recursive imports. Normal single-file imports remain immediate. Rename/move/search never touch blobs.
 
 **Tech Stack:** JavaFX 21 (`Task`, `TreeView`, `MenuButton`), Java NIO, JUnit 6, `cmd /c mklink /J` for junction tests on Windows.
 
@@ -3356,7 +3356,7 @@ Run (PowerShell): `mvn -B test "-Dtest=LargeFileStreamingTest" "-Dencryptdrive.l
 Expected: `Tests run: 2, Failures: 0, Errors: 0, Skipped: 0`. Record PASS + duration in the ledger.
 
 Run: `mvn -B test "-Dtest=FolderImportBenchmarkTest" "-Dencryptdrive.perfCheck=true"`
-Record the printed duration in the ledger. **Decision rule:** if 1,000 files take longer than 120,000 ms on this machine, add a release-fix task before T23: "batch folder-import commits per source directory (≤ 64 files per manifest commit; blobs are still written before the commit and deleted if the commit fails)", with a crash-safety test proving no committed entry references a missing blob. Otherwise keep the spec's per-file model and note the measurement.
+Record the printed duration in the ledger. At Phase 03, the 1,000-file result was below the original 120,000 ms threshold, so per-file saves were retained at that time. Phase 03A T19A supersedes that decision based on measured scaling and requires batches of at most 64 logical mutations.
 
 - [ ] **Step 6: Full suite**
 

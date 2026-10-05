@@ -471,7 +471,7 @@ Requirements:
 - duplicate logical names discovered during preflight must abort before importing that conflicting subtree rather than silently overwrite data;
 - any blobs created by an import that cannot be committed must be cleaned best-effort and must never be referenced by a partially committed manifest.
 
-For v1.0.0, correctness and crash safety take priority over batching metadata writes for maximum throughput.
+Recursive Import Folder commits at most 64 logical manifest mutations per save, counting both files and folders, including empty folders. The operation loads and decrypts the manifest once. A file enters a pending batch only after streaming encryption authenticates and the blob is atomically finalized. Normal single-file import retains its immediate save behavior. If a batch save fails, its logical entries remain invisible and blobs created only for that batch are cleaned best-effort; earlier committed batches remain valid. Orphan ciphertext is acceptable, but committed metadata may never reference a missing blob. No plaintext journal or cache is introduced.
 
 ### 13.4 Search
 
@@ -530,11 +530,11 @@ v1.0.0 performs targeted optimization only where measurement or architecture jus
 
 ### 14.2 Folder-import strategy
 
-Do not introduce a complicated multi-file database-style transaction solely to maximize folder-import speed for v1.0.0. Prefer the existing safe per-file/manifest transaction model unless profiling proves it unusable.
+Use bounded manifest batches of at most 64 logical mutations for recursive folder import. This is an in-memory batching policy, not a multi-file database transaction; normal single-file imports keep their current behavior. A batch is visible only after one atomic manifest save succeeds.
 
 ### 14.3 Performance regression checks
 
-Add repeatable tests/benchmarks sufficient to catch accidental whole-file buffering and gross metadata regressions. Do not make wall-clock thresholds brittle in normal CI.
+Benchmark recursive import with 1,000 x 4 KiB and 10,000 x 4 KiB inputs, including a large pre-existing manifest when supported. Record runtime, manifest-save count, environment, and before/after evidence. Do not add brittle wall-clock thresholds to routine CI.
 
 ---
 

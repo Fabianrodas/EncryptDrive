@@ -40,8 +40,10 @@ class FolderImportBenchmarkTest {
 
         try (TestVault vault = new TestVault(dir)) {
             TestVault.Account alice = vault.register("alice");
-            FileService files = vault.files(alice);
+            CountingManifests counting = new CountingManifests(vault.vault);
+            FileService files = vault.files(alice, counting);
             addExistingEntries(vault, alice, existing);
+            counting.saves.set(0);
             int[] reported = {0};
             long start = System.nanoTime();
 
@@ -55,7 +57,7 @@ class FolderImportBenchmarkTest {
 
             System.out.println("Folder import benchmark: " + fileCount + " x 4 KiB in "
                     + (System.nanoTime() - start) / 1_000_000 + " ms, with " + existing
-                    + " entries already in the manifest");
+                    + " entries already in the manifest and " + counting.saves.get() + " manifest saves");
             assertEquals(fileCount, result.filesImported());
         }
     }

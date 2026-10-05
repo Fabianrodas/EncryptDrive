@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute the child plans strictly in the order below; each child plan lists its own tasks.
 
-**Goal:** Take `feature/encryptdrive-1.0` from its current 19-commit roadmap state to a hardened, tested, packaged (installer + portable), cleanly versioned, tagged and manually validated EncryptDrive v1.0.0 that meets the spec's Definition of Done.
+**Goal:** Take `feature/encryptdrive-1.0` through a hardened, tested, packaged (installer + portable), cleanly versioned, tagged and manually validated EncryptDrive v1.0.0 that meets the spec's Definition of Done. Phase 03A freezes the portable Format 1 contract and performance behavior before packaging begins.
 
 **Architecture:** No redesign. The existing layering stays (`security` → `repositories` → `services` → `encryptdrive` controllers). Hardening goes into the repositories (size limits, strict parsing, checkpoint saves), the deletion engine goes into `FileService` with an encrypted journal inside `UserManifest`, and one close guard in `App` gates every exit path. Packaging becomes two scripts (`build-release.ps1`, `verify-package.ps1`) that derive everything from the Maven version.
 
@@ -28,6 +28,8 @@ Every task in every child plan implicitly includes these.
 - The installer installs the application only; it never creates, selects, moves, modifies or deletes a vault.
 - No private keys, certificates or signing secrets in the repository. Unsigned release is allowed and documented.
 - No tags during implementation. First tag: annotated `v1.0.0-rc.1`, only after Gates A–C on `main`. Tags are never moved or replaced. `v1.0.0` only after the full manual matrix passes on an accepted RC.
+- The Java desktop app is the official Format 1 reference implementation. Vault Format 1 is language- and operating-system-independent; a future Rust CLI is planned but out of scope. Desktop, CLI, and vault-format versions have independent lifecycles.
+- T20 packaging cannot start until `FORMAT_V1_READY` is `DONE` in `V1_RELEASE_STATE.md`.
 - No destructive Git history rewrite, no force-push, no remote tag/branch rewrite without the user's explicit approval at Human Gate H2.
 - Visual language of the existing UI is preserved; 1000×600 and maximized layouts must stay usable (`UiLayoutTest`).
 - One commit per task with the exact message given in the task. Every commit message ends with the trailer:
@@ -75,8 +77,21 @@ Every task in every child plan implicitly includes these.
 | 1 | `2026-10-01-encryptdrive-v1.0.0-01-foundation.md` | T1–T3 | — |
 | 2 | `2026-10-01-encryptdrive-v1.0.0-02-storage-security.md` | T4–T11 (incl. T6A) | 1 |
 | 3 | `2026-10-01-encryptdrive-v1.0.0-03-file-manager.md` | T12–T19 | 2 (T10 engine, T11 guard) |
-| 4 | `2026-10-01-encryptdrive-v1.0.0-04-packaging-ci.md` | T20–T22, H2 | 1 (version), 3 (final UI) |
+| 3A | `2026-10-05-encryptdrive-v1.0.0-03a-format-portability.md` | T19A–T19C | 3 |
+| 4 | `2026-10-01-encryptdrive-v1.0.0-04-packaging-ci.md` | T20–T22, H2 | 1, 3, 3A (`FORMAT_V1_READY`) |
 | 5 | `2026-10-01-encryptdrive-v1.0.0-05-release.md` | T23–T33, H3–H6 | 4 |
+
+Roadmap after the current file-manager phase:
+
+```text
+Phase 03   File manager completion / current implementation
+   ↓
+Phase 03A  Performance + Format 1 + portability freeze
+   ↓
+Phase 04   Windows packaging / CI
+   ↓
+Phase 05   Release validation / RC / v1.0.0
+```
 
 All paths in the child plans are relative to the repository root.
 
@@ -104,6 +119,9 @@ All paths in the child plans are relative to the repository root.
 | T17 | Search | `feat: search active files across folders` |
 | T18 | Empty Trash | `feat: empty the trash through the permanent-delete engine` |
 | T19 | Streaming-memory and metadata-read regression guards | `test: guard streaming memory use and metadata reads` |
+| T19A | Batched recursive folder-import manifest commits (maximum 64 logical mutations) | `perf: batch recursive folder-import manifest commits` |
+| T19B | Freeze Vault Format 1 and publish conformance vectors | `test: freeze Vault Format 1 with public conformance vectors` |
+| T19C | Cross-platform persistence audit and compatibility contract | `docs/test: freeze cross-platform Vault Format 1 compatibility` |
 | T20 | WiX toolchain, icon, `build-release.ps1` | `build: produce versioned portable and installer artifacts` |
 | T21 | `verify-package.ps1` (portable, ZIP, installer, silent install) | `build: verify portable and installer artifacts end to end` |
 | T22 | CI packaging job + tag release workflow | `ci: package Windows artifacts and draft tagged releases` |
@@ -121,7 +139,7 @@ All paths in the child plans are relative to the repository root.
 | T32 | Publish draft release | — |
 | T33 | Archive v1.0.0 planning docs | `docs: archive the v1.0.0 planning documents` |
 
-Count: 5 phases, 34 tasks — 28 commit tasks (T1–T24 with T6A, T26, the T27 merge, T33; T23 may end "audit clean" with no commit), 2 tag tasks (T28, T30), 4 verification/fix/publishing tasks (T25, T29 conditional, T31, T32) — plus 5 human gates (H1 = this plan review, H2–H6) and 3 conditional gates.
+Count: 6 phases, 37 tasks — 31 commit tasks (the existing commit tasks plus T19A–T19C; T23 may end "audit clean" with no commit), 2 tag tasks (T28, T30), 4 verification/fix/publishing tasks (T25, T29 conditional, T31, T32) — plus 5 human gates (H1 = this plan review, H2–H6) and 3 conditional gates.
 
 ---
 
@@ -220,6 +238,7 @@ States are tracked in `V1_RELEASE_STATE.md` as `TODO | IN PROGRESS | DONE | BLOC
 
 | State | Becomes DONE when |
 |---|---|
+| FORMAT_V1_READY | T19A–T19C complete; full suite and all Format 1 vector/portability tests pass; the 1,000- and 10,000-file benchmarks confirm batch scaling; working tree is clean. T20 is blocked until this is DONE. |
 | IMPLEMENTATION_COMPLETE | T1–T24 (incl. T6A) committed; T25 audit finds no release-blocking issue (Gate A). |
 | AUTOMATED_GATES_COMPLETE | On the `main` merge commit: fresh-worktree `mvn -B clean verify` green, 1 GiB test PASS, portable + installer build and `verify-package.ps1 -Launch -Install` PASS (Gate B). |
 | PACKAGING_COMPLETE | T20–T22 done and the CI `package` job green on GitHub. |
@@ -286,7 +305,8 @@ Each gate's exact checklist, evidence to send back, and resume point is in the c
 | 13.4 | Search rules | T17 |
 | 13.5 | Empty Trash rules | T18 |
 | 13.6 | Existing behaviour retained | existing tests + T12 regression |
-| 14.1–14.3 | Streaming; off-FX-thread; throttled updates; no repeated reads; regression checks | T12, T19 |
+| 14.1–14.3 | Streaming; off-FX-thread; throttled updates; no repeated reads; regression checks | T12, T19, T19A |
+| Format 1 portability | Byte-level protocol, public vectors, host-independent persistence, logical-name contract | T19B, T19C |
 | 15 | UX additions; 1000×600 + maximized | T3, T7, T11–T18 (`UiLayoutTest`) |
 | 16.3 | One active plan chain; archive at release | T1, T33 |
 | 18.1–18.3 | Release scripts, output dir, clean package verification | T20, T21 |
@@ -312,7 +332,7 @@ Also added: the purge never deletes a blob that a live entry still references (T
 
 ## Known risks (tracked in the ledger)
 
-- **Folder-import throughput.** The spec keeps one manifest commit per file; each commit rewrites the manifest and rotates a backup copy, so cost grows with manifest size. T19 measures 1,000 files; decision rule in T19.
+- **Folder-import throughput.** T19 recorded the 1,000-file measurement; later measured scaling justified Phase 03A T19A. Recursive import now must commit at most 64 logical mutations per manifest save, while single-file import remains immediate.
 - **Staged vault creation** renames a folder into place; a sync client or antivirus holding a handle inside the staging folder can make that rename fail. The failure is clean (staging removed, target untouched) and creation can be retried. H5 creates a vault inside OneDrive.
 - **OneDrive / antivirus holding files open** can make `ATOMIC_MOVE` fail transiently on Windows. Not changed speculatively; H5 will show it. If it occurs, a bounded retry in `AtomicFileWriter.replace` becomes a release-fix task with a test.
 - **OneDrive Files-On-Demand placeholders** are reparse points; T15 detects links by "real path differs from location", not by "is a reparse point", so placeholders still import. H5 includes importing a folder from OneDrive.

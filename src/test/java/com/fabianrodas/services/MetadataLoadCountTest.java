@@ -129,7 +129,7 @@ class MetadataLoadCountTest {
     }
 
     @Test
-    void folderImportReadsAFixedNumberOfTimesPerItem() throws Exception {
+    void folderImportDecryptsTheManifestOnceForTheWholeOperation() throws Exception {
         Path source = Files.createDirectories(tempDir.resolve("in").resolve("Tree"));
         Files.createDirectories(source.resolve("sub"));
         Files.writeString(source.resolve("a.txt"), "a");
@@ -139,8 +139,7 @@ class MetadataLoadCountTest {
 
         files.importFolder(source, root, (a, b, c, d) -> { });
 
-        // 1 preflight + 1 per folder (2) + 2 per file (3): the per-file transaction model of spec 14.2.
-        assertEquals(1 + 2 + 2 * 3, counting.loads.get());
+        assertEquals(1, counting.loads.get());
     }
 
     private ManifestEntry trashed(String name) throws Exception {

@@ -9,6 +9,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.fabianrodas.models.ManifestEntry;
 import com.fabianrodas.models.UserManifest;
+import com.fabianrodas.models.VaultContext;
+import com.fabianrodas.repositories.BlobRepository;
 import com.fabianrodas.repositories.ManifestRepository;
 import com.fabianrodas.repositories.VaultStorageException;
 import java.io.IOException;
@@ -74,6 +76,151 @@ class FolderImportTest {
                 "Photos/2024/b.txt", "FILE", "Photos/2024/summer", "FOLDER",
                 "Photos/2024/summer/c.txt", "FILE", "Photos/empty", "FOLDER"
         ), tree());
+    }
+
+    @Test
+    void folderImportSavesOncePer64LogicalMutations() throws Exception {
+        CountingManifests counting = new CountingManifests(vault.vault);
+        FileService counted = vault.files(alice, counting);
+
+        for (int mutations : List.of(64, 65, 130)) {
+            Path input = inputTree("Batch" + mutations, mutations - 1);
+            counting.loads.set(0);
+            counting.saves.set(0);
+
+            FileService.FolderImport result = counted.importFolder(input, root, (a, b, c, d) -> { });
+
+            assertEquals((mutations + 63) / 64, counting.saves.get(), mutations + " logical mutations");
+            assertEquals(1, counting.loads.get(), mutations + " logical mutations");
+            assertEquals(mutations, result.foldersCreated() + result.filesImported());
+        }
+    }
+
+    @Test
+    void manyEmptyFoldersAreAlsoCommittedInBoundedBatches() throws Exception {
+        Path input = Files.createDirectories(tempDir.resolve("inputs").resolve("EmptyTree"));
+        for (int i = 0; i < 129; i++) {
+            Files.createDirectories(input.resolve(String.format(Locale.ROOT, "empty-%03d", i)));
+        }
+        CountingManifests counting = new CountingManifests(vault.vault);
+        FileService counted = vault.files(alice, counting);
+
+        FileService.FolderImport result = counted.importFolder(input, root, (a, b, c, d) -> { });
+
+        assertEquals(130, result.foldersCreated());
+        assertEquals(0, result.filesImported());
+        assertEquals(3, counting.saves.get());
+    }
+
+    @Test
+    void aFailedFirstBatchDoesNotExposeItsFoldersOrFiles() throws Exception {
+        Path input = inputTree("FailedFirst", 63);
+        ManifestRepository failsWhenFileEntriesAreSaved = new ManifestRepository(vault.vault) {
+            @Override
+            public void save(UserManifest manifest, UUID manifestId, byte[] key) throws VaultStorageException {
+                if (manifest.getEntries().stream().anyMatch(entry -> entry.getBlobId() != null)) {
+                    throw new VaultStorageException(VaultStorageException.Reason.IO);
+                }
+                super.save(manifest, manifestId, key);
+            }
+        };
+
+        FileService.FolderImport result = vault.files(alice, failsWhenFileEntriesAreSaved)
+                .importFolder(input, root, (a, b, c, d) -> { });
+
+        assertTrue(result.stopped());
+        assertEquals(0, result.foldersCreated());
+        assertEquals(0, result.filesImported());
+        assertEquals(FileServiceException.Reason.STORAGE, result.failures().get(0).reason());
+        assertEquals(List.of(), files.listChildren(root));
+        assertEquals(List.of(), vault.blobFiles());
+    }
+
+    @Test
+    void aFailedLaterBatchKeepsOnlyEarlierCommittedEntriesVisible() throws Exception {
+        Path input = inputTree("FailedLater", 65);
+        ManifestRepository failsSecondSave = failOnSave(vault.vault, 2);
+
+        FileService.FolderImport result = vault.files(alice, failsSecondSave)
+                .importFolder(input, root, (a, b, c, d) -> { });
+        FileService reopened = vault.files(alice);
+        List<ManifestEntry> visible = reopened.listChildren(root);
+
+        assertTrue(result.stopped());
+        assertEquals(1, result.foldersCreated());
+        assertEquals(63, result.filesImported());
+        assertEquals(FileServiceException.Reason.STORAGE, result.failures().get(0).reason());
+        List<String> firstFolderChildren = visible.isEmpty() ? List.of()
+                : reopened.listChildren(visible.get(0).getEntryId()).stream()
+                        .map(ManifestEntry::getName).toList();
+        assertEquals(64, countEntries(reopened, visible), "top-level="
+                + visible.stream().map(ManifestEntry::getName).toList()
+                + ", first-folder-children=" + firstFolderChildren
+                + ", blob-files=" + vault.blobFiles().size());
+        assertEquals(63, vault.blobFiles().size());
+        assertTrue(visible.stream().filter(entry -> entry.getBlobId() != null)
+                .allMatch(entry -> Files.exists(vault.blob(entry))));
+    }
+
+    @Test
+    void aCleanupFailureMayLeaveAnOrphanButNeverACommittedReference() throws Exception {
+        Path input = inputTree("Orphan", 1);
+        ManifestRepository failsWhenFileEntriesAreSaved = new ManifestRepository(vault.vault) {
+            @Override
+            public void save(UserManifest manifest, UUID manifestId, byte[] key) throws VaultStorageException {
+                if (manifest.getEntries().stream().anyMatch(entry -> entry.getBlobId() != null)) {
+                    throw new VaultStorageException(VaultStorageException.Reason.IO);
+                }
+                super.save(manifest, manifestId, key);
+            }
+        };
+        BlobRepository cannotDelete = new BlobRepository() {
+            @Override
+            public void delete(Path vaultRoot, UUID blobId) throws IOException {
+                throw new IOException("simulated cleanup failure");
+            }
+        };
+
+        FileService.FolderImport result = vault.files(alice, failsWhenFileEntriesAreSaved, cannotDelete)
+                .importFolder(input, root, (a, b, c, d) -> { });
+        UserManifest persisted = vault.manifest(alice);
+
+        assertTrue(result.stopped());
+        assertEquals(1, vault.blobFiles().size());
+        UUID orphan = UUID.fromString(vault.blobFiles().get(0).getFileName().toString().replace(".edv", ""));
+        assertTrue(persisted.getEntries().stream().noneMatch(entry -> orphan.equals(entry.getBlobId())));
+        assertEquals(List.of(), files.listChildren(root));
+    }
+
+    @Test
+    void nestedAndEmptyFoldersRemainCorrectAcrossABatchBoundary() throws Exception {
+        for (int i = 0; i < 63; i++) {
+            Files.createDirectories(source.resolve(String.format(Locale.ROOT, "empty-%03d", i)));
+        }
+        write("z-nested/inner/kept.txt", "content");
+
+        FileService.FolderImport result = files.importFolder(source, root, (a, b, c, d) -> { });
+
+        assertEquals(66, result.foldersCreated());
+        assertEquals(1, result.filesImported());
+        ManifestEntry photos = child(root, "Photos");
+        ManifestEntry nested = child(photos.getEntryId(), "z-nested");
+        ManifestEntry inner = child(nested.getEntryId(), "inner");
+        assertEquals("FILE", child(inner.getEntryId(), "kept.txt").getKind().name());
+        assertEquals("FOLDER", child(photos.getEntryId(), "empty-062").getKind().name());
+    }
+
+    @Test
+    void singleFileImportStillSavesImmediately() throws Exception {
+        CountingManifests counting = new CountingManifests(vault.vault);
+        FileService counted = vault.files(alice, counting);
+        Path oneFile = Files.writeString(tempDir.resolve("one.txt"), "one");
+        counting.saves.set(0);
+
+        ManifestEntry imported = counted.importFile(oneFile, root);
+
+        assertEquals(1, counting.saves.get());
+        assertEquals(imported.getEntryId(), counted.listChildren(root).get(0).getEntryId());
     }
 
     @Test
@@ -356,40 +503,44 @@ class FolderImportTest {
         assertEquals(List.of(2L, 2L, 8L, 8L), List.of(last[0], last[1], last[2], last[3]));
     }
 
-    @Test
-    void aVaultWriteFailureStopsTheImportAndKeepsWhatWasCommitted() throws Exception {
-        write("a.txt", "a");
-        write("b.txt", "b");
-        write("c.txt", "c");
-        ManifestRepository failsFourthSave = new ManifestRepository(vault.vault) {
-            private int saves;
-
-            @Override
-            public void save(UserManifest manifest, UUID manifestId, byte[] key) throws VaultStorageException {
-                if (++saves == 4) {
-                    throw new VaultStorageException(VaultStorageException.Reason.IO);
-                }
-
-                super.save(manifest, manifestId, key);
-            }
-        };
-
-        FileService.FolderImport result = vault.files(alice, failsFourthSave)
-                .importFolder(source, root, (a, b, c, d) -> { });
-
-        assertTrue(result.stopped());
-        assertEquals(2, result.filesImported());
-        assertEquals(FileServiceException.Reason.STORAGE, result.failures().get(0).reason());
-        assertEquals(Map.of("Photos", "FOLDER", "Photos/a.txt", "FILE", "Photos/b.txt", "FILE"), tree());
-        assertEquals(2, vault.blobFiles().size());
-    }
-
     // ------------------------------------------------------------ helpers
 
     private Path write(String relative, String content) throws IOException {
         Path file = source.resolve(relative);
         Files.createDirectories(file.getParent());
         return Files.writeString(file, content, UTF_8);
+    }
+
+    private Path inputTree(String name, int fileCount) throws IOException {
+        Path input = Files.createDirectories(tempDir.resolve("inputs").resolve(name));
+        for (int i = 0; i < fileCount; i++) {
+            Files.write(input.resolve(String.format(Locale.ROOT, "file-%03d.bin", i)), new byte[]{(byte) i});
+        }
+        return input;
+    }
+
+    private static ManifestRepository failOnSave(VaultContext vault, int failureNumber) {
+        return new ManifestRepository(vault) {
+            private int saves;
+
+            @Override
+            public void save(UserManifest manifest, UUID manifestId, byte[] key) throws VaultStorageException {
+                if (++saves == failureNumber) {
+                    throw new VaultStorageException(VaultStorageException.Reason.IO);
+                }
+                super.save(manifest, manifestId, key);
+            }
+        };
+    }
+
+    private static int countEntries(FileService service, List<ManifestEntry> entries) throws Exception {
+        int count = entries.size();
+        for (ManifestEntry entry : entries) {
+            if (entry.getKind() == com.fabianrodas.models.ManifestEntryKind.FOLDER) {
+                count += countEntries(service, service.listChildren(entry.getEntryId()));
+            }
+        }
+        return count;
     }
 
     private static void junction(Path link, Path target) throws Exception {
