@@ -8,11 +8,11 @@ Updated after every task. Git history and test output are the record; this is th
 |---|---|
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
-| current phase | 04 - Windows packaging and CI |
-| current task | T22 Step 6: H2 history and push gate; `FORMAT_V1_READY` is DONE |
-| last completed commit | T22 review-fix commit `9f8aa01` (`build: clean up failed package smoke checks`) |
-| tests last run | T22 `mvn -B clean verify` (2026-10-05, 4 min 8 s); final verifier changes then passed `ReleaseMetadataTest`, PowerShell parsing, and portable launch check |
-| test result | BUILD SUCCESS - 406 run, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
+| current phase | 05 - Cleanup, documentation, release gates, and tagging |
+| current task | T24 documentation; H2 still gates history rewrite, push, merge, and tags |
+| last completed commit | T23 dead-code audit and cleanup (recorded in this revision) |
+| tests last run | T23 `mvn -B clean verify` (2026-10-05, 3 min 4 s) |
+| test result | BUILD SUCCESS - 406 tests, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
 
 ## Release states
 
@@ -47,6 +47,7 @@ Updated after every task. Git history and test output are the record; this is th
 | folder-import benchmark with 10,000 existing manifest entries | 1,000 incoming x 4 KiB: 26,740 ms / 16 saves; 10,000 incoming x 4 KiB: 137,763 ms / 157 saves. |
 | folder-import benchmark environment | Windows build 10.0.26200.9457, NTFS, Java 21.0.2 64-bit HotSpot, Intel64 Family 6 Model 154 Stepping 3, 16 logical processors. CPU marketing name was unavailable in the sandbox. The handoff-reported scaling (1,000 about 36 s through 8,000 about 910 s) has no local benchmark artifact in this checkout. |
 | Format 1 conformance vectors | PASS - 2026-10-05; public fixtures under `test-vectors/format-v1/`, independent Argon2id/AES generation, repository/blob/name tests pass |
+| dead-code/resource audit (T23) | PASS - all production classes, FXML/CSS resources, and CSS selectors have references; removed only unused `assertNull` static import from `FileServiceTest`; other heuristic member matches are initializer calls, and `FxTestSupport.fireAndAnswerPopup` is used by `UiFlowTest`. Remaining pattern matches are intentional: `users.json` packaging deny-list, `1.0-SNAPSHOT` regression assertion, and `System.exit` in the isolated streaming probe. |
 | host-path persistence and compatibility contract | PASS - T19C; `docs/COMPATIBILITY.md`, `Format1PathPersistenceTest`, and logical-name tests pass on Windows 11 / NTFS / Java 21.0.2; no persistent model serializes a host `Path`; no format ruling required |
 | folder-import link/lock tests (T15) | all ran, none skipped, on Windows 11 / NTFS / JDK 21.0.2: junction (outside the tree and a loop back into it), symbolic link (file and directory — created because the build shell was elevated; Developer Mode is off, so a non-elevated run skips this one test), locked file, Kelvin-sign clash (file and folder), differently-cased vault path. Fix round 1, also all ran: vault reached through the `\\localhost\C$` share alias (reachable here; skips cleanly where the administrative share is not), folder swapped for a junction after the scan, source that is a junction with a missing target |
 | history cleanup (`data/users.json`) | local copy deleted; still in history and in origin/main tip — decision at H2 |

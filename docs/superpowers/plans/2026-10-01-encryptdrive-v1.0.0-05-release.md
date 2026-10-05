@@ -24,7 +24,7 @@ See the master plan. No tag before T28's preconditions; never move or replace a 
 
 **Interfaces:** none.
 
-- [ ] **Step 1: Classes** — every production class is referenced outside its own file (Java or FXML `fx:controller`):
+- [x] **Step 1: Classes** — every production class is referenced outside its own file (Java or FXML `fx:controller`):
 
 ```bash
 for f in $(git ls-files 'src/main/java/*.java' | grep -v module-info); do
@@ -35,7 +35,7 @@ done
 ```
 Expected: no output.
 
-- [ ] **Step 2: FXML and CSS files**
+- [x] **Step 2: FXML and CSS files**
 
 ```bash
 for f in src/main/resources/com/fabianrodas/encryptdrive/*.fxml; do
@@ -49,7 +49,7 @@ done
 ```
 Expected: no output.
 
-- [ ] **Step 3: CSS selectors** — every `.class` and `#id` in each stylesheet appears in an FXML `styleClass`/`id`/`fx:id` or a Java string:
+- [x] **Step 3: CSS selectors** — every `.class` and `#id` in each stylesheet appears in an FXML `styleClass`/`id`/`fx:id` or a Java string:
 
 ```bash
 for css in src/main/resources/com/fabianrodas/css/*.css; do
@@ -62,7 +62,7 @@ done
 ```
 Expected: no output, or a list to remove (each removal re-checked visually in `UiLayoutTest` screens).
 
-- [ ] **Step 4: Unused imports and private members**
+- [x] **Step 4: Unused imports and private members**
 
 ```bash
 for f in $(git ls-files 'src/*.java'); do
@@ -76,12 +76,12 @@ done
 ```
 Expected: no output; investigate each hit (FXML-injected `@FXML` fields count as used if their `fx:id` exists in the FXML).
 
-- [ ] **Step 5: Leftover patterns**
+- [x] **Step 5: Leftover patterns**
 
 Run: `git grep -nE "TODO|FIXME|XXX|HACK|System\.exit|printStackTrace|1\.0-SNAPSHOT|users\.json" -- src scripts .github ':!docs/superpowers'`
-Expected: no output except `users.json` in `verify-package.ps1`'s forbidden-file list.
+Expected: no unexplained output. Keep `users.json` in `verify-package.ps1`'s forbidden-file list, the `1.0-SNAPSHOT` regression assertion in `ReleaseMetadataTest`, and `System.exit` in the isolated `StreamingMemoryProbe` child process.
 
-- [ ] **Step 6: Remove what was proven unused, verify, commit**
+- [x] **Step 6: Remove what was proven unused, verify, commit**
 
 Run: `mvn -B clean verify` → BUILD SUCCESS. If nothing was found, skip the commit and record "audit clean" in the ledger.
 
