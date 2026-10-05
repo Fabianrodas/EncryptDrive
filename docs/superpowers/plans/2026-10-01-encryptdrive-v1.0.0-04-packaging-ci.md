@@ -626,168 +626,27 @@ git commit -m "build: verify portable and installer artifacts end to end" -m "Co
 
 **Security:** `build.yml` keeps `contents: read`; only `release.yml` has `contents: write`, only for tags, and only creates drafts. The tag must be annotated, on `main`, and match the pom version.
 
-- [ ] **Step 1: `build.yml`**
+- [x] **Step 1: `build.yml`**
 
-```yaml
-name: Build
+- Pushes to every branch and pull requests run `mvn -B clean verify` on Windows with Java 21.
+- A dependent package job downloads WiX 3.14.1, checks SHA-256 `6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31`, builds with `scripts/build-release.ps1 -SkipTests`, and runs `scripts/verify-package.ps1 -Launch -Install`.
+- The package job uploads `target/release/` as `encryptdrive-windows` for 14 days.
+- Actions use the current official major tags: checkout v7, setup-java v6, upload-artifact v7.
 
-on:
-  push:
-    branches: ["**"]
-  pull_request:
+- [x] **Step 2: `release.yml`**
 
-permissions:
-  contents: read
+- Runs only for `v*` tags and grants `contents: write` only to the draft job; the regular build workflow remains read-only.
+- Passes GitHub-provided values through step environment variables. It accepts only `vMAJOR.MINOR.PATCH` and `vMAJOR.MINOR.PATCH-rc.N`, requires an annotated tag, confirms the fetched tag still resolves to the triggering commit, confirms that commit is on `main`, and requires an exact match with `pom.xml`.
+- Runs Maven verification, installs the same checksum-verified WiX archive, builds and verifies release artifacts, takes notes from the matching changelog entry and T24 footer, then creates a draft with the prerelease flag for RC tags. Publishing remains manual.
+- `docs/testing/release-notes-footer.md` is created in T24 (checksum verification + unsigned-publisher note). Until T24 lands, no tag can exist, so the workflow is never triggered early.
 
-jobs:
-  verify:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v5
+- [x] **Step 3: Static checks**
 
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: maven
-
-      # Tests create throwaway vaults in temporary folders; nothing is uploaded.
-      - name: Verify
-        run: mvn -B clean verify
-
-  package:
-    needs: verify
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: maven
-
-      - name: Install WiX 3
-        shell: pwsh
-        run: |
-          $zip = Join-Path $env:RUNNER_TEMP "wix-binaries.zip"
-          Invoke-WebRequest "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" -OutFile $zip
-          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne "<SHA-256 recorded in the ledger at T20 Step 1>") { throw "unexpected WiX download" }
-          $wix = Join-Path $env:RUNNER_TEMP "wix"
-          Expand-Archive $zip -DestinationPath $wix
-          Add-Content $env:GITHUB_PATH $wix
-
-      - name: Build release artifacts
-        shell: pwsh
-        run: ./scripts/build-release.ps1 -SkipTests
-
-      - name: Verify release artifacts
-        shell: pwsh
-        run: ./scripts/verify-package.ps1 -Launch -Install
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: encryptdrive-windows
-          path: target/release/
-          retention-days: 14
-```
-(Replace the angle-bracket text with the actual hash from the ledger before committing; the commit must contain the real 64-hex value.)
-
-- [ ] **Step 2: `release.yml`**
-
-```yaml
-name: Release
-
-on:
-  push:
-    tags: ["v*"]
-
-permissions:
-  contents: write
-
-jobs:
-  draft:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: maven
-
-      - name: Check the tag
-        id: tag
-        shell: pwsh
-        run: |
-          $tag = "${{ github.ref_name }}"
-          # actions/checkout stores the pushed tag as a plain commit ref; fetch the real tag object.
-          git fetch --force origin "refs/tags/${tag}:refs/tags/${tag}"
-          if ($LASTEXITCODE -ne 0) { throw "could not fetch $tag" }
-          if ((git cat-file -t "refs/tags/$tag") -ne "tag") { throw "$tag must be an annotated tag" }
-          git fetch origin main
-          git merge-base --is-ancestor HEAD origin/main
-          if ($LASTEXITCODE -ne 0) { throw "$tag does not point to a commit on main" }
-          $version = ([xml](Get-Content pom.xml)).project.version
-          if ($tag -notmatch '^v(\d+\.\d+\.\d+)(-(rc\.\d+))?$' -or $Matches[1] -ne $version) {
-            throw "$tag does not match the project version $version"
-          }
-          "channel=$($Matches[3])" >> $env:GITHUB_OUTPUT
-          "prerelease=$(if ($Matches[3]) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
-          "version=$version" >> $env:GITHUB_OUTPUT
-
-      - name: Verify
-        run: mvn -B clean verify
-
-      - name: Install WiX 3
-        shell: pwsh
-        run: |
-          $zip = Join-Path $env:RUNNER_TEMP "wix-binaries.zip"
-          Invoke-WebRequest "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" -OutFile $zip
-          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne "<same hash as build.yml>") { throw "unexpected WiX download" }
-          $wix = Join-Path $env:RUNNER_TEMP "wix"
-          Expand-Archive $zip -DestinationPath $wix
-          Add-Content $env:GITHUB_PATH $wix
-
-      - name: Build release artifacts
-        shell: pwsh
-        run: ./scripts/build-release.ps1 -Release -SkipTests -Channel "${{ steps.tag.outputs.channel }}"
-
-      - name: Verify release artifacts
-        shell: pwsh
-        run: ./scripts/verify-package.ps1 -Channel "${{ steps.tag.outputs.channel }}" -Launch -Install
-
-      - name: Release notes
-        shell: pwsh
-        run: |
-          $version = "${{ steps.tag.outputs.version }}"
-          $section = ((Get-Content CHANGELOG.md -Raw) -split '(?m)^## ') | Where-Object { $_.StartsWith("[$version]") }
-          if (-not $section) { throw "CHANGELOG.md has no section for $version" }
-          $notes = "## " + $section.Trim() + "`n`n" + (Get-Content docs/testing/release-notes-footer.md -Raw)
-          Set-Content release-notes.md $notes -Encoding utf8
-
-      # Always a draft: it is published by hand after the artifact smoke test.
-      - name: Draft the GitHub release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $files = Get-ChildItem "target/release/${{ steps.tag.outputs.version }}" -File | ForEach-Object FullName
-          $flags = @("--draft", "--verify-tag", "--title", "EncryptDrive ${{ github.ref_name }}", "--notes-file", "release-notes.md")
-          if ("${{ steps.tag.outputs.prerelease }}" -eq "true") { $flags += "--prerelease" }
-          gh release create "${{ github.ref_name }}" @files @flags
-```
-`docs/testing/release-notes-footer.md` is created in T24 (checksum verification + unsigned-publisher note). Until T24 lands, no tag can exist, so the workflow is never triggered early.
-
-- [ ] **Step 3: Static checks**
-
-Run: `python -c "import yaml,sys; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" .github/workflows/build.yml .github/workflows/release.yml` (install PyYAML with `python -m pip install --user pyyaml` if missing).
-Expected: no output (valid YAML). Run `mvn -B -q test "-Dtest=ReleaseMetadataTest"` → PASS (no hard-coded version in workflows).
+Recorded: PyYAML parsed both workflow files successfully; `mvn -B -q test "-Dtest=ReleaseMetadataTest"` passed (3 tests; no hard-coded application version).
 
 - [ ] **Step 4: Full suite + commit**
+
+Recorded: `mvn -B clean verify` → BUILD SUCCESS; 406 tests, 0 failures, 0 errors, 3 opt-in skips, 4 min 1 s. Commit is pending.
 
 Run: `mvn -B clean verify` → BUILD SUCCESS.
 

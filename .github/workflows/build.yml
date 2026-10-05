@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
 
 permissions:
@@ -11,11 +11,10 @@ permissions:
 jobs:
   verify:
     runs-on: windows-latest
-
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -24,3 +23,40 @@ jobs:
       # Tests create throwaway vaults in temporary folders; nothing is uploaded.
       - name: Verify
         run: mvn -B clean verify
+
+  package:
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Install WiX 3
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "wix-binaries.zip"
+          Invoke-WebRequest "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" -OutFile $zip
+          $expectedHash = "6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31"
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne $expectedHash) { throw "unexpected WiX download" }
+          $wix = Join-Path $env:RUNNER_TEMP "wix"
+          Expand-Archive $zip -DestinationPath $wix
+          Add-Content $env:GITHUB_PATH $wix
+
+      - name: Build release artifacts
+        shell: pwsh
+        run: ./scripts/build-release.ps1 -SkipTests
+
+      - name: Verify release artifacts
+        shell: pwsh
+        run: ./scripts/verify-package.ps1 -Launch -Install
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: encryptdrive-windows
+          path: target/release/
+          retention-days: 14

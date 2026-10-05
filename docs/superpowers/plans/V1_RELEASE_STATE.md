@@ -9,9 +9,9 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 04 - Windows packaging and CI |
-| current task | T22 Step 1: CI packaging job and tag release workflow; `FORMAT_V1_READY` is DONE |
+| current task | T22 Step 4: full verification and commit; `FORMAT_V1_READY` is DONE |
 | last completed commit | T21 (this commit; see HEAD) |
-| tests last run | T21 `mvn -B clean verify` (2026-10-05, 2 min 51 s) |
+| tests last run | T22 `mvn -B clean verify` (2026-10-05, 4 min 1 s) |
 | test result | BUILD SUCCESS - 406 run, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
 
 ## Release states
@@ -21,7 +21,7 @@ Updated after every task. Git history and test output are the record; this is th
 | FORMAT_V1_READY | DONE - T19A, T19B, and T19C verified and committed; all format and portability tests pass; clean full verification passed; benchmarks recorded; working tree clean after this commit |
 | IMPLEMENTATION_COMPLETE | TODO |
 | AUTOMATED_GATES_COMPLETE | TODO |
-| PACKAGING_COMPLETE | DONE - T20 builds both artifacts; T21 verifies checksums, archive contents, no-Java launch, silent install/uninstall, shortcut, and sentinel preservation |
+| PACKAGING_COMPLETE | TODO - local T20/T21 build and end-to-end checks pass; mark DONE only after both CI jobs pass for the pushed branch head |
 | REPOSITORY_SECURITY_READY | TODO |
 | RC_CREATED | TODO |
 | MANUAL_VALIDATION_COMPLETE | TODO |
