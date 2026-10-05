@@ -117,16 +117,16 @@ mvn javafx:run
 mvn clean verify
 ```
 
-Build the portable Windows app (produces `target/dist/EncryptDrive/EncryptDrive.exe`
-with its own Java runtime), then check it:
+Build the portable and installer Windows editions with their own Java runtime.
+Artifacts are written to `target/release/<version>/`.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1
-powershell -ExecutionPolicy Bypass -File scripts/verify-portable-package.ps1 -Launch
+powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1
 ```
 
-Copy the whole `target/dist/EncryptDrive` folder to use it elsewhere, for
-example onto a USB drive next to your vault.
+The portable ZIP can be moved to another directory or a USB drive. Choose the
+vault location from inside EncryptDrive; installing or moving the app does not
+move the vault.
 
 ### Tests
 

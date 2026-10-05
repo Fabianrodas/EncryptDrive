@@ -33,7 +33,9 @@ See the master plan. Upgrade UUID `b1c326c7-6ed8-4052-868d-459a9cc54cd9` never c
 
 **Security:** signing only when `ENCRYPTDRIVE_SIGN_CERT_SHA1` names a certificate already in the user's store; nothing secret is read from files. The installer is per-user (no admin unless the user picks a protected folder).
 
-- [ ] **Step 1: Install WiX 3.14 for this user (no admin) and record its hash**
+- [x] **Step 1: Install WiX 3.14 for this user (no admin) and record its hash**
+
+Installed WiX 3.14.1.8722 from the official `wix314-binaries.zip`; SHA-256 is recorded in `V1_RELEASE_STATE.md`. `candle.exe` and `light.exe` both print the expected version banner, and .NET Framework 3.5 is present.
 
 ```powershell
 $wix = "$env:USERPROFILE\Tools\wix314"
@@ -47,7 +49,9 @@ light.exe -? | Select-Object -First 1
 ```
 Expected: both print a WiX 3.14 banner. Record the SHA-256 in the ledger (T22 pins it in CI). If the URL is gone, take `wix314-binaries.zip` from the newest 3.14.x release on `https://github.com/wixtoolset/wix3/releases`. If `candle.exe` reports a missing .NET Framework 3.5, stop at the **conditional environment gate**: ask the user to enable "Windows Features → .NET Framework 3.5 (includes .NET 2.0 and 3.0)" (administrator), then resume here. PACKAGING_COMPLETE stays BLOCKED meanwhile.
 
-- [ ] **Step 2: Generate the icon once (Windows PowerShell 5.1)**
+- [x] **Step 2: Generate the icon once (Windows PowerShell 5.1)**
+
+Generated `packaging/windows/EncryptDrive.ico` with 256, 48, 32, and 16 px PNG-compressed entries from `logo.png`; inspected the 256 px entry against the source logo.
 
 ```powershell
 Add-Type -AssemblyName System.Drawing
@@ -80,7 +84,7 @@ $writer.Close(); $logo.Dispose()
 ```
 Expected: `packaging/windows/EncryptDrive.ico` exists (PNG-compressed ICO, 4 sizes). Open it in Explorer's preview once to confirm it shows the logo.
 
-- [ ] **Step 3: Write the failing tests** (add to `ReleaseMetadataTest`)
+- [x] **Step 3: Write the failing tests** (add to `ReleaseMetadataTest`)
 
 ```java
     @Test
@@ -152,12 +156,12 @@ Expected: `packaging/windows/EncryptDrive.ico` exists (PNG-compressed ICO, 4 siz
 ```
 (imports `assertFalse`, `assertNotEquals`, `java.util.*`, `java.util.stream.Stream`, `org.junit.jupiter.api.condition.EnabledOnOs`, `org.junit.jupiter.api.condition.OS`).
 
-- [ ] **Step 4: Run to confirm failure**
+- [x] **Step 4: Run to confirm failure**
 
 Run: `mvn -B -q test "-Dtest=ReleaseMetadataTest"`
-Expected: `releaseNamesDeriveFromTheProjectVersionAndChannel` FAILS (script missing, non-zero exit); `scriptsAndWorkflowsHardCodeNoApplicationVersion` PASSES only if T3 already removed the literals (it pins that).
+Observed: `releaseNamesDeriveFromTheProjectVersionAndChannel` failed because `scripts/build-release.ps1` did not exist; the no-hardcoded-version and app-version tests passed.
 
-- [ ] **Step 5: Write `scripts/build-release.ps1`**
+- [x] **Step 5: Write `scripts/build-release.ps1`**
 
 ```powershell
 <#
@@ -291,7 +295,7 @@ Get-ChildItem $out -File | Where-Object Name -ne "SHA256SUMS.txt" | Sort-Object 
 Write-Host "Release artifacts in $out"
 ```
 
-- [ ] **Step 6: Remove the old script and fix the README build section**
+- [x] **Step 6: Remove the old script and fix the README build section**
 
 ```bash
 git rm scripts/package-windows.ps1
@@ -302,11 +306,13 @@ powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1
 ```
 and the sentence about `target/dist/EncryptDrive` with "Artifacts are written to `target/release/<version>/`." (T21 adds the verify line; T24 rewrites the section.)
 
-- [ ] **Step 7: Run the tests, then a real build**
+- [x] **Step 7: Run the tests, then a real build**
 
 Run: `mvn -B -q test "-Dtest=ReleaseMetadataTest"` → PASS.
 Run (with WiX on PATH): `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1`
 Expected: BUILD SUCCESS, then `target/release/1.0.0-SNAPSHOT/` contains exactly `EncryptDrive-1.0.0-SNAPSHOT-Setup.exe`, `EncryptDrive-1.0.0-SNAPSHOT-Windows-Portable.zip`, `SHA256SUMS.txt`.
+
+Observed: the focused tests and real build passed. `target/release/1.0.0-SNAPSHOT/` contains exactly the setup EXE (37,786,112 bytes), portable ZIP (35,804,244 bytes), and SHA256SUMS.txt. The app-image top level is `app`, `runtime`, and `EncryptDrive.exe`; `app/EncryptDrive.cfg` names the expected module and contains no machine JDK or user path. Both package checksums are in the generated SHA256SUMS.txt.
 
 Inspect and record in the ledger:
 ```powershell
@@ -317,14 +323,16 @@ Get-Content target/release/1.0.0-SNAPSHOT/SHA256SUMS.txt
 ```
 Expected: top level `app`, `runtime`, `EncryptDrive.exe` (note any other item for T21's allowlist); the `.cfg` names the module and contains no `C:\Program Files\Java` or user path.
 
-- [ ] **Step 8: Full suite + commit**
+- [x] **Step 8: Full suite + commit**
 
-Run: `mvn -B clean verify` → BUILD SUCCESS.
+Final `mvn -B clean verify`: BUILD SUCCESS, 406 tests, 0 failures, 0 errors, 3 opt-in skips, 2 min 39 s.
 
 ```bash
 git add packaging/windows/EncryptDrive.ico scripts/build-release.ps1 README.md src/test/java/com/fabianrodas/encryptdrive/ReleaseMetadataTest.java docs/superpowers/plans/V1_RELEASE_STATE.md
 git commit -m "build: produce versioned portable and installer artifacts" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
+
+Committed as `build: produce versioned portable and installer artifacts`.
 
 **Acceptance:** one script produces both artifacts and checksums with names derived from the pom (+ channel); numeric Windows version; stable upgrade UUID; per-user installer with directory chooser, Start Menu group and optional desktop shortcut; signing hook without secrets; no hard-coded versions; build green.
 

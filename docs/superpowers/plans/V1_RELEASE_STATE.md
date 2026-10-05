@@ -9,10 +9,10 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 04 - Windows packaging and CI |
-| current task | T20 Step 1 ready; Phase 03A complete and `FORMAT_V1_READY` is DONE |
-| last completed commit | T19C (this commit; see HEAD) |
-| tests last run | `mvn -B clean verify` (2026-10-05, 2 min 26 s) |
-| test result | BUILD SUCCESS - 404 run, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
+| current task | T21 Step 1 ready; T20 packaging build committed; `FORMAT_V1_READY` is DONE |
+| last completed commit | T20 (this commit; see HEAD) |
+| tests last run | final `mvn -B clean verify` (2026-10-05, 2 min 39 s) |
+| test result | BUILD SUCCESS - 406 run, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
 
 ## Release states
 
@@ -34,9 +34,10 @@ Updated after every task. Git history and test output are the record; this is th
 | Item | Status |
 |---|---|
 | 1 GiB streaming test (`-Xmx256m`) | PASS 2026-10-04 at fad2753 plus the T19 tests (the T19 commit): `mvn -B test "-Dtest=LargeFileStreamingTest" "-Dencryptdrive.largeFileCheck=true" "-DargLine=-Xmx256m"` → Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, 104.9 s (crypto-only and full vault import/export). Development evidence: run again on the release commit before any RC tag (spec 21.7) |
-| portable build | old app-image script only (jar name and app version now derived from the pom; replaced in T20) |
-| installer build | TODO — WiX not installed locally (.NET Framework 3.5 present; no-admin binaries planned in T20) |
-| WiX 3.14 binaries SHA-256 | (record at T20 Step 1) |
+| portable build | PASS 2026-10-05: versioned ZIP is 35,804,244 bytes; app-image contains `app`, `runtime`, and `EncryptDrive.exe`; `EncryptDrive.cfg` names the app module and contains no machine JDK or user path |
+| installer build | PASS 2026-10-05: versioned setup EXE is 37,786,112 bytes, produced by `jpackage` with WiX 3.14.1.8722; .NET Framework 3.5 is present |
+| package checksums | `SHA256SUMS.txt` generated: setup `6ffa1f1272678b9cc8ac4172704a5a72257afa96a05774c2925b93a79f6c1f1d`; portable `3c8a411ead375bfb332bf828f3074049b379281ed49bb93672562f6e551a4ff3` |
+| WiX 3.14.1 binaries ZIP SHA-256 | `6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31` (official `wix314-binaries.zip`; candle/light 3.14.1.8722 verified locally) |
 | folder-import benchmark (1,000 x 4 KiB) | 9,909 ms, 16 manifest saves, on 2026-10-05 after T19A; historical local pre-batch result was 48,467 ms (2026-10-04), so this run is 79.6% faster. The old run's environment was not recorded; compare directionally. |
 | folder-import benchmark (10,000 x 4 KiB) | 157,926 ms, 157 manifest saves, on 2026-10-05 after T19A; no local pre-batch 10,000-file artifact was found. |
 | folder-import benchmark with 10,000 existing manifest entries | 1,000 incoming x 4 KiB: 26,740 ms / 16 saves; 10,000 incoming x 4 KiB: 137,763 ms / 157 saves. |
