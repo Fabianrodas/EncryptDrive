@@ -75,7 +75,7 @@ function Test-Launch([string] $exe) {
                 Where-Object { $_.Id -notin $existingIds -and $_.MainWindowTitle -eq "EncryptDrive" } |
                 Select-Object -First 1
             $launcher.Refresh()
-        } until ($window -or $launcher.HasExited -or (Get-Date) -gt $deadline)
+        } until ($window -or (Get-Date) -gt $deadline)
 
         if ($window) {
             Write-Host "Started without a system Java: $exe"
@@ -87,7 +87,10 @@ function Test-Launch([string] $exe) {
 
         $processIds = @($launcher.Id)
         if ($window) { $processIds += $window.Id }
-        Get-Process -Id $processIds -ErrorAction SilentlyContinue | Stop-Process -ErrorAction SilentlyContinue
+        Get-Process -Id $processIds -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        foreach ($processId in $processIds) {
+            Wait-Process -Id $processId -Timeout 10 -ErrorAction SilentlyContinue
+        }
     } finally {
         $env:JAVA_HOME = $savedHome
         $env:PATH = $savedPath
@@ -103,39 +106,62 @@ function Test-Install([string] $installer) {
     $installDir = Join-Path $scratch "InstalledEncryptDrive"
     $vault = Join-Path $scratch "Sentinel vault"
     $installLog = Join-Path $scratch "installer.log"
+    $installAttempted = $false
     New-Item -ItemType Directory $vault | Out-Null
     Set-Content (Join-Path $vault "keep.txt") "must survive install and uninstall"
     $vaultHash = (Get-FileHash (Join-Path $vault "keep.txt")).Hash
 
-    $arguments = "/qn INSTALLDIR=`"$installDir`" /l*v `"$installLog`""
-    $process = Start-Process $installer -ArgumentList $arguments -PassThru
-    $process.WaitForExit()
-    if ($process.ExitCode -ne 0) {
-        if (Test-Path $installLog) { Get-Content $installLog -Tail 30 | ForEach-Object { Write-Host $_ } }
-        Fail "silent install failed with exit code $($process.ExitCode)"
-        return
+    try {
+        $arguments = "/qn INSTALLDIR=`"$installDir`" /l*v `"$installLog`""
+        $installAttempted = $true
+        $process = Start-Process $installer -ArgumentList $arguments -PassThru
+        $process.WaitForExit()
+        if ($process.ExitCode -ne 0) {
+            if (Test-Path $installLog) { Get-Content $installLog -Tail 30 | ForEach-Object { Write-Host $_ } }
+            Fail "silent install failed with exit code $($process.ExitCode)"
+            return
+        }
+
+        $entry = Get-UninstallEntry
+        if (-not $entry) {
+            Fail "no uninstall entry was registered"
+            return
+        }
+
+        if ($entry.DisplayVersion -ne $numeric) { Fail "uninstall entry version is $($entry.DisplayVersion), expected $numeric" }
+
+        $exe = Join-Path $installDir "EncryptDrive.exe"
+        if (Test-Path $exe) { Test-Launch $exe } else { Fail "EncryptDrive.exe was not installed into $installDir" }
+
+        $menu = Join-Path ([Environment]::GetFolderPath("Programs")) "EncryptDrive"
+        if (-not (Get-ChildItem $menu -Filter *.lnk -ErrorAction SilentlyContinue)) { Fail "no Start Menu shortcut in $menu" }
+
+        $process = Start-Process msiexec.exe -ArgumentList "/x", $entry.PSChildName, "/qn" -PassThru
+        $process.WaitForExit()
+        if ($process.ExitCode -ne 0) { Fail "silent uninstall failed with exit code $($process.ExitCode)" }
+        if (Test-Path $exe) { Fail "EncryptDrive.exe is still present after uninstall" }
+        if (Get-UninstallEntry) { Fail "the uninstall entry is still registered after uninstall" }
+        if ((Get-FileHash (Join-Path $vault "keep.txt")).Hash -ne $vaultHash) { Fail "the vault folder changed during install or uninstall" }
+    } finally {
+        if ($installAttempted) {
+            try {
+                $remainingEntry = Get-UninstallEntry
+                if ($remainingEntry) {
+                    $cleanup = Start-Process msiexec.exe -ArgumentList "/x", $remainingEntry.PSChildName, "/qn" -PassThru
+                    $cleanup.WaitForExit()
+                    if ($cleanup.ExitCode -ne 0) { Fail "cleanup uninstall failed with exit code $($cleanup.ExitCode)" }
+                }
+            } catch {
+                Fail "cleanup uninstall failed: $($_.Exception.Message)"
+            }
+
+            try {
+                if (Test-Path $installDir) { Remove-Item -LiteralPath $installDir -Recurse -Force }
+            } catch {
+                Fail "could not remove temporary install directory: $($_.Exception.Message)"
+            }
+        }
     }
-
-    $entry = Get-UninstallEntry
-    if (-not $entry) {
-        Fail "no uninstall entry was registered"
-        return
-    }
-
-    if ($entry.DisplayVersion -ne $numeric) { Fail "uninstall entry version is $($entry.DisplayVersion), expected $numeric" }
-
-    $exe = Join-Path $installDir "EncryptDrive.exe"
-    if (Test-Path $exe) { Test-Launch $exe } else { Fail "EncryptDrive.exe was not installed into $installDir" }
-
-    $menu = Join-Path ([Environment]::GetFolderPath("Programs")) "EncryptDrive"
-    if (-not (Get-ChildItem $menu -Filter *.lnk -ErrorAction SilentlyContinue)) { Fail "no Start Menu shortcut in $menu" }
-
-    $process = Start-Process msiexec.exe -ArgumentList "/x", $entry.PSChildName, "/qn" -PassThru
-    $process.WaitForExit()
-    if ($process.ExitCode -ne 0) { Fail "silent uninstall failed with exit code $($process.ExitCode)" }
-    if (Test-Path $exe) { Fail "EncryptDrive.exe is still present after uninstall" }
-    if (Get-UninstallEntry) { Fail "the uninstall entry is still registered after uninstall" }
-    if ((Get-FileHash (Join-Path $vault "keep.txt")).Hash -ne $vaultHash) { Fail "the vault folder changed during install or uninstall" }
 }
 
 try {
@@ -200,7 +226,11 @@ try {
         if ($Install -and $failures.Count -eq 0) { Test-Install $setup }
     }
 } finally {
-    Remove-Item $scratch -Recurse -Force -ErrorAction SilentlyContinue
+    for ($attempt = 0; $attempt -lt 5 -and (Test-Path -LiteralPath $scratch); $attempt++) {
+        Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $scratch) { Start-Sleep -Milliseconds 250 }
+    }
+    if (Test-Path -LiteralPath $scratch) { Fail "could not remove verifier temporary directory: $scratch" }
 }
 
 if ($failures.Count -gt 0) {
