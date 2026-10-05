@@ -8,14 +8,17 @@ permissions:
   contents: read
 
 jobs:
-  draft:
+  build:
     runs-on: windows-latest
-    permissions:
-      contents: write
+    outputs:
+      release_tag: ${{ steps.tag.outputs.release_tag }}
+      release_version: ${{ steps.tag.outputs.version }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-java@v6
         with:
@@ -53,6 +56,7 @@ jobs:
           $version = ([xml](Get-Content pom.xml -Raw)).project.version
           if ($tagVersion -ne $version) { throw "$tag does not match the project version $version" }
           $prerelease = if ($channel) { "true" } else { "false" }
+          Add-Content $env:GITHUB_OUTPUT "release_tag=$tag"
           Add-Content $env:GITHUB_OUTPUT "channel=$channel"
           Add-Content $env:GITHUB_OUTPUT "prerelease=$prerelease"
           Add-Content $env:GITHUB_OUTPUT "version=$version"
@@ -95,19 +99,44 @@ jobs:
           $notes = "## " + $section.Trim() + "`n`n" + $footer
           Set-Content release-notes.md $notes -Encoding utf8
 
+      - name: Upload verified release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: encryptdrive-release
+          path: |
+            target/release/
+            release-notes.md
+          if-no-files-found: error
+          retention-days: 1
+
+  draft:
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: encryptdrive-release
+          path: release-bundle
+
       # Always a draft: it is published by hand after the artifact smoke test.
       - name: Draft the GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
-          RELEASE_VERSION: ${{ steps.tag.outputs.version }}
-          IS_PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+          IS_PRERELEASE: ${{ needs.build.outputs.prerelease }}
         run: |
-          $releaseDir = Join-Path "target/release" $env:RELEASE_VERSION
-          $files = Get-ChildItem -LiteralPath $releaseDir -File | Sort-Object Name | ForEach-Object FullName
+          $releaseDir = Join-Path "release-bundle/target/release" $env:RELEASE_VERSION
+          $notes = "release-bundle/release-notes.md"
+          if (-not (Test-Path -LiteralPath $releaseDir) -or -not (Test-Path -LiteralPath $notes)) { throw "release bundle is incomplete" }
+          $files = @(Get-ChildItem -LiteralPath $releaseDir -File | Sort-Object Name | ForEach-Object FullName)
           if (@($files).Count -ne 3) { throw "expected setup, portable ZIP, and checksums in $releaseDir" }
-          $flags = @("--draft", "--verify-tag", "--title", "EncryptDrive $env:RELEASE_TAG", "--notes-file", "release-notes.md")
+          $flags = @("--draft", "--verify-tag", "--title", "EncryptDrive $env:RELEASE_TAG", "--notes-file", $notes)
           if ($env:IS_PRERELEASE -eq "true") { $flags += "--prerelease" }
           gh release create $env:RELEASE_TAG @files @flags
           if ($LASTEXITCODE -ne 0) { throw "could not create draft release" }
