@@ -9,9 +9,9 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 04 - Windows packaging and CI |
-| current task | T21 Step 1 ready; T20 packaging build committed; `FORMAT_V1_READY` is DONE |
-| last completed commit | T20 (this commit; see HEAD) |
-| tests last run | final `mvn -B clean verify` (2026-10-05, 2 min 39 s) |
+| current task | T22 Step 1: CI packaging job and tag release workflow; `FORMAT_V1_READY` is DONE |
+| last completed commit | T21 (this commit; see HEAD) |
+| tests last run | T21 `mvn -B clean verify` (2026-10-05, 2 min 51 s) |
 | test result | BUILD SUCCESS - 406 run, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
 
 ## Release states
@@ -21,7 +21,7 @@ Updated after every task. Git history and test output are the record; this is th
 | FORMAT_V1_READY | DONE - T19A, T19B, and T19C verified and committed; all format and portability tests pass; clean full verification passed; benchmarks recorded; working tree clean after this commit |
 | IMPLEMENTATION_COMPLETE | TODO |
 | AUTOMATED_GATES_COMPLETE | TODO |
-| PACKAGING_COMPLETE | TODO |
+| PACKAGING_COMPLETE | DONE - T20 builds both artifacts; T21 verifies checksums, archive contents, no-Java launch, silent install/uninstall, shortcut, and sentinel preservation |
 | REPOSITORY_SECURITY_READY | TODO |
 | RC_CREATED | TODO |
 | MANUAL_VALIDATION_COMPLETE | TODO |
@@ -34,9 +34,10 @@ Updated after every task. Git history and test output are the record; this is th
 | Item | Status |
 |---|---|
 | 1 GiB streaming test (`-Xmx256m`) | PASS 2026-10-04 at fad2753 plus the T19 tests (the T19 commit): `mvn -B test "-Dtest=LargeFileStreamingTest" "-Dencryptdrive.largeFileCheck=true" "-DargLine=-Xmx256m"` → Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, 104.9 s (crypto-only and full vault import/export). Development evidence: run again on the release commit before any RC tag (spec 21.7) |
-| portable build | PASS 2026-10-05: versioned ZIP is 35,804,244 bytes; app-image contains `app`, `runtime`, and `EncryptDrive.exe`; `EncryptDrive.cfg` names the app module and contains no machine JDK or user path |
+| portable build | PASS 2026-10-05: versioned ZIP is 35,807,920 bytes after T21 normalized ZIP entry names; app-image contains `app`, `runtime`, and `EncryptDrive.exe`; `EncryptDrive.cfg` names the app module and contains no machine JDK or user path |
 | installer build | PASS 2026-10-05: versioned setup EXE is 37,786,112 bytes, produced by `jpackage` with WiX 3.14.1.8722; .NET Framework 3.5 is present |
-| package checksums | `SHA256SUMS.txt` generated: setup `6ffa1f1272678b9cc8ac4172704a5a72257afa96a05774c2925b93a79f6c1f1d`; portable `3c8a411ead375bfb332bf828f3074049b379281ed49bb93672562f6e551a4ff3` |
+| package checksums | Final T21 build `SHA256SUMS.txt`: setup `97f2c4ee32d94fea402bba4a0dce94b861b72a3b989b930b1f3bc83ac8e8679f`; portable `73fbdedb3b1285d7ed29eb4ac1bad6307db9b05e8b44036cbf23675d032b1d33` |
+| release package verifier | PASS 2026-10-05: tampered setup checksum and packaged `users.json` each failed; standard-user `verify-package.ps1 -Launch -Install` completed on the final rebuilt artifacts; portable and installed app launches worked without system Java; installer version, Start Menu shortcut, uninstall, and sentinel vault preservation all verified; installer signature is `NotSigned` |
 | WiX 3.14.1 binaries ZIP SHA-256 | `6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31` (official `wix314-binaries.zip`; candle/light 3.14.1.8722 verified locally) |
 | folder-import benchmark (1,000 x 4 KiB) | 9,909 ms, 16 manifest saves, on 2026-10-05 after T19A; historical local pre-batch result was 48,467 ms (2026-10-04), so this run is 79.6% faster. The old run's environment was not recorded; compare directionally. |
 | folder-import benchmark (10,000 x 4 KiB) | 157,926 ms, 157 manifest saves, on 2026-10-05 after T19A; no local pre-batch 10,000-file artifact was found. |

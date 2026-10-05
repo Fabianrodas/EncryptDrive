@@ -106,8 +106,9 @@ two computers.
 
 ## Building and running
 
-Requirements: JDK 21 and Maven. The portable build needs no Java on the
-computer that runs it.
+Requirements: JDK 21 and Maven for source work; Windows release packaging also
+needs WiX 3.14 on `PATH`. The portable and installed builds need no Java on the
+computer that runs them.
 
 ```bash
 # Run from source
@@ -122,6 +123,7 @@ Artifacts are written to `target/release/<version>/`.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-package.ps1 -Launch -Install
 ```
 
 The portable ZIP can be moved to another directory or a USB drive. Choose the

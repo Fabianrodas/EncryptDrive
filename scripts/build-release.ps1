@@ -103,12 +103,32 @@ Sign-IfConfigured "target/dist/EncryptDrive/EncryptDrive.exe"
 
 New-Item -ItemType Directory -Force $out | Out-Null
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-[System.IO.Compression.ZipFile]::CreateFromDirectory(
-    (Resolve-Path "target/dist/EncryptDrive").Path,
-    (Join-Path (Resolve-Path $out).Path (Split-Path $portable -Leaf)),
-    [System.IO.Compression.CompressionLevel]::Optimal,
-    $true
+Add-Type -AssemblyName System.IO.Compression
+$imagePath = (Resolve-Path "target/dist/EncryptDrive").Path
+$portablePath = Join-Path (Resolve-Path $out).Path (Split-Path $portable -Leaf)
+if (Test-Path $portablePath) { Remove-Item -LiteralPath $portablePath -Force }
+$archive = [System.IO.Compression.ZipFile]::Open(
+    $portablePath,
+    [System.IO.Compression.ZipArchiveMode]::Create
 )
+try {
+    $archive.CreateEntry("EncryptDrive/") | Out-Null
+    Get-ChildItem $imagePath -Directory -Recurse -Force | ForEach-Object {
+        $relative = $_.FullName.Substring($imagePath.Length).TrimStart([char[]]@("\", "/")).Replace("\", "/")
+        $archive.CreateEntry("EncryptDrive/$relative/") | Out-Null
+    }
+    Get-ChildItem $imagePath -File -Recurse -Force | ForEach-Object {
+        $relative = $_.FullName.Substring($imagePath.Length).TrimStart([char[]]@("\", "/")).Replace("\", "/")
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $archive,
+            $_.FullName,
+            "EncryptDrive/$relative",
+            [System.IO.Compression.CompressionLevel]::Optimal
+        ) | Out-Null
+    }
+} finally {
+    $archive.Dispose()
+}
 
 # The installer installs the application only. Vaults are created and opened
 # inside EncryptDrive wherever the user chooses; install and uninstall never touch them.

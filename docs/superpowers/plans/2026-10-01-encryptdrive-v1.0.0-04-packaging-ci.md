@@ -353,7 +353,10 @@ Committed as `build: produce versioned portable and installer artifacts`.
 
 **Security:** checks the ZIP the user will download (extracted to a temp folder), not the build tree. `-Install` refuses to run if EncryptDrive is already installed for this user, so it can never replace or remove a real installation.
 
-- [ ] **Step 1: Write `scripts/verify-package.ps1`**
+- [x] **Step 1: Write `scripts/verify-package.ps1`**
+
+The verifier parses and reports missing artifact paths with a non-zero exit when run before packaging output exists.
+The implementation checks HKCU and HKLM for an existing uninstall entry (the MSI records this entry under HKLM on this Windows build), passes a verbose MSI log path during `-Install`, and verifies the registered version, installed files, shortcut, uninstall, and sentinel vault after each process exits.
 
 ```powershell
 <#
@@ -395,15 +398,21 @@ $sums = Join-Path $ArtifactDir "SHA256SUMS.txt"
 $failures = [System.Collections.Generic.List[string]]::new()
 $scratch = Join-Path ([System.IO.Path]::GetTempPath()) ("EncryptDrive-verify-" + [guid]::NewGuid())
 New-Item -ItemType Directory $scratch | Out-Null
-$uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
+$uninstallKeys = @(
+    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
+)
 
 function Fail([string] $message) {
     $failures.Add($message)
 }
 
 function Get-UninstallEntry {
-    Get-ChildItem $uninstallKey -ErrorAction SilentlyContinue | Get-ItemProperty |
-        Where-Object DisplayName -eq "EncryptDrive" | Select-Object -First 1
+    foreach ($key in $uninstallKeys) {
+        $entry = Get-ChildItem $key -ErrorAction SilentlyContinue | Get-ItemProperty |
+            Where-Object DisplayName -eq "EncryptDrive" | Select-Object -First 1
+        if ($entry) { return $entry }
+    }
 }
 
 # Starts an EncryptDrive.exe with no Java on PATH or JAVA_HOME and waits for
@@ -450,14 +459,18 @@ function Test-Install([string] $installer) {
         return
     }
 
-    $installDir = Join-Path $scratch "Installed EncryptDrive"
+    $installDir = Join-Path $scratch "InstalledEncryptDrive"
     $vault = Join-Path $scratch "Sentinel vault"
+    $installLog = Join-Path $scratch "installer.log"
     New-Item -ItemType Directory $vault | Out-Null
     Set-Content (Join-Path $vault "keep.txt") "must survive install and uninstall"
     $vaultHash = (Get-FileHash (Join-Path $vault "keep.txt")).Hash
 
-    $process = Start-Process $installer -ArgumentList "/qn", "INSTALLDIR=`"$installDir`"" -Wait -PassThru
+    $arguments = "/qn INSTALLDIR=`"$installDir`" /l*v `"$installLog`""
+    $process = Start-Process $installer -ArgumentList $arguments -PassThru
+    $process.WaitForExit()
     if ($process.ExitCode -ne 0) {
+        if (Test-Path $installLog) { Get-Content $installLog -Tail 30 | ForEach-Object { Write-Host $_ } }
         Fail "silent install failed with exit code $($process.ExitCode)"
         return
     }
@@ -476,7 +489,8 @@ function Test-Install([string] $installer) {
     $menu = Join-Path ([Environment]::GetFolderPath("Programs")) "EncryptDrive"
     if (-not (Get-ChildItem $menu -Filter *.lnk -ErrorAction SilentlyContinue)) { Fail "no Start Menu shortcut in $menu" }
 
-    $process = Start-Process msiexec.exe -ArgumentList "/x", $entry.PSChildName, "/qn" -Wait -PassThru
+    $process = Start-Process msiexec.exe -ArgumentList "/x", $entry.PSChildName, "/qn" -PassThru
+    $process.WaitForExit()
     if ($process.ExitCode -ne 0) { Fail "silent uninstall failed with exit code $($process.ExitCode)" }
     if (Test-Path $exe) { Fail "EncryptDrive.exe is still present after uninstall" }
     if (Get-UninstallEntry) { Fail "the uninstall entry is still registered after uninstall" }
@@ -557,14 +571,14 @@ Write-Host "Release artifacts verified: $ArtifactDir"
 ```
 Adjust the top-level allowlist (`app,EncryptDrive.exe,runtime`) to exactly what T20 Step 7 recorded if jpackage adds another file; keep it exact.
 
-- [ ] **Step 2: Remove the old verifier; README line**
+- [x] **Step 2: Remove the old verifier; README line**
 
 ```bash
 git rm scripts/verify-portable-package.ps1
 ```
 README build section: add `powershell -ExecutionPolicy Bypass -File scripts/verify-package.ps1 -Launch -Install`.
 
-- [ ] **Step 3: Negative checks (prove the verifier fails when it should)**
+- [x] **Step 3: Negative checks (prove the verifier fails when it should)**
 
 On a copy of the artifacts in a scratch folder:
 ```powershell
@@ -575,20 +589,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-package.ps1 -
 ```
 Expected: `FAIL: checksum mismatch for EncryptDrive-1.0.0-SNAPSHOT-Setup.exe`, `exit=1`. Then rebuild the copy, add a file `EncryptDrive/users.json` into a copy of the ZIP (with `System.IO.Compression.ZipFile` update mode), regenerate its checksum line, and expect `FAIL: packaged data file: \users.json`. Record both outcomes in the ledger.
 
-- [ ] **Step 4: Positive run on this machine**
+Recorded: a tampered setup EXE failed with exit 1 on checksum mismatch; a ZIP containing `EncryptDrive/users.json` with refreshed checksums failed with exit 1 as packaged data. The first package build also exposed backslash ZIP entry names from .NET Framework `ZipFile.CreateFromDirectory`; `build-release.ps1` now writes normalized forward-slash entries, which the verifier accepts.
+
+- [x] **Step 4: Positive run on this machine**
 
 Run: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-package.ps1 -Launch -Install`
 Expected: `Started without a system Java` twice (portable and installed), `Installer signature: NotSigned`, `Release artifacts verified`. If the silent install used a different install folder or shortcut default than assumed (`INSTALLDIR`, Start Menu shortcut under `/qn`), inspect with `msiexec /i <msi> /l*v log.txt` (extract the MSI by running Setup.exe with `/?` or reading jpackage's `--temp` output) and adjust the property name/assertion — never weaken the uninstall-entry, launch, uninstall or sentinel-vault checks. If a run aborts midway, clean up with: `Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall | Get-ItemProperty | Where-Object DisplayName -eq EncryptDrive | ForEach-Object { msiexec /x $_.PSChildName /qn }`.
 
-- [ ] **Step 5: Full suite + commit**
+Recorded: the combined standard-user run completed with exit 0; the installer was `NotSigned`; portable and installed launches worked without a system Java; the 1.0.0 uninstall entry and user Start Menu shortcut were present; uninstall removed the installed executable and entry; the sentinel vault hash was unchanged. Repeated successfully against the final rebuilt artifacts; the MSI phase took about three minutes on this host.
+The MSI uninstall record appeared under HKLM on this machine while the app's registry values and shortcut were per-user. If an interrupted run needs cleanup, inspect both HKCU and HKLM; the verifier refuses an existing entry in either hive.
+
+- [x] **Step 5: Full suite + commit**
 
 Run: `mvn -B clean verify` → BUILD SUCCESS (`scriptsAndWorkflowsHardCodeNoApplicationVersion` now also scans `verify-package.ps1`).
 
+Recorded: `mvn -B clean verify` → BUILD SUCCESS; 406 tests, 0 failures, 0 errors, 3 opt-in skips, 2 min 51 s.
+
 ```bash
-git add scripts/verify-package.ps1 README.md docs/superpowers/plans/V1_RELEASE_STATE.md
+git add -A -- README.md docs/superpowers/plans/2026-10-01-encryptdrive-v1.0.0-04-packaging-ci.md docs/superpowers/plans/V1_RELEASE_STATE.md scripts/build-release.ps1 scripts/verify-package.ps1 scripts/verify-portable-package.ps1
 git commit -m "build: verify portable and installer artifacts end to end" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
-(the `git rm` is already staged).
 
 **Acceptance:** verifier passes on good artifacts (launch without Java, silent install/launch/uninstall, sentinel vault untouched) and fails on tampered checksums and packaged data; build green; ledger has the evidence.
 
