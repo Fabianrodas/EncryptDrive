@@ -9,9 +9,9 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 04 - Windows packaging and CI |
-| current task | T22 Step 4: full verification and commit; `FORMAT_V1_READY` is DONE |
-| last completed commit | T21 (this commit; see HEAD) |
-| tests last run | T22 `mvn -B clean verify` (2026-10-05, 4 min 1 s) |
+| current task | T22 Step 6: H2 history and push gate; `FORMAT_V1_READY` is DONE |
+| last completed commit | T22 review-fix commit `9f8aa01` (`build: clean up failed package smoke checks`) |
+| tests last run | T22 `mvn -B clean verify` (2026-10-05, 4 min 8 s); final verifier changes then passed `ReleaseMetadataTest`, PowerShell parsing, and portable launch check |
 | test result | BUILD SUCCESS - 406 run, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
 
 ## Release states
@@ -37,7 +37,10 @@ Updated after every task. Git history and test output are the record; this is th
 | portable build | PASS 2026-10-05: versioned ZIP is 35,807,920 bytes after T21 normalized ZIP entry names; app-image contains `app`, `runtime`, and `EncryptDrive.exe`; `EncryptDrive.cfg` names the app module and contains no machine JDK or user path |
 | installer build | PASS 2026-10-05: versioned setup EXE is 37,786,112 bytes, produced by `jpackage` with WiX 3.14.1.8722; .NET Framework 3.5 is present |
 | package checksums | Final T21 build `SHA256SUMS.txt`: setup `97f2c4ee32d94fea402bba4a0dce94b861b72a3b989b930b1f3bc83ac8e8679f`; portable `73fbdedb3b1285d7ed29eb4ac1bad6307db9b05e8b44036cbf23675d032b1d33` |
-| release package verifier | PASS 2026-10-05: tampered setup checksum and packaged `users.json` each failed; standard-user `verify-package.ps1 -Launch -Install` completed on the final rebuilt artifacts; portable and installed app launches worked without system Java; installer version, Start Menu shortcut, uninstall, and sentinel vault preservation all verified; installer signature is `NotSigned` |
+| release package verifier | T21 E2E evidence (pre-review build), PASS 2026-10-05: tampered setup checksum and packaged `users.json` each failed; standard-user `verify-package.ps1 -Launch -Install` completed; portable and installed app launches worked without system Java; installer version, Start Menu shortcut, uninstall, and sentinel vault preservation all verified; installer signature is `NotSigned` |
+| T22 local artifact rebuild | `build-release.ps1 -SkipTests` succeeded; current setup SHA-256 `de9fa88e8ea56c576beb527b0411351cf9ad0c529da79562d5c012e07a3cb710`, portable ZIP `67cc38a2f84fea1282e2c17c5a9b189fcf9af6a3dd6aba1408405039a6dc4e94`; `verify-package.ps1 -Launch` passed and removed its scratch directory |
+| T22 installer retry | Review-fix `-Launch -Install` did not complete on this host: sandboxed MSI returned 1603 with HKLM rollback-key access denied; unsandboxed MSI stalled without a log. Both exact test processes were stopped; no EncryptDrive uninstall entry or verifier scratch folder remained; `msiserver` returned to Stopped / Manual. T21's earlier full install/uninstall verification remains recorded above. |
+| H2 local refs | `main` and cached `origin/main` both point to `0f913d25b82fea4a1d41605325fbe9e140654cf9`; `feature/encryptdrive-1.0` points to `9f8aa01c9e5c1cf405148e8a47378858021a6211`. `data/users.json` exists at both `main` refs and not on the feature tip; no `v*` tags are present locally. No remote fetch was performed for this check. |
 | WiX 3.14.1 binaries ZIP SHA-256 | `6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31` (official `wix314-binaries.zip`; candle/light 3.14.1.8722 verified locally) |
 | folder-import benchmark (1,000 x 4 KiB) | 9,909 ms, 16 manifest saves, on 2026-10-05 after T19A; historical local pre-batch result was 48,467 ms (2026-10-04), so this run is 79.6% faster. The old run's environment was not recorded; compare directionally. |
 | folder-import benchmark (10,000 x 4 KiB) | 157,926 ms, 157 manifest saves, on 2026-10-05 after T19A; no local pre-batch 10,000-file artifact was found. |

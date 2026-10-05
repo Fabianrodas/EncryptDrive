@@ -624,7 +624,7 @@ git commit -m "build: verify portable and installer artifacts end to end" -m "Co
 
 **Interfaces:** consumes `build-release.ps1`, `verify-package.ps1`, the WiX SHA-256 recorded in T20 Step 1.
 
-**Security:** `build.yml` keeps `contents: read`; only `release.yml` has `contents: write`, only for tags, and only creates drafts. The tag must be annotated, on `main`, and match the pom version.
+**Security:** `build.yml` keeps `contents: read`. `release.yml` also defaults to `contents: read`; only its tag-triggered draft job has `contents: write`. That job downloads a verified artifact bundle and does not check out or execute project code. The tag must be annotated, on `main`, and match the pom version.
 
 - [x] **Step 1: `build.yml`**
 
@@ -635,18 +635,19 @@ git commit -m "build: verify portable and installer artifacts end to end" -m "Co
 
 - [x] **Step 2: `release.yml`**
 
-- Runs only for `v*` tags and grants `contents: write` only to the draft job; the regular build workflow remains read-only.
+- Runs only for `v*` tags. A read-only build job validates the tag, verifies, packages, and uploads release files plus notes. A separate draft job downloads that bundle and has `contents: write`; it does not check out or execute repository code. Checkout credentials are not persisted in the build job.
 - Passes GitHub-provided values through step environment variables. It accepts only `vMAJOR.MINOR.PATCH` and `vMAJOR.MINOR.PATCH-rc.N`, requires an annotated tag, confirms the fetched tag still resolves to the triggering commit, confirms that commit is on `main`, and requires an exact match with `pom.xml`.
-- Runs Maven verification, installs the same checksum-verified WiX archive, builds and verifies release artifacts, takes notes from the matching changelog entry and T24 footer, then creates a draft with the prerelease flag for RC tags. Publishing remains manual.
+- Runs Maven verification, installs the same checksum-verified WiX archive, builds and verifies release artifacts, takes notes from the matching changelog entry and T24 footer, then creates a draft with the prerelease flag for RC tags. The artifact bundle is retained for one day; publishing remains manual.
+- Actions use checkout v7, setup-java v6, upload-artifact v7, and download-artifact v8.
 - `docs/testing/release-notes-footer.md` is created in T24 (checksum verification + unsigned-publisher note). Until T24 lands, no tag can exist, so the workflow is never triggered early.
 
 - [x] **Step 3: Static checks**
 
 Recorded: PyYAML parsed both workflow files successfully; `mvn -B -q test "-Dtest=ReleaseMetadataTest"` passed (3 tests; no hard-coded application version).
 
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 4: Full suite + commit**
 
-Recorded: `mvn -B clean verify` → BUILD SUCCESS; 406 tests, 0 failures, 0 errors, 3 opt-in skips, 4 min 1 s. Commit is pending.
+Recorded: `mvn -B clean verify` → BUILD SUCCESS; 406 tests, 0 failures, 0 errors, 3 opt-in skips, 4 min 1 s. Committed as `6ff40b4` (`ci: package Windows artifacts and draft tagged releases`).
 
 Run: `mvn -B clean verify` → BUILD SUCCESS.
 
@@ -655,7 +656,7 @@ git add .github/workflows/build.yml .github/workflows/release.yml docs/superpowe
 git commit -m "ci: package Windows artifacts and draft tagged releases" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 5: Phase 04 boundary** — fresh-worktree `mvn -B clean verify`; superpowers:requesting-code-review over `<T20 commit>^..HEAD` (focus: scripts' failure modes, no secrets, workflow permissions); fix findings as separate commits.
+- [x] **Step 5: Phase 04 boundary** — no separate worktree per the active instruction to continue on the existing branch. `mvn -B clean verify` passed on the T22 tree and again after the substantive review fixes; the final PowerShell cleanup adjustment passed the focused metadata test, PowerShell parser, and portable launch verifier. The read-only review found: (1) write-token exposure, fixed by the two-job release workflow; (2) installer cleanup and launcher handoff gaps, fixed; (3) a claimed `Select-String` path bug, declined because `FileInfo.FullName` binds to `-Path` by property name and a content search confirmed it; (4) missing changelog/footer inputs, deferred to T24 as the plan already specifies, before any release tag. Local MSI install attempts after the review fixes returned 1603 in the sandbox or stalled in the unsandboxed host; each attempt was stopped only after verifying its exact process command line, and cleanup left no install record or scratch folder. The pre-review T21 build had passed the full install/uninstall smoke test.
 
 - [ ] **Step 6: Stop at Human Gate H2** (below). After H2 resolves and the branch is pushed, watch the `Build` run for the pushed commit:
 
