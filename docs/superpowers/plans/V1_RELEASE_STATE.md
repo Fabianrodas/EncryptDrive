@@ -9,16 +9,16 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 03A - performance, Format 1, and portability |
-| current task | T19B in progress; T19A verified and committed; Phase 03 complete; T20 blocked on `FORMAT_V1_READY` |
-| last completed commit | T19A (this commit; see HEAD) |
-| tests last run | `mvn -B clean verify` (2026-10-05, 6 min 7 s) |
-| test result | BUILD SUCCESS - 393 run, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
+| current task | T19C in progress; T19A and T19B verified and committed; Phase 03 complete; T20 blocked on `FORMAT_V1_READY` |
+| last completed commit | T19B (this commit; see HEAD) |
+| tests last run | `mvn -B clean verify` (2026-10-05, 2 min 25 s) |
+| test result | BUILD SUCCESS - 400 run, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
 
 ## Release states
 
 | State | Status |
 |---|---|
-| FORMAT_V1_READY | IN PROGRESS - T19A is verified; T19B and T19C remain |
+| FORMAT_V1_READY | IN PROGRESS - T19A and T19B are verified; T19C remains |
 | IMPLEMENTATION_COMPLETE | TODO |
 | AUTOMATED_GATES_COMPLETE | TODO |
 | PACKAGING_COMPLETE | TODO |
@@ -41,7 +41,7 @@ Updated after every task. Git history and test output are the record; this is th
 | folder-import benchmark (10,000 x 4 KiB) | 157,926 ms, 157 manifest saves, on 2026-10-05 after T19A; no local pre-batch 10,000-file artifact was found. |
 | folder-import benchmark with 10,000 existing manifest entries | 1,000 incoming x 4 KiB: 26,740 ms / 16 saves; 10,000 incoming x 4 KiB: 137,763 ms / 157 saves. |
 | folder-import benchmark environment | Windows build 10.0.26200.9457, NTFS, Java 21.0.2 64-bit HotSpot, Intel64 Family 6 Model 154 Stepping 3, 16 logical processors. CPU marketing name was unavailable in the sandbox. The handoff-reported scaling (1,000 about 36 s through 8,000 about 910 s) has no local benchmark artifact in this checkout. |
-| Format 1 conformance vectors | TODO - T19B |
+| Format 1 conformance vectors | PASS - 2026-10-05; public fixtures under `test-vectors/format-v1/`, independent Argon2id/AES generation, repository/blob/name tests pass |
 | host-path persistence and compatibility contract | TODO - T19C; `docs/COMPATIBILITY.md` does not exist yet |
 | folder-import link/lock tests (T15) | all ran, none skipped, on Windows 11 / NTFS / JDK 21.0.2: junction (outside the tree and a loop back into it), symbolic link (file and directory — created because the build shell was elevated; Developer Mode is off, so a non-elevated run skips this one test), locked file, Kelvin-sign clash (file and folder), differently-cased vault path. Fix round 1, also all ran: vault reached through the `\\localhost\C$` share alias (reachable here; skips cleanly where the administrative share is not), folder swapped for a junction after the scan, source that is a junction with a missing target |
 | history cleanup (`data/users.json`) | local copy deleted; still in history and in origin/main tip — decision at H2 |
@@ -55,6 +55,6 @@ Updated after every task. Git history and test output are the record; this is th
 
 ## Remaining blockers
 
-1. `FORMAT_V1_READY`: T19B-T19C, full verification, and Format 1 vector/portability evidence; T19A benchmarks and full verification are recorded above.
+1. `FORMAT_V1_READY`: T19C host-path persistence/compatibility tests and final full verification; T19A benchmarks and T19B vectors are recorded above.
 2. H2 (later): history-rewrite decision and push permission.
 3. H3–H6 (later): manual matrix on the accepted RC.

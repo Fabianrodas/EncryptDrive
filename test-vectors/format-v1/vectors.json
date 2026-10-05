@@ -1,0 +1,184 @@
+{
+  "ids": {
+    "vaultId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    "userId": "11111111-2222-4333-8444-555555555555",
+    "manifestId": "66666666-7777-4666-8666-666666666666",
+    "rootFolderId": "00000000-0000-4000-8000-000000000001",
+    "folderId": "00000000-0000-4000-8000-000000000002",
+    "fileId": "00000000-0000-4000-8000-000000000003",
+    "blobId": "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+    "pendingBlobId": "cccccccc-dddd-4eee-8fff-000000000001"
+  },
+  "logicalNames": {
+    "accepted": [
+      {
+        "input": "  Quarterly report  ",
+        "stored": "Quarterly report"
+      },
+      {
+        "input": "café",
+        "stored": "café"
+      },
+      {
+        "input": "café",
+        "stored": "café"
+      },
+      {
+        "input": "資料",
+        "stored": "資料"
+      },
+      {
+        "input": "folder/name",
+        "stored": "folder/name"
+      },
+      {
+        "input": "CON",
+        "stored": "CON"
+      },
+      {
+        "input": "trailing.",
+        "stored": "trailing."
+      },
+      {
+        "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "stored": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    ],
+    "rejected": [
+      {
+        "input": "",
+        "reason": "INVALID_NAME"
+      },
+      {
+        "input": "   ",
+        "reason": "INVALID_NAME"
+      },
+      {
+        "input": ".",
+        "reason": "INVALID_NAME"
+      },
+      {
+        "input": "..",
+        "reason": "INVALID_NAME"
+      },
+      {
+        "input": "bad\u0000name",
+        "reason": "INVALID_NAME"
+      },
+      {
+        "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "reason": "INVALID_NAME"
+      }
+    ],
+    "caseCollision": {
+      "existing": "Report",
+      "input": "report",
+      "reason": "DUPLICATE_NAME"
+    },
+    "distinctUnicodeForms": {
+      "composed": "café",
+      "decomposed": "café"
+    }
+  },
+  "argon2id": {
+    "reference": {
+      "name": "Independent Argon2id v1.3 vector (Python argon2-cffi)",
+      "passwordUtf8Hex": "0101010101010101010101010101010101010101010101010101010101010101",
+      "saltHex": "02020202020202020202020202020202",
+      "memoryKiB": 32,
+      "iterations": 3,
+      "parallelism": 4,
+      "outputHex": "03aab965c12001c9d7d0d2de33192c0494b684bb148196d73c1df1acaf6d0c2e"
+    },
+    "vaultPassword": {
+      "name": "EncryptDrive vault-password profile",
+      "passwordUtf8Hex": "566563746f72207661756c742070617373706872617365",
+      "saltHex": "000102030405060708090a0b0c0d0e0f",
+      "memoryKiB": 65536,
+      "iterations": 3,
+      "parallelism": 1,
+      "outputHex": "9b22c0dfaf1cca2d60958be91880d1f7dbc878fa660810d6c3f499bc2a0b6972",
+      "passwordUtf8": "Vector vault passphrase"
+    },
+    "accountPassword": {
+      "name": "EncryptDrive account-password profile",
+      "passwordUtf8Hex": "636f6e7472617365c3b1612dc3b1e282ac",
+      "saltHex": "f0e0d0c0b0a090807060504030201000",
+      "memoryKiB": 65536,
+      "iterations": 3,
+      "parallelism": 1,
+      "outputHex": "77e2252c4db1f4fbf86e602a68ecdbf1be312ad231e90f23a7ffc37c8c5fe91c",
+      "passwordUtf8": "contraseña-ñ€"
+    }
+  },
+  "aad": {
+    "vaultKey": {
+      "text": "EncryptDrive|vault-key|v1|aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "utf8Hex": "456e637279707444726976657c7661756c742d6b65797c76317c61616161616161612d626262622d346363632d386464642d656565656565656565656565"
+    },
+    "users": {
+      "text": "EncryptDrive|users|v1|aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "utf8Hex": "456e637279707444726976657c75736572737c76317c61616161616161612d626262622d346363632d386464642d656565656565656565656565"
+    },
+    "userKey": {
+      "text": "EncryptDrive|user-key|v1|aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee|11111111-2222-4333-8444-555555555555",
+      "utf8Hex": "456e637279707444726976657c757365722d6b65797c76317c61616161616161612d626262622d346363632d386464642d6565656565656565656565657c31313131313131312d323232322d343333332d383434342d353535353535353535353535"
+    },
+    "manifest": {
+      "text": "EncryptDrive|manifest|v1|aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee|11111111-2222-4333-8444-555555555555",
+      "utf8Hex": "456e637279707444726976657c6d616e69666573747c76317c61616161616161612d626262622d346363632d386464642d6565656565656565656565657c31313131313131312d323232322d343333332d383434342d353535353535353535353535"
+    },
+    "fileKey": {
+      "text": "EncryptDrive|file-key|v1|aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee|11111111-2222-4333-8444-555555555555|00000000-0000-4000-8000-000000000003",
+      "utf8Hex": "456e637279707444726976657c66696c652d6b65797c76317c61616161616161612d626262622d346363632d386464642d6565656565656565656565657c31313131313131312d323232322d343333332d383434342d3535353535353535353535357c30303030303030302d303030302d343030302d383030302d303030303030303030303033"
+    },
+    "fileContent": {
+      "text": "EncryptDrive|file|v1|aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee|11111111-2222-4333-8444-555555555555|00000000-0000-4000-8000-000000000003",
+      "utf8Hex": "456e637279707444726976657c66696c657c76317c61616161616161612d626262622d346363632d386464642d6565656565656565656565657c31313131313131312d323232322d343333332d383434342d3535353535353535353535357c30303030303030302d303030302d343030302d383030302d303030303030303030303033"
+    }
+  },
+  "keyWraps": {
+    "wrappedRegistryKey": {
+      "keyHex": "9b22c0dfaf1cca2d60958be91880d1f7dbc878fa660810d6c3f499bc2a0b6972",
+      "plaintextHex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+      "nonceHex": "101112131415161718191a1b",
+      "aadUtf8": "EncryptDrive|vault-key|v1|aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "ciphertextAndTagHex": "fe328f4e9a890042e5a5f5a0ffbeeb19e933de032ae4e106d4f7accbde47eabaa2b6eadd4e3cdaf78a4850331161d7be"
+    },
+    "wrappedUserMasterKey": {
+      "keyHex": "77e2252c4db1f4fbf86e602a68ecdbf1be312ad231e90f23a7ffc37c8c5fe91c",
+      "plaintextHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+      "nonceHex": "303132333435363738393a3b",
+      "aadUtf8": "EncryptDrive|user-key|v1|aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee|11111111-2222-4333-8444-555555555555",
+      "ciphertextAndTagHex": "19da83b066d46bc7af1b1be01c0592fc7c5bae48c919d21653e497979a5c8187a5fdb8185a39c92d0ad30bdb5f6b7de4"
+    },
+    "wrappedFileKey": {
+      "keyHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+      "plaintextHex": "606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f",
+      "nonceHex": "505152535455565758595a5b",
+      "aadUtf8": "EncryptDrive|file-key|v1|aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee|11111111-2222-4333-8444-555555555555|00000000-0000-4000-8000-000000000003",
+      "ciphertextAndTagHex": "f62a7061bcd4145bb382a940f229edd2113b7aa04d0d4aadbc90f7b64a0c3dbff4ee9f43e26d5b43c3e13e204e087e5e"
+    }
+  },
+  "userRegistry": {
+    "keyHex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "nonceHex": "202122232425262728292a2b",
+    "aadUtf8": "EncryptDrive|users|v1|aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    "plaintextUtf8": "{\"formatVersion\":1,\"users\":[{\"userId\":\"11111111-2222-4333-8444-555555555555\",\"fullName\":\"Vector Example\",\"username\":\"VectorUser\",\"normalizedUsername\":\"vectoruser\",\"createdAt\":\"2026-10-05T12:00:00Z\",\"manifestId\":\"66666666-7777-4666-8666-666666666666\",\"userKdf\":{\"algorithm\":\"Argon2id\",\"memoryKiB\":65536,\"iterations\":3,\"parallelism\":1,\"salt\":\"8ODQwLCgkIBwYFBAMCAQAA==\"},\"wrappedUserMasterKey\":{\"version\":1,\"algorithm\":\"AES/GCM/NoPadding\",\"nonce\":\"MDEyMzQ1Njc4OTo7\",\"ciphertext\":\"GdqDsGbUa8evGxvgHAWS/HxbrkjJGdIWU+SXl5pcgYel/bgYWjnJLQrTC9tfa33k\"}}]}",
+    "ciphertextAndTagHex": "8007f93f55927230c74a14c55f80a67715d259903bb5d872c3dc021540f9d31073ef7c65f803bbf02d2085176ac54d5d9cc40bb5edc0570a967466bfe817c2606c1988d2d541864cf1b7a25683b184bf3312b5d95077cbb843d0da2752feb25c9666714217fb2e93c744742eeb62d7635c96d28e22d2f80c4706e67b9284e478fb8db0ba8b1371b46a63829b4963d5eef6411ec4788f75227b5b8880d455605f88e89bbf2432976a3e3fff34f76f1a103c308cb5c08134f9dd00ba95748a6cd4be0d6c57441cd231a0edf703327b73c8b00c3659f8f89d68347e5007c8348edeabf9ae2e7e506049739b8faad4069021e3506e9c60a21687fdd5b1cfaa307b941afd0fa3b2805feeb9804c2c82b43b92d45239c23550c2509724786a6f8205c2e205a5a1fc1895e16ec2391f831df826d7e4934bfbd8c9d72df808c77e2a9439c18ff1bdaffe7f3b6a1c227668695af6f2db351ad15d5e460065894a97aeed15bc47cd3f05a411fe0388c0c74f8a6cd0f1470f2df389ced16a3b0516e5c622acbefc1ca82b6dcd5358e68e3b849756c777c960a93021004b9b08939b8a22011f3454611058ae5a4c34654d7f29670a5caeb960392633f770afb06379eb2bc28abdd72f99c9db2a56a569a8de34ffa8d369d0b8c1f60555aba5645dd5dde75d5a390ec415dbb95a7eabdadac05daa24a1070acc00a83041ee3a570cb9eb1337183012f98dcef958fb31455b6060769b16a84d3103363dabe9470a8411422e23797690e1144f3d8b9b4f40d44cd86a5af23139"
+  },
+  "manifest": {
+    "keyHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+    "nonceHex": "404142434445464748494a4b",
+    "aadUtf8": "EncryptDrive|manifest|v1|aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee|11111111-2222-4333-8444-555555555555",
+    "plaintextUtf8": "{\"formatVersion\":1,\"userId\":\"11111111-2222-4333-8444-555555555555\",\"rootFolderId\":\"00000000-0000-4000-8000-000000000001\",\"entries\":[{\"entryId\":\"00000000-0000-4000-8000-000000000001\",\"kind\":\"FOLDER\",\"name\":\"/\",\"createdAt\":\"2026-10-05T12:00:00Z\",\"modifiedAt\":\"2026-10-05T12:00:00Z\"},{\"entryId\":\"00000000-0000-4000-8000-000000000002\",\"kind\":\"FOLDER\",\"parentId\":\"00000000-0000-4000-8000-000000000001\",\"name\":\"docs\",\"createdAt\":\"2026-10-05T12:00:00Z\",\"modifiedAt\":\"2026-10-05T12:00:00Z\"},{\"entryId\":\"00000000-0000-4000-8000-000000000003\",\"kind\":\"FILE\",\"parentId\":\"00000000-0000-4000-8000-000000000002\",\"name\":\"notes.txt\",\"createdAt\":\"2026-10-05T12:00:00Z\",\"modifiedAt\":\"2026-10-05T12:00:00Z\",\"plainSize\":37,\"blobId\":\"bbbbbbbb-cccc-4ddd-8eee-ffffffffffff\",\"wrappedFileKey\":{\"version\":1,\"algorithm\":\"AES/GCM/NoPadding\",\"nonce\":\"UFFSU1RVVldYWVpb\",\"ciphertext\":\"9ipwYbzUFFuzgqlA8int0hE7eqBNDUqtvJD3tkoMPb/07p9D4m1bQ8PhPiBOCH5e\"},\"contentNonce\":\"oKGio6Slpqeoqaqr\"}],\"pendingDeletions\":[{\"blobId\":\"cccccccc-dddd-4eee-8fff-000000000001\",\"queuedAt\":\"2026-10-05T12:00:00Z\"}]}",
+    "ciphertextAndTagHex": "9684c4cb645d16140b644cde4414f44374461b93346c907d8170595a33a58dd4b59048143cbbcddfd0bed57c21ee23f1b589664ac587b095ff640bdd6d93368d802ff6a51c2815e54112b16b42cf58077e501c695589cdcf0bde3a5d92d12e226d24d45f6a762e8612ae2c37bf4c8072acaffe0fbbbf96720b0ab26c34f6ece76629a46ec1757dc1d6c10732a4964173522cb93c6707c3a238fe7efb8dea763c847ed3680f50fdc392c1a58753f41a6dd05ba4adfd0873a6afa57374a4ca166f2c91ac2225cd566f33a740aacb91c77a404b8f1fe206d0bba1bddf0e32a5321776360fb45fcc023f8837e7349d10e468fa8367df81b1c82b663101ddd86257aa53aea1ea201c67de12c05e78e3534ef09acaac7cba50f4f666a9c2f6aa5df2495403c6e86aa8d1b00da2ba858c7756795b000f9a08f69dd02f3a98d663f0ef221ddae2442c0773bf3bc0b6bea84b91eac3ae16d55af93b4c6c6f08abc52b03448bcefc5f1cf11a4b104d5657ce5b13653f5821e040b4579b09e6bc5f6490d337caa82aa71eb89c0a53043ab3e5b57c8299fb4d15a13919cb99fa04ad1732f91ce1d45ffe3dc6ddc43ba146e5268c38a281aaf7798bd73b9844b0a6dc57eb1d758201c33c2d7cbe28c103fd57f65953320b3573cf9117408336d5365d54c6323dc9516cd7e22515d664a520bc17f5f870a8c7027a97049a75db8ebef30ef770353c22cdca16c81658f05e04c64d3644b25c0e3e984f13f7067d77366754cf971c543fe5699783b8c4873ea7286165847383ec66decc45a7b982ceacedd9a785f27015f7f26c18c7c26142b8b71c9f99c20529ac004a8c508bb05f255cce1cb43b2488c34ed6ead3029f3091a1aa1caf578077fa3a76defac5b763d4227564259511481e5acbe1de086de6759ad5fcc059b73efe0879c50ec60785cfe294b3707aa3bff07b8f06087f8ad0adf6be21e1c35d53f1890203f637bbb7cbd2f83707f860de41128eca5eb11c9526a35548cb009e5ee20c5c2fdcadac3fdf605b439607525cb29df880503966cb79afe5ba611833ff3852c8d87e02e8e9a1d4eb30f92cd52051fe07b7cf7254aef3b767aee83af1ed97f7079db2051b42ccf210cf47c37e6ce2ec0a78af962056960adda2dc987c7cd22588827b373986a3fc903a76d71b07debdb613c6449aa77a164ef2259e61751fb952a6909b7a81e6607d43af408c7c9d9235fcf454911975a2d97c19d5112e926dd90b7a6a548255a7337b747c151f17613f5568a67fe36b691f9a9acc4bada0b974609441cb2c6bc26dc28786d7aa1e8fe1aaf80af39e83e1268c7102bb5ce7145a9e8934ec921554ed33bbd6daf062122aba8582c37a535eea6bb0ac215ef2883f672dc6c4316712d29470bb96daf9baf643af0d63700522c2ff82c3ac93ccb9e764e80d1a3945bc34671beb706798dbf201f15bcb08b9242300b4fa1289c677e1378c118852cbbfad48cc3742616f11a34331378e1f2db479839dc30b1e41b98f"
+  },
+  "fileBlob": {
+    "keyHex": "606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f",
+    "nonceHex": "a0a1a2a3a4a5a6a7a8a9aaab",
+    "aadUtf8": "EncryptDrive|file|v1|aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee|11111111-2222-4333-8444-555555555555|00000000-0000-4000-8000-000000000003",
+    "plaintextHex": "456e6372797074447269766520466f726d6174203120766563746f722066696c652e0a00ff",
+    "ciphertextAndTagHex": "731395c7fa42b35833b4097651e08a2ae48a93d77b056ff0d321109584bd7033fcb42ec6e68e658305b97a491c9239828861bedb01"
+  }
+}

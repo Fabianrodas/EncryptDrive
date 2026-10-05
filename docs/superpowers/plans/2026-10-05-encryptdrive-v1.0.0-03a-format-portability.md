@@ -109,23 +109,23 @@ Review crash safety, orphan cleanup, partial-import counters, mutation boundarie
 
 **Interfaces:** No production crypto change unless an approved security requirement conflicts with the current behavior. If a conflict is found, write its ruling in the ledger before a TDD change.
 
-- [ ] **Step 1: Inventory the current persisted bytes and add failing conformance tests**
+- [x] **Step 1: Inventory the current persisted bytes and add failing conformance tests**
 
 Tests must consume exact public fixtures for Argon2id, UTF-8 AAD bytes, AES-256-GCM, wrapped keys, encrypted users/registry payload, encrypted manifest payload, encrypted file blob layout, authentication tampering, and logical-name/collision examples.
 
-- [ ] **Step 2: Verify that the fixtures fail for the expected missing/incorrect protocol assertions**
+- [x] **Step 2: Verify that the fixtures fail for the expected missing/incorrect protocol assertions**
 
 Run the new vector test class alone. Expected: compile/test failures identify the absent fixtures or uncovered protocol behavior, not malformed test setup.
 
-- [ ] **Step 3: Specify Format 1 byte behavior**
+- [x] **Step 3: Specify Format 1 byte behavior**
 
 Document format-version meaning; UTF-8 and password-byte rules; exact AAD construction; UUID text; timestamp form; Base64 alphabet/padding; JSON encoding, required and unknown fields; integer bounds; nonce/tag lengths; encrypted payload and wrapped-key layouts; Argon2id version/parameters/salt/output; RMK/UMK/FDEK roles; users and manifest structures; blob layout; backups; pending deletions; and corruption/authentication failures. A Rust implementation must not need Java source to reproduce any byte-level rule.
 
-- [ ] **Step 4: Add deterministic public fixtures and independent verification**
+- [x] **Step 4: Add deterministic public fixtures and independent verification**
 
 Use fixed keys, salts, and nonces only in public tests. Verify expected values through a second implementation/library path where practical. Record how each vector was derived; expected data must not be generated from the Java production helper under test. Do not add deterministic randomness to production.
 
-- [ ] **Step 5: Run vector, crypto, persistence, and full-suite tests; review and commit**
+- [x] **Step 5: Run vector, crypto, persistence, and full-suite tests; review and commit**
 
 Run the vector test and related crypto/repository tests, then `mvn -B clean verify`. Commit separately as `test: freeze Vault Format 1 with public conformance vectors` using the repository's current trailer convention.
 
