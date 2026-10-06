@@ -9,8 +9,8 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0` |
 | current phase | 05 - Cleanup, documentation, release gates, and tagging |
-| current task | T26: commit the `1.0.0` version update and gate record; T25 Gates A–C are complete; H2 still gates history rewrite, push, merge, and tags |
-| last completed commit | T25 verifier fix `26e3da9` (T26 changes are verified and awaiting commit) |
+| current task | T27: integrate into `main` after H2 is resolved; T25 Gates A–C and T26 are complete |
+| last completed commit | T26 version release commit `b55d570` |
 | tests last run | T26 `mvn -B clean verify` (2026-10-05, 2 min 52 s) |
 | test result | BUILD SUCCESS - 412 tests, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
 
@@ -59,7 +59,7 @@ Updated after every task. Git history and test output are the record; this is th
 | T25 repository hygiene | PASS for current tracked tree: no tracked secret/artifact candidates outside allowlisted synthetic Format 1 vectors; no private-key markers; password-assignment candidates are runtime variables or the synthetic Argon2 test fixture; 0 tracked CRLF files. `.superpowers/` and `target_test-classes/` remain ignored local outputs. Three `data/users.json` history commits remain, so H2 is unresolved. |
 | T25 spec coverage re-check | Walked all 39 master-plan coverage rows against the 63 commits in `main..HEAD` and mapped tests; no uncovered implementation row found, and all 22 mapped release test classes are present. Release-only state-machine rows remain pending their later gates. |
 | T25 reviewer minors | PASS in local commit `26e3da9`: a crafted archive with 9 traversal, dot, empty, alternate-stream, reserved-name, invalid-character, backslash, and outside-root entries is rejected before extraction; extracted content is required to have only the `EncryptDrive` root. Full-tree private-key scan found no markers; full-tree password-assignment scan found only the exact synthetic Argon2 test fixture line, which the runbook allowlists. |
-| T26 release version | PASS 2026-10-05: `pom.xml` is `1.0.0`; `CHANGELOG.md` dates `[1.0.0]` to `2026-10-05`, the planned RC work date. |
+| T26 release version | PASS 2026-10-05 in commit `b55d570`: `pom.xml` is `1.0.0`; `CHANGELOG.md` dates `[1.0.0]` to `2026-10-05`, the planned RC work date. |
 | T26 release metadata regression | The first clean run found `ReleaseMetadataTest` attempting `Files.readString` on the `scripts/tests` directory added by T25. Updated the scan to include only regular files; focused `mvn -B -Dtest=ReleaseMetadataTest test` passed 3/3, then the full clean suite passed. |
 | T26 clean verification | PASS 2026-10-05: `mvn -B clean verify` → BUILD SUCCESS, 412 tests, 0 failures, 0 errors, 3 opt-in skips; 2 min 52 s. Run in host context because sandbox Maven could not download the pinned plugins. |
 | T26 RC dry run | PASS 2026-10-05: `build-release.ps1 -DryRun -Release -Channel rc.1` exited 0; derived installer `target/release/1.0.0/EncryptDrive-1.0.0-rc.1-Setup.exe`, portable ZIP, and checksums under `target/release/1.0.0`. No package was produced. |
@@ -76,9 +76,8 @@ Updated after every task. Git history and test output are the record; this is th
 
 ## Remaining blockers
 
-1. T26 local commit is pending after its successful tests and dry run.
-2. H2: history-rewrite decision and permission for integration, push, and tags.
-3. H3–H6: manual validation matrix on the accepted RC.
+1. H2: history-rewrite decision and permission for integration, push, and tags.
+2. H3–H6: manual validation matrix on the accepted RC.
 
 ### T25 rulings and review record
 
@@ -86,3 +85,8 @@ Updated after every task. Git history and test output are the record; this is th
 - Final: fixed Important path-swap containment finding in `77b3310` — import, folder-import, and export race tests failed before the fix and passed after; full suite 412 tests, 0 failures/errors, 3 opt-in skips.
 - Final: fixed Minor ZIP-layout finding in `26e3da9`: unsafe path components are rejected before extraction, and extraction-root contents are constrained to `EncryptDrive`; all 9 crafted regression paths were rejected and the real package passed verification.
 - Final: fixed Minor credential-scan finding in the local follow-up: private-key and password checks cover the full tracked tree, with only the exact synthetic Argon2 fixture line allowlisted.
+
+### T26 rulings
+
+- Ruling: date the changelog `2026-10-05` as the planned RC work date because no separate RC date was supplied; cost if the RC schedule moves, the changelog date must be updated before tagging.
+- Ruling: omit the plan's stale `Claude Opus 5.5` co-author trailer; this T26 work was performed by Codex and the commit uses the configured repository identity. Cost if wrong: that requested attribution is absent, while the recorded authorship remains accurate.

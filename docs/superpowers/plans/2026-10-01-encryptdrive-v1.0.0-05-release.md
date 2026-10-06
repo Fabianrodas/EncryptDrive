@@ -277,7 +277,7 @@ cat .gitattributes; git ls-files --eol | awk '$2=="w/crlf"' | wc -l   # expect 0
 - [x] **Step 1:** set the Maven version and changelog date to `1.0.0` and `2026-10-05`.
 - [x] **Step 2:** `mvn -B clean verify` → BUILD SUCCESS: 412 tests, 0 failures/errors, 3 opt-in skips (2:52). The first run exposed `ReleaseMetadataTest` trying to read the new `scripts/tests` directory as a file; filtering the version scan to regular files fixed it, and the focused class passed 3/3.
 - [x] **Step 3:** `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1 -DryRun -Release -Channel rc.1` → exit 0 and `installer=target/release/1.0.0/EncryptDrive-1.0.0-rc.1-Setup.exe`.
-- [ ] **Step 4: Commit** — include the version update, regression fix, T25 evidence, and release checklist updates.
+- [x] **Step 4: Commit** — `b55d570` (`chore: set release version 1.0.0`) includes the version update, regression fix, T25 evidence, and release checklist updates.
 
 ```bash
 git add pom.xml CHANGELOG.md src/test/java/com/fabianrodas/encryptdrive/ReleaseMetadataTest.java docs/superpowers/plans/2026-10-01-encryptdrive-v1.0.0-05-release.md docs/superpowers/plans/V1_RELEASE_STATE.md docs/testing/release-checklist.md
