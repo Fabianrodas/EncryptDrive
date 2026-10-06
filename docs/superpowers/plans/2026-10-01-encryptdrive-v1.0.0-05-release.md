@@ -190,7 +190,7 @@ then choose **More info → Run anyway**.
   - **Sessions:** Close, Log Out and Close Vault are blocked while a file operation runs; closing wipes user and vault keys and releases the lock.
   - **Import, export:** folder import never follows links/junctions and refuses folders that contain the vault; export refuses destinations inside the vault; an interrupted export can leave a `<name>.<digits>.part` plaintext file next to the chosen destination — delete it.
   - **Distribution:** installer vs portable; per-user install; uninstall keeps vaults; unsigned artifacts and SmartScreen; SHA-256 verification; JavaFX writes native libraries to `%USERPROFILE%\.openjfx\cache` on each computer where it runs (the portable edition leaves this trace on the host).
-  - **History (new subsection):** an early development build stored a plaintext user list (`data/users.json`, with password hashes and salts) in this repository's history; current builds never use it and it is not packaged; outcome of H2 (rewritten on <date> / still in history); treat any password used for those development accounts as compromised.
+  - **History (new subsection):** an early development build stored a plaintext user list (`data/users.json`, with password hashes and salts) in this repository's history; current builds never use it and it is not packaged; H2 rewrote it out of all reachable history before v1.0.0 on 2026-10-05. The rewrite does not erase copies in forks, clones, caches, or elsewhere; treat any password used for those development accounts as compromised, especially if reused anywhere else.
 
 - [x] **Step 5: `docs/VAULT_FORMAT.md`** — add:
   - Manifest member `pendingDeletions` (optional, array of `{ "blobId": "<uuid>", "queuedAt": "<instant>" }`), its meaning, and that format version stays `1` (older readers ignore it; absent means empty).
@@ -256,7 +256,7 @@ git log --all --oneline -- data/users.json           # empty if H2 rewrote; othe
 cat .gitattributes; git ls-files --eol | awk '$2=="w/crlf"' | wc -l   # expect 0
 ```
 
-**Result:** no tracked secret/artifact candidates outside public Format 1 vectors, no private-key markers, no literal credential assignments found beyond the synthetic test fixture, and 0 tracked CRLF files. H2 history still includes the three documented `data/users.json` commits. The credential scan covers the full tree, with only the exact synthetic test fixture line allowlisted. The local ZIP-layout regression rejects all 9 crafted unsafe entries before extraction; the current real package passes normal verification and portable launch.
+**Result at the T25 check:** no tracked secret/artifact candidates outside public Format 1 vectors, no private-key markers, no literal credential assignments found beyond the synthetic test fixture, and 0 tracked CRLF files. At that point H2 history still included the three documented `data/users.json` commits; H2 later rewrote those out before v1.0.0. The credential scan covers the full tree, with only the exact synthetic test fixture line allowlisted. The local ZIP-layout regression rejects all 9 crafted unsafe entries before extraction; the T25 package passed normal verification and portable launch.
 
 - [x] **Step 3: Whole-branch review** — reviewer found one Important import/export path-swap race; TDD regressions failed before and passed after fix `77b3310`, followed by a 412-test clean suite. No Critical finding. The two Minor findings were fixed in local commit `26e3da9` and recorded in `V1_RELEASE_STATE.md`.
 

@@ -670,58 +670,10 @@ $runs.workflow_runs[0] | Select-Object status, conclusion, head_sha, html_url
 
 ---
 
-### Human Gate H2: historical `data/users.json` and permission to push
+### Human Gate H2: historical `data/users.json` — DONE (2026-10-05)
 
-**Why this stops:** rewriting history and force-pushing `main` are destructive to commit ids and to every existing clone; the spec requires explicit human confirmation (17.1). Pushing the branch and, later, `main` and annotated tags to `origin` are outward-facing actions.
+The user authorized Option 1. A complete `--all` bundle was created and verified before rewriting. All reachable commit histories were rewritten to remove `data/users.json`; local reflogs were expired and unreachable Git objects pruned. The local path-history, reachable-object, branch-tree, clean-worktree, and post-rewrite `mvn -B clean verify` checks passed. The rewritten feature branch was pushed normally. Immediately before updating `main`, `origin` was fetched and `origin/main` matched the audited SHA `0f913d25b82fea4a1d41605325fbe9e140654cf9`; only `main` was updated with the approved exact `--force-with-lease` value. Remote refs and the reachable `origin/main` history were verified afterward. Full pre/post refs, bundle path/hash, and verification details are recorded in `docs/superpowers/plans/V1_RELEASE_STATE.md`.
 
-**Facts to present:**
-- `data/users.json` (fields `id, fullName, username, passwordHash, salt`) was added in `0030c7c`, changed in `9d866c1`, and is **still tracked in the current tip of `main` and `origin/main`**. It was removed only on the unpushed feature branch (`baf82ea`).
-- Without a rewrite, merging the release branch removes it from the tip, but every historical commit on GitHub keeps it.
-- Recommendation: **rewrite now**, before the first push of the release branch and before any tag, because no release tag exists yet and the branch is unpublished, so the rewrite only force-updates `main`. Regardless of the decision, change any real password that was ever used for those development accounts anywhere else.
-- A rewrite cannot remove copies in forks, clones or caches; GitHub may keep unreachable commits viewable by id until GitHub Support purges them.
+No release tag existed or was moved. The bundle at `data/pre-h2-20261005.bundle` must be retained until the stable v1.0.0 release succeeds. History rewriting cannot remove copies in forks, clones, caches, or other copies already made elsewhere. Any password used by the historical development accounts is compromised if reused anywhere else.
 
-**Ask the user to choose exactly one:**
-1. **Approve rewrite + force-push of `main`**, plus normal pushes of `feature/encryptdrive-1.0`, `main` (T27) and annotated release tags (T28, T30) for the rest of this workstream.
-2. **Decline the rewrite**, but approve the normal pushes listed in option 1. The exposure is documented in `docs/SECURITY.md` (T24).
-3. **Decline both** — PACKAGING_COMPLETE (CI evidence), RC_CREATED and later states stay BLOCKED until pushes are allowed.
-
-**If option 1 — exact commands (run from the repository root, PowerShell):**
-
-```powershell
-# 0. Preconditions
-git status --porcelain                                   # must print nothing
-git rev-parse main origin/main feature/encryptdrive-1.0  # record in the ledger
-
-# 1. Full backup of every ref (restore: git clone ..\EncryptDrive-pre-rewrite.bundle)
-git bundle create ..\EncryptDrive-pre-rewrite.bundle --all
-git bundle verify ..\EncryptDrive-pre-rewrite.bundle
-
-# 2. Tool
-python -m pip install --user git-filter-repo
-python -m git_filter_repo --version
-
-# 3. Rewrite all local branches (filter-repo removes the origin remote as a safety measure)
-python -m git_filter_repo --invert-paths --path data/users.json --force
-git remote add origin git@github.com:Fabianrodas/EncryptDrive.git
-
-# 4. Verify locally before anything leaves the machine
-git log --all --oneline -- data/users.json               # expect: no output
-git rev-list --all | ForEach-Object { git ls-tree -r --name-only $_ } | Select-String -SimpleMatch "users.json"   # expect: no output
-git log --oneline -3 feature/encryptdrive-1.0            # same messages as before, new ids
-mvn -B clean verify                                      # expect: BUILD SUCCESS
-
-# 5. Publish (the lease fails safely if origin/main moved since the audit)
-git fetch origin
-git push --force-with-lease=main:0f913d25b82fea4a1d41605325fbe9e140654cf9 origin main
-git push -u origin feature/encryptdrive-1.0
-
-# 6. Verify the remote
-git ls-remote origin refs/heads/main refs/heads/feature/encryptdrive-1.0
-git fetch origin; git log --oneline origin/main -- data/users.json   # expect: no output
-```
-
-**If option 2:** run only `git push -u origin feature/encryptdrive-1.0`, then the step-6 `ls-remote`.
-
-**Evidence to record in the ledger:** chosen option; pre/post ref ids; outputs of step 4 and step 6. History cleanup status becomes `DONE (rewritten <date>)` or `DONE (declined, documented)`.
-
-**Resume point:** T22 Step 6 (watch CI), then Plan 05 T23.
+**Resume point:** T27, then T28 only after every T28 precondition is DONE. Stop at H3–H6 for the physical/manual RC validation gates.

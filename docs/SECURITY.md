@@ -231,7 +231,9 @@ physical erasure of deleted data.
 An early development build stored a plaintext account list in
 `data/users.json`, including account identifiers, usernames, password hashes,
 full names, and salts. Current builds do not use that file, and it is not
-included in release packages. As of the local reference check on 2026-10-05,
-the file remains in the history of `main`; the history-rewrite decision is
-pending. Treat any password used for one of those development accounts as
-compromised.
+included in release packages. Before v1.0.0, the repository history was
+rewritten to remove the historical development user database from reachable
+commits on `main` and the release branch. This rewrite does not erase copies in
+forks, clones, caches, or copies already made elsewhere. Treat any password
+used for one of those development accounts as compromised, especially if it
+was reused anywhere else.

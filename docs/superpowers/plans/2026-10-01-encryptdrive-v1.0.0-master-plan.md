@@ -45,7 +45,7 @@ Every task in every child plan implicitly includes these.
 | `main` | Untouched by feature work; equals `origin/main` (`0f913d2`). |
 | Build | `mvn -B clean verify`: 166 tests, 0 failures, 1 skipped (opt-in `LargeFileStreamingTest`). UI tests run locally. |
 | Version | `pom.xml` `1.0-SNAPSHOT`; `scripts/package-windows.ps1` hard-codes the jar name and `--app-version 1.0.0`. |
-| `data/users.json` | Plaintext dev DB (`id, fullName, username, passwordHash, salt`). Added in `0030c7c`, removed only on the feature branch (`baf82ea`). **Still tracked in the current tip of `main` and `origin/main`.** Local untracked copy in `data/`. |
+| `data/users.json` | Plaintext dev DB (`id, fullName, username, passwordHash, salt`), originally added in `0030c7c`. H2 rewrote it out of all reachable history before v1.0.0 on 2026-10-05. The verified pre-rewrite bundle remains local; copies in forks, clones, caches, or elsewhere may remain. Any reused development password is compromised. |
 | Local junk | `data/`, `.github/java-upgrade/` (extension output), `target/` (old `1.0-SNAPSHOT` jar), `nb-configuration.xml` (NetBeans local settings, ignored — kept). |
 | Line endings | Index is LF everywhere; 15 working-tree files are CRLF because `core.autocrlf=true`; no `.gitattributes`. `nbactions.xml` is tracked but also listed in `.gitignore`. |
 | Toolchain | JDK 21.0.2 with `jpackage` (all `--win-*` flags used in T20 confirmed with `jpackage --help`); Maven 3.9.16; Python 3.13; .NET Framework 3.5 installed; **WiX not installed**; `git-filter-repo` not installed; `gh` not installed. |
