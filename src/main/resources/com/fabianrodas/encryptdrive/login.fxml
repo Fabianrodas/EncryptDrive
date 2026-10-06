@@ -109,6 +109,26 @@
 
                                 <Label styleClass="brand-note"
                                        text="LOCAL • PRIVATE • PORTABLE" />
+
+                                <VBox alignment="CENTER"
+                                      maxWidth="280.0"
+                                      spacing="2.0"
+                                      styleClass="vault-chip">
+                                    <children>
+                                        <Label styleClass="vault-chip-caption"
+                                               text="OPEN VAULT" />
+
+                                        <Label fx:id="vaultNameLabel"
+                                               styleClass="vault-chip-name"
+                                               text="No vault open" />
+
+                                        <Button fx:id="closeVaultButton"
+                                                mnemonicParsing="false"
+                                                onAction="#closeVault"
+                                                styleClass="vault-chip-link"
+                                                text="Close vault" />
+                                    </children>
+                                </VBox>
                             </children>
                         </VBox>
                     </children>

@@ -1,0 +1,41 @@
+package com.fabianrodas.security;
+
+import java.nio.charset.StandardCharsets;
+
+/**
+ * AES-GCM associated data from the design spec. These strings are part of
+ * the on-disk format: every ciphertext is bound to one of them.
+ */
+public final class Aad {
+
+    private Aad() {
+    }
+
+    public static byte[] vaultKey(String vaultId) {
+        return of("vault-key|v1|" + vaultId);
+    }
+
+    public static byte[] users(String vaultId) {
+        return of("users|v1|" + vaultId);
+    }
+
+    public static byte[] userKey(String vaultId, String userId) {
+        return of("user-key|v1|" + vaultId + "|" + userId);
+    }
+
+    public static byte[] manifest(String vaultId, String userId) {
+        return of("manifest|v1|" + vaultId + "|" + userId);
+    }
+
+    public static byte[] fileKey(String vaultId, String userId, String fileId) {
+        return of("file-key|v1|" + vaultId + "|" + userId + "|" + fileId);
+    }
+
+    public static byte[] fileContent(String vaultId, String userId, String fileId) {
+        return of("file|v1|" + vaultId + "|" + userId + "|" + fileId);
+    }
+
+    private static byte[] of(String context) {
+        return ("EncryptDrive|" + context).getBytes(StandardCharsets.UTF_8);
+    }
+}

@@ -1,10 +1,13 @@
 package com.fabianrodas.encryptdrive;
 
-import com.fabianrodas.controllers.UserController;
-import com.fabianrodas.models.User;
+import com.fabianrodas.services.AuthException;
+import com.fabianrodas.services.AuthService;
+import com.fabianrodas.services.RecoveryService;
 import com.fabianrodas.services.SessionService;
+import com.fabianrodas.services.VaultSessionService;
 import java.io.IOException;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.ResourceBundle;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
@@ -49,8 +52,12 @@ public class LoginController implements Initializable {
     @FXML
     private Label feedbackLabel;
 
-    private final UserController userController = new UserController();
-    
+    @FXML
+    private Label vaultNameLabel;
+
+    @FXML
+    private Button closeVaultButton;
+
     private final WindowDragHandler windowDragHandler
         = new WindowDragHandler();
     
@@ -60,8 +67,15 @@ public class LoginController implements Initializable {
     public void initialize(URL url, ResourceBundle rb) {
         visiblePasswordField.textProperty()
                 .bindBidirectional(passwordField.textProperty());
-        
+
+        closeVaultButton.disableProperty().bind(Background.busyProperty());
+        vaultNameLabel.setText(App.openVaultName());
         configureResponsiveForm();
+
+        if (RecoveryService.takeRecoveryNotice()) {
+            feedbackLabel.setText(Formats.RECOVERY_NOTICE);
+            feedbackLabel.getStyleClass().add("notice");
+        }
     }
 
     @FXML
@@ -76,11 +90,7 @@ public class LoginController implements Initializable {
 
     @FXML
     private void close() {
-        Stage stage = getStage();
-
-        if (stage != null) {
-            stage.close();
-        }
+        App.requestClose(getStage());
     }
 
     @FXML
@@ -125,33 +135,57 @@ public class LoginController implements Initializable {
     @FXML
     private void login() {
         String username = usernameField.getText().trim();
-        String password = passwordField.getText();
 
-        if (username.isEmpty() || password.isBlank()) {
+        if (username.isEmpty() || passwordField.getText().isBlank()) {
             showError("Enter username and password to continue.");
             return;
         }
 
-        User user = userController.authenticate(username, password);
-
-        if (user == null) {
-            if (userController.getLastError().isEmpty()) {
-                showError("Invalid username or password.");
-            } else {
-                showError("Could not access the local user database.");
-            }
-
+        if (!VaultSessionService.isOpen()) {
+            showError("Open a vault before logging in.");
             return;
         }
 
+        char[] password = passwordField.getText().toCharArray();
+        passwordField.clear();
+        AuthService authService = new AuthService(VaultSessionService.current());
+        formCard.setDisable(true);
+
+        Background.run(
+                () -> {
+                    try {
+                        return authService.login(username, password);
+                    } finally {
+                        Arrays.fill(password, '\0');
+                    }
+                },
+                result -> {
+                    SessionService.start(result.identity(), result.userMasterKey());
+
+                    try {
+                        App.setRoot("dashboard");
+                    } catch (IOException e) {
+                        SessionService.logout();
+                        formCard.setDisable(false);
+                        showError("Could not open the dashboard.");
+                    }
+                },
+                failure -> {
+                    formCard.setDisable(false);
+                    showError(failure instanceof AuthException authError
+                            && authError.getReason() == AuthException.Reason.INVALID_CREDENTIALS
+                            ? "Invalid username or password."
+                            : "Could not read the accounts of this vault.");
+                }
+        );
+    }
+
+    @FXML
+    private void closeVault() {
         try {
-            SessionService.startSession(user);
-
-            passwordField.clear();
-            App.setRoot("dashboard");
-
+            App.closeVault();
         } catch (IOException e) {
-            showError("Could not open the dashboard.");
+            showError("Could not return to vault selection.");
         }
     }
 
@@ -178,7 +212,7 @@ public class LoginController implements Initializable {
 
     private void showError(String message) {
         feedbackLabel.setText(message);
-        feedbackLabel.getStyleClass().remove("success");
+        feedbackLabel.getStyleClass().removeAll("success", "notice");
     }
 
     private Stage getStage() {

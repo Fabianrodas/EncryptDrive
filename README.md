@@ -5,427 +5,217 @@
 <h1 align="center">EncryptDrive</h1>
 
 <p align="center">
-  A local-first desktop application for managing protected personal storage spaces.
+  A local-first desktop app that keeps your files in an encrypted, portable vault.
 </p>
 
 ---
 
-## Overview
-
-EncryptDrive is a JavaFX desktop application designed around the idea of local and portable protected storage.
-
-The long-term goal is to allow a user to select or create a protected directory in locations such as:
-
-```text
-E:\EncryptDrive Vault
-C:\Users\User\Desktop\EncryptDrive Vault
-C:\Users\User\OneDrive\EncryptDrive Vault
-```
-
-Inside that directory, multiple users will be able to register and access their own protected content. Each user will have a separate account, password, and private storage area.
-
-The project is being developed as a local-first application. It does not depend on a cloud service, a remote database, or an HTTP backend for its core functionality.
-
-At its current stage, EncryptDrive includes local user registration, secure password storage, JSON-based account persistence, and a custom registration-success popup.
-
----
-
-## Current Features
-
-The current version includes:
-
-* JavaFX desktop interface built with FXML and CSS.
-* Custom undecorated application window.
-* Window dragging, minimizing, and closing controls.
-* Login and registration screens.
-* Password visibility toggle buttons.
-* Registration validation.
-* Local account storage using `users.json`.
-* Duplicate username validation.
-* Password hashing using PBKDF2 with HMAC-SHA256.
-* Unique random salt generated for every password.
-* Passwords are not stored in plain text.
-* Custom registration-success popup.
-* Popup behavior:
-
-  * Closing the popup with `X` keeps the user on the registration screen.
-  * Selecting `Go to Log In` redirects the user to the login screen.
-
----
-
-## Current Development Status
-
-| Feature                                   | Status      |
-| ----------------------------------------- | ----------- |
-| JavaFX application structure              | Implemented |
-| Login interface                           | Implemented |
-| Registration interface                    | Implemented |
-| Local user registration                   | Implemented |
-| JSON user storage                         | Implemented |
-| Password hashing and salt                 | Implemented |
-| Registration success popup                | Implemented |
-| Login authentication against `users.json` | In progress |
-| Redirect to main dashboard after login    | Planned     |
-| Folder or vault selection                 | Planned     |
-| File encryption                           | Planned     |
-| Multi-user encrypted storage              | Planned     |
-| Portable vault support for USB drives     | Planned     |
-
----
-
-## Project Goal
-
-EncryptDrive is intended to become a local multi-user encrypted storage system.
-
-A future EncryptDrive vault may have a structure similar to this:
-
-```text
-EncryptDrive Vault/
-│
-├── .encryptdrive/
-│   ├── users.json
-│   ├── vault.json
-│   ├── accounts/
-│   └── backups/
-│
-└── storage/
-    ├── user-identifier-1/
-    │   ├── encrypted-file-1.edf
-    │   └── encrypted-file-2.edf
-    │
-    └── user-identifier-2/
-        ├── encrypted-file-3.edf
-        └── encrypted-file-4.edf
-```
-
-Each registered user will eventually have:
-
-* A unique identifier.
-* A username and full name.
-* A protected password hash.
-* A unique password salt.
-* A private encrypted storage area.
-* Access only to their own protected files.
-
-Other users may see that encrypted files exist, but they should not be able to read or decrypt content that does not belong to them.
-
----
-
-## Local-First Design
-
-EncryptDrive is being designed to work without a traditional remote database.
-
-Instead of requiring users to install MySQL, PostgreSQL, or another database system, the application stores its local user information in a JSON file.
-
-Current local storage location:
-
-```text
-data/users.json
-```
-
-The application currently creates or uses this file from the project working directory:
-
-```text
-EncryptDrive/
-├── data/
-│   └── users.json
-├── src/
-├── pom.xml
-└── README.md
-```
-
-A new file starts with:
-
-```json
-[]
-```
-
-After registering an account, it will contain user information similar to this:
-
-```json
-[
-  {
-    "id": 1,
-    "fullName": "Fabian Rodas",
-    "username": "Fabian",
-    "passwordHash": "stored-password-hash",
-    "salt": "unique-random-salt"
-  }
-]
-```
-
-The original password is never written to `users.json`.
-
----
-
-## Password Security
-
-EncryptDrive currently protects account passwords using:
-
-```text
-PBKDF2WithHmacSHA256
-```
-
-The password process works as follows:
-
-```text
-User password
-      ↓
-Random salt generated
-      ↓
-PBKDF2WithHmacSHA256 hash generated
-      ↓
-Hash and salt saved in users.json
-```
-
-The application stores:
-
-* `passwordHash`
-* `salt`
-
-The application does not store:
-
-* The original password.
-* Reversible password information.
-* Plain-text account credentials.
-
-Every user receives a different random salt. This means that two users with the same password would still have different stored hashes.
-
-Important: password hashing is used to validate a login. File encryption will be implemented separately in a future stage using an encryption method such as AES-GCM.
-
----
-
-## Architecture
-
-EncryptDrive follows a lightweight Model-View-Controller structure.
-
-```text
-com.fabianrodas/
-│
-├── encryptdrive/
-│   ├── App.java
-│   ├── LoginController.java
-│   ├── RegisterController.java
-│   └── SuccessPopupController.java
-│
-├── controllers/
-│   └── UserController.java
-│
-├── models/
-│   └── User.java
-│
-└── security/
-    └── PasswordHasher.java
-```
-
-### Main Components
-
-| Component                     | Responsibility                                                       |
-| ----------------------------- | -------------------------------------------------------------------- |
-| `App.java`                    | Starts the JavaFX application and loads FXML views.                  |
-| `LoginController.java`        | Handles login screen behavior.                                       |
-| `RegisterController.java`     | Validates registration data and creates accounts.                    |
-| `SuccessPopupController.java` | Controls the registration-success popup behavior.                    |
-| `UserController.java`         | Reads and writes user data in `users.json`.                          |
-| `User.java`                   | Represents a registered EncryptDrive user.                           |
-| `PasswordHasher.java`         | Generates password salts, hashes passwords, and validates passwords. |
-
----
-
-## User Registration Flow
-
-The current registration process follows these steps:
-
-```text
-User fills in registration form
-      ↓
-Application validates all fields
-      ↓
-Application validates username length
-      ↓
-Application validates password length
-      ↓
-Application checks password confirmation
-      ↓
-Application checks whether username already exists
-      ↓
-Password is hashed with a random salt
-      ↓
-New user is saved in users.json
-      ↓
-Success popup is shown
-```
-
-Registration validation currently includes:
-
-* Full name cannot be empty.
-* Username cannot be empty.
-* Username must contain at least 3 characters.
-* Password cannot be empty.
-* Password must contain at least 8 characters.
-* Password confirmation must match.
-* Username cannot already exist.
-
----
-
-## Registration Success Popup
-
-After a successful registration, EncryptDrive displays a custom popup window.
-
-The popup provides two possible actions:
-
-```text
-X button
-→ Closes the popup
-→ Keeps the user on the registration screen
-
-Go to Log In button
-→ Closes the popup
-→ Redirects the user to the login screen
-```
-
-This behavior allows the user to decide whether to register another account or continue to login.
-
----
-
-## Technologies Used
-
-* Java 21
-* JavaFX 21
-* Maven
-* FXML
-* CSS
-* Gson
-* JSON local storage
-* PBKDF2WithHmacSHA256
-* Java Cryptography Architecture
-
----
-
-## Dependencies
-
-EncryptDrive uses Gson to read and write user information in JSON format.
-
-Example Maven dependency:
-
-```xml
-<dependency>
-    <groupId>com.google.code.gson</groupId>
-    <artifactId>gson</artifactId>
-    <version>2.14.0</version>
-</dependency>
-```
-
-The Java module configuration must include Gson support:
-
-```java
-module com.fabianrodas.encryptdrive {
-    requires javafx.controls;
-    requires javafx.fxml;
-    requires com.google.gson;
-
-    opens com.fabianrodas.encryptdrive to javafx.fxml;
-    opens com.fabianrodas.models to com.google.gson;
-
-    exports com.fabianrodas.encryptdrive;
-}
-```
-
----
-
-## Running the Project
-
-### Requirements
-
-Before running EncryptDrive, make sure that the following tools are installed:
-
-* JDK 21
-* Maven
-* JavaFX 21
-* A Java IDE such as Apache NetBeans, IntelliJ IDEA, or Eclipse
-
-### Run with Maven
-
-From the project directory, run:
+## What it does
+
+EncryptDrive creates an encrypted **vault** in any folder you choose: your own
+disk, a USB drive, or a folder synced by OneDrive. Several people can have
+accounts in the same vault, and each person can only ever decrypt their own
+files.
+
+Account names, file and folder names, and file contents in the vault are
+encrypted. The only plaintext vault metadata is a small `vault.json` header;
+EncryptDrive also uses a lock file while the vault is open. It works fully
+offline: there is no server, cloud account, telemetry, or network access.
+
+## Screenshots
+
+| Vault selection | Log in | Files |
+|---|---|---|
+| ![Create or open a vault](docs/screenshots/vault-selection.png) | ![Log in to an open vault](docs/screenshots/login.png) | ![Encrypted files of the signed-in account](docs/screenshots/files.png) |
+
+The screenshots use a demo vault and a fictional account.
+
+## How it works
+
+- **Two passwords, two layers.** The vault password unlocks the encrypted list
+  of accounts. Each account password unlocks that account's own key, which is
+  the only way to decrypt that account's files.
+- **One key per file.** Every file is encrypted with its own random key using
+  AES-256-GCM, streamed in small chunks so even very large files use little
+  memory. Tampering with any byte makes decryption fail instead of producing
+  wrong data.
+- **Passwords are never stored.** Keys are derived with Argon2id (64 MiB,
+  3 iterations). Changing a password rewraps a key; nothing is re-encrypted.
+- **Safe writes.** Metadata is replaced atomically, with three encrypted backup
+  generations that are restored automatically if the current copy is damaged.
+- **One process at a time.** A lock file keeps a second EncryptDrive process
+  from opening a vault that is already open.
+
+The details are in [docs/SECURITY.md](docs/SECURITY.md) and the exact file
+format is in [docs/VAULT_FORMAT.md](docs/VAULT_FORMAT.md).
+
+## Download and install
+
+The Windows release has two editions:
+
+- **Installer:** run `EncryptDrive-<version>-Setup.exe`. If SmartScreen reports
+  an unknown publisher, verify the SHA-256 checksum first, then choose **More
+  info → Run anyway**. The per-user wizard lets you choose the install folder,
+  add a Start Menu entry, and optionally add a desktop shortcut. It does not
+  ask for administrator access.
+- **Portable:** unzip `EncryptDrive-<version>-Windows-Portable.zip` anywhere
+  and run `EncryptDrive\EncryptDrive.exe`. It also works from a USB drive.
+
+Both editions bundle Java and need no separate Java installation. Installing
+EncryptDrive does not choose, create, or move a vault; uninstalling it never
+deletes a vault. Create and open vaults from inside the app.
+
+Verify the downloaded installer against `SHA256SUMS.txt` using the PowerShell
+commands in [the release notes footer](docs/testing/release-notes-footer.md).
+
+## Using EncryptDrive
+
+### Create or open a vault
+
+EncryptDrive starts on **Vault Selection**.
+
+- **Create vault:** choose a name and a location (disk, USB drive, or synced
+  folder), then set a vault password of at least 12 characters. EncryptDrive
+  creates a new folder with that name and asks you to register the first
+  account.
+- **Open vault:** choose an existing vault folder and enter its vault
+  password. You land on the login screen.
+
+> **There is no password recovery.** If you forget the vault password, the
+> vault cannot be opened. If you forget an account password, that account's
+> files cannot be decrypted. Nobody, including the author, can reset them.
+
+### Accounts
+
+- **Create account** adds a local account to the open vault (username of at
+  least 3 characters, password of at least 12). Accounts created by pre-release
+  builds with shorter passwords still work; change those passwords in Personal
+  Profile.
+- **Log in** opens that account's workspace.
+- **Log Out** ends the account session and returns to login; the vault stays
+  open for the next person.
+- **Close Vault** (sidebar, Vault Settings, or the login screen) signs out,
+  erases the vault keys from memory, and releases the vault.
+
+### Files
+
+The workspace sidebar has **Overview**, **Files**, **Trash**,
+**Personal Profile**, and **Vault Settings**.
+
+- **Import** offers **Files…** and **Folder…**. Files encrypt copies into the
+  current folder. Folder imports include subfolders and empty folders; links
+  and junctions are skipped. Both actions show progress, and originals stay
+  where they are.
+- **New Folder**, double-click to open a folder, and use the breadcrumbs to go
+  back. **Rename** and **Move** change items inside your encrypted workspace.
+- **Search** searches only your own files. Press Enter to search; select
+  **Clear** to return to the current folder. Results show their location, and
+  double-clicking a result opens its folder.
+- **Export** writes decrypted copies to a location you choose, after warning
+  that exported files are no longer protected by EncryptDrive. Exports into the
+  vault folder are refused. Files are never opened as temporary plaintext.
+- **Move to Trash** hides items but keeps them encrypted. In **Trash** you can
+  **Restore**, **Permanently Delete**, or **Empty Trash** after confirmation.
+- **Personal Profile** changes your account password; **Vault Settings**
+  shows the vault details and changes the vault password.
+
+### USB drives and OneDrive
+
+A vault is just a folder, so you can keep it on a USB drive and open it on
+another Windows computer with the portable build. Keep the portable app on the
+USB drive beside the vault if convenient. Close the vault and EncryptDrive
+before ejecting the drive.
+
+In a OneDrive (or similar) folder, the provider only ever receives encrypted
+data.
+
+**Never open the same synced vault on two computers at the same time. Close
+EncryptDrive and wait for sync to finish before switching computers.**
+
+## Versions and tags
+
+- `1.0.0-SNAPSHOT` is the development version.
+- `v1.0.0-rc.N` tags a release candidate for testing; it is a prerelease.
+- `v1.0.0` tags the stable release.
+
+## Building and running
+
+Requirements: JDK 21 and Maven for source work; Windows release packaging also
+needs WiX Toolset 3.14 on `PATH`. The portable and installed builds bundle a
+Java runtime and need no separate Java installation on the computer that runs
+them.
 
 ```bash
-mvn clean javafx:run
+# Run from source
+mvn javafx:run
+
+# Run all tests
+mvn -B clean verify
 ```
 
-When using Apache NetBeans, the project can also be run directly through the IDE.
+Build the portable and installer Windows editions with their own Java runtime.
+Artifacts are written to `target/release/<version>/`.
 
----
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-package.ps1 -Launch -Install
+```
 
-## Project Resources
+The portable ZIP can be moved to another directory or a USB drive. Choose the
+vault location from inside EncryptDrive; installing or moving the app does not
+move the vault.
+
+### Tests
+
+`mvn -B clean verify` runs the unit and integration tests: key derivation against
+reference vectors, AES-GCM tamper cases, vault and account lifecycles,
+encrypted storage, cross-account isolation, a corruption and recovery matrix,
+and JavaFX layout and flow checks. The JavaFX tests are skipped automatically
+where no desktop session is available.
+
+A 1 GiB streaming check is opt-in and uses a 256 MiB Java heap:
+
+```bash
+mvn -B test "-Dtest=LargeFileStreamingTest" "-Dencryptdrive.largeFileCheck=true" "-DargLine=-Xmx256m"
+```
+
+The manual UI checklist is in [docs/testing/manual-ui.md](docs/testing/manual-ui.md).
+The release gates and hardware checks are in
+[docs/testing/release-checklist.md](docs/testing/release-checklist.md).
+
+## Project structure
 
 ```text
-src/main/resources/
-│
-└── com/fabianrodas/
-    │
-    ├── css/
-    │   ├── login.css
-    │   ├── register.css
-    │   └── success-popup.css
-    │
-    ├── encryptdrive/
-    │   ├── login.fxml
-    │   ├── register.fxml
-    │   └── success-popup.fxml
-    │
-    └── images/
-        └── logo.png
+src/main/java/com/fabianrodas/
+├── encryptdrive/   JavaFX app and FXML controllers (no crypto or file I/O)
+├── models/         data classes: vault header, envelopes, accounts, manifests
+├── security/       Argon2id, AES-GCM, associated data, key wiping
+├── repositories/   atomic, backed-up persistence of vault files and blobs
+├── services/       vault lifecycle, accounts, sessions, files, recovery
+└── utils/          window dragging
+
+src/main/resources/com/fabianrodas/
+├── encryptdrive/   FXML views
+├── css/            stylesheets
+└── images/         logo
+
+packaging/windows/  Windows installer resources
+scripts/            portable Windows packaging and package verification
+docs/               security model, vault format, compatibility, and test checklists
 ```
 
----
+## Known limitations
 
-## Future Development
+- EncryptDrive protects data at rest. It cannot protect against malware,
+  keyloggers, or an administrator on the computer where the vault is open.
+- File sizes and the number of files and accounts are visible from the vault
+  folder, although names and contents are not.
+- Exported files, and originals you imported, are ordinary plaintext files.
+- SSDs and flash drives cannot guarantee that deleted data is physically
+  erased.
+- The same synced vault must not be used from two computers at once.
 
-The next development stages for EncryptDrive are expected to include:
-
-1. Login authentication using the local `users.json` file.
-2. Redirecting authenticated users to a main dashboard.
-3. Session handling for the currently logged-in user.
-4. Selecting or creating a protected vault directory.
-5. Creating a vault configuration file.
-6. Creating separate protected storage folders for each user.
-7. Encrypting files locally before storing them.
-8. Supporting portable vaults stored on USB drives.
-9. Adding encrypted backup support.
-10. Adding safe file import, export, deletion, and recovery features.
-11. Improving protection against accidental file replacement or corruption.
-
----
-
-## Important Security Note
-
-The current version protects account passwords through hashing, but it does not yet encrypt files.
-
-The future file protection layer should use authenticated encryption, such as:
-
-```text
-AES/GCM/NoPadding
-```
-
-This will allow EncryptDrive to protect file confidentiality and detect unauthorized modifications.
-
-The application is also intended to remain local-first. A future cloud synchronization option may be considered, but only after local encryption is implemented so that files remain encrypted before leaving the user’s device.
-
----
-
-## Development Notes
-
-The local `users.json` file should not contain real production credentials in a public repository.
-
-For development purposes, the file may be ignored through `.gitignore`:
-
-```gitignore
-data/users.json
-```
-
-The application can recreate an empty JSON file automatically when necessary.
-
----
+See [docs/SECURITY.md](docs/SECURITY.md) for the full threat model.
 
 ## Author
 

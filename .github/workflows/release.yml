@@ -1,0 +1,142 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      release_tag: ${{ steps.tag.outputs.release_tag }}
+      release_version: ${{ steps.tag.outputs.version }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Check the tag
+        id: tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          $tag = $env:RELEASE_TAG
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+)(?:-(rc\.\d+))?$') {
+            throw "$tag is not vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N"
+          }
+          $tagVersion = $Matches[1]
+          $channel = if ($Matches[2]) { $Matches[2] } else { "" }
+
+          # actions/checkout stores the pushed tag as a plain commit ref; fetch the real tag object.
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) { throw "could not fetch $tag" }
+          $tagObjectType = (git cat-file -t "refs/tags/$tag" | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $tagObjectType -ne "tag") { throw "$tag must be an annotated tag" }
+
+          $tagCommit = (git rev-parse "refs/tags/$tag^{commit}" | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $env:TRIGGER_SHA) { throw "$tag changed after this workflow was triggered" }
+          git fetch origin "+refs/heads/main:refs/remotes/origin/main"
+          if ($LASTEXITCODE -ne 0) { throw "could not fetch main" }
+          git merge-base --is-ancestor $tagCommit refs/remotes/origin/main
+          if ($LASTEXITCODE -ne 0) { throw "$tag does not point to a commit on main" }
+
+          $version = ([xml](Get-Content pom.xml -Raw)).project.version
+          if ($tagVersion -ne $version) { throw "$tag does not match the project version $version" }
+          $prerelease = if ($channel) { "true" } else { "false" }
+          Add-Content $env:GITHUB_OUTPUT "release_tag=$tag"
+          Add-Content $env:GITHUB_OUTPUT "channel=$channel"
+          Add-Content $env:GITHUB_OUTPUT "prerelease=$prerelease"
+          Add-Content $env:GITHUB_OUTPUT "version=$version"
+
+      - name: Verify
+        run: mvn -B clean verify
+
+      - name: Install WiX 3
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "wix-binaries.zip"
+          Invoke-WebRequest "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" -OutFile $zip
+          $expectedHash = "6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31"
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne $expectedHash) { throw "unexpected WiX download" }
+          $wix = Join-Path $env:RUNNER_TEMP "wix"
+          Expand-Archive $zip -DestinationPath $wix
+          Add-Content $env:GITHUB_PATH $wix
+
+      - name: Build release artifacts
+        shell: pwsh
+        env:
+          RELEASE_CHANNEL: ${{ steps.tag.outputs.channel }}
+        run: ./scripts/build-release.ps1 -Release -SkipTests -Channel $env:RELEASE_CHANNEL
+
+      - name: Verify release artifacts
+        shell: pwsh
+        env:
+          RELEASE_CHANNEL: ${{ steps.tag.outputs.channel }}
+        run: ./scripts/verify-package.ps1 -Channel $env:RELEASE_CHANNEL -Launch -Install
+
+      - name: Release notes
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          $version = $env:RELEASE_VERSION
+          $section = ((Get-Content CHANGELOG.md -Raw) -split '(?m)^## ') | Where-Object { $_.TrimStart().StartsWith("[$version]") } | Select-Object -First 1
+          if (-not $section) { throw "CHANGELOG.md has no section for $version" }
+          $footer = Get-Content docs/testing/release-notes-footer.md -Raw
+          $notes = "## " + $section.Trim() + "`n`n" + $footer
+          Set-Content release-notes.md $notes -Encoding utf8
+
+      - name: Upload verified release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: encryptdrive-release
+          path: |
+            target/release/
+            release-notes.md
+          if-no-files-found: error
+          retention-days: 1
+
+  draft:
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: encryptdrive-release
+          path: release-bundle
+
+      # Always a draft: it is published by hand after the artifact smoke test.
+      - name: Draft the GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+          IS_PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          $releaseDir = Join-Path "release-bundle/target/release" $env:RELEASE_VERSION
+          $notes = "release-bundle/release-notes.md"
+          if (-not (Test-Path -LiteralPath $releaseDir) -or -not (Test-Path -LiteralPath $notes)) { throw "release bundle is incomplete" }
+          $files = @(Get-ChildItem -LiteralPath $releaseDir -File | Sort-Object Name | ForEach-Object FullName)
+          if (@($files).Count -ne 3) { throw "expected setup, portable ZIP, and checksums in $releaseDir" }
+          $flags = @("--draft", "--verify-tag", "--title", "EncryptDrive $env:RELEASE_TAG", "--notes-file", $notes)
+          if ($env:IS_PRERELEASE -eq "true") { $flags += "--prerelease" }
+          gh release create $env:RELEASE_TAG @files @flags
+          if ($LASTEXITCODE -ne 0) { throw "could not create draft release" }

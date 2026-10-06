@@ -1,0 +1,237 @@
+package com.fabianrodas.services;
+
+import com.fabianrodas.models.EncryptedFileDescriptor;
+import com.fabianrodas.security.CryptoConstants;
+import com.fabianrodas.security.CryptoException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.Arrays;
+import java.util.function.LongConsumer;
+import org.bouncycastle.crypto.InvalidCipherTextException;
+import org.bouncycastle.crypto.engines.AESEngine;
+import org.bouncycastle.crypto.modes.GCMBlockCipher;
+import org.bouncycastle.crypto.modes.GCMModeCipher;
+import org.bouncycastle.crypto.params.AEADParameters;
+import org.bouncycastle.crypto.params.KeyParameter;
+
+/**
+ * Streams file content through AES-256-GCM in 64 KiB chunks, so memory use
+ * does not grow with file size. Output is standard GCM (ciphertext followed
+ * by the 128-bit tag). Bouncy Castle's GCM is used because the JDK
+ * implementation buffers the whole ciphertext while decrypting.
+ *
+ * Both methods write only to the given part file, which the caller owns and
+ * renames on success; on any failure the part file is deleted.
+ */
+public class StreamingFileCryptoService {
+
+    private static final int BUFFER_BYTES = 64 * 1024;
+    private static final PathGuard NO_GUARD = path -> { };
+
+    /** A path check performed after its file handle is opened and before any bytes are copied. */
+    @FunctionalInterface
+    interface PathGuard {
+        void verify(Path path) throws IOException;
+    }
+
+    /** Reading the input failed, as opposed to writing the output. */
+    public static final class SourceReadException extends IOException {
+
+        SourceReadException(IOException cause) {
+            super(cause.getMessage(), cause);
+        }
+    }
+
+    public EncryptedFileDescriptor encrypt(
+            Path source,
+            Path destinationPart,
+            byte[] fileKey,
+            byte[] nonce,
+            byte[] aad
+    ) throws IOException {
+        return encrypt(source, destinationPart, fileKey, nonce, aad, bytes -> { });
+    }
+
+    /** Like {@link #encrypt}, reporting the source bytes consumed so far. */
+    public EncryptedFileDescriptor encrypt(
+            Path source,
+            Path destinationPart,
+            byte[] fileKey,
+            byte[] nonce,
+            byte[] aad,
+            LongConsumer progress
+    ) throws IOException {
+
+        return encrypt(source, destinationPart, fileKey, nonce, aad, progress, NO_GUARD);
+    }
+
+    /** Like {@link #encrypt(Path, Path, byte[], byte[], byte[], LongConsumer)}, guarding the opened source path. */
+    EncryptedFileDescriptor encrypt(
+            Path source,
+            Path destinationPart,
+            byte[] fileKey,
+            byte[] nonce,
+            byte[] aad,
+            LongConsumer progress,
+            PathGuard sourceGuard
+    ) throws IOException {
+
+        GCMModeCipher cipher = cipher(true, fileKey, nonce, aad);
+
+        try {
+            long plainSize = stream(cipher, source, destinationPart, progress, sourceGuard, NO_GUARD);
+            return new EncryptedFileDescriptor(plainSize, Files.size(destinationPart));
+
+        } catch (InvalidCipherTextException e) {
+            throw new IllegalStateException("GCM encryption cannot fail authentication.", e);
+        }
+    }
+
+    /**
+     * Writes plaintext to the part file and fails with {@link CryptoException}
+     * (deleting that file) unless the authentication tag verifies at the end.
+     */
+    public void decrypt(
+            Path encryptedBlob,
+            Path destinationPart,
+            byte[] fileKey,
+            byte[] nonce,
+            byte[] aad
+    ) throws IOException, CryptoException {
+
+        decrypt(encryptedBlob, destinationPart, fileKey, nonce, aad, NO_GUARD);
+    }
+
+    /** Like {@link #decrypt(Path, Path, byte[], byte[], byte[])}, guarding the opened plaintext destination. */
+    void decrypt(
+            Path encryptedBlob,
+            Path destinationPart,
+            byte[] fileKey,
+            byte[] nonce,
+            byte[] aad,
+            PathGuard destinationGuard
+    ) throws IOException, CryptoException {
+
+        try {
+            stream(cipher(false, fileKey, nonce, aad), encryptedBlob, destinationPart,
+                    bytes -> { }, NO_GUARD, destinationGuard);
+        } catch (InvalidCipherTextException e) {
+            throw new CryptoException();
+        }
+    }
+
+    private static long stream(
+            GCMModeCipher cipher,
+            Path input,
+            Path outputPart,
+            LongConsumer progress,
+            PathGuard sourceGuard,
+            PathGuard destinationGuard
+    ) throws IOException, InvalidCipherTextException {
+
+        byte[] in = new byte[BUFFER_BYTES];
+        byte[] out = new byte[BUFFER_BYTES + 2 * CryptoConstants.GCM_TAG_BITS / 8];
+        long consumed = 0;
+        boolean complete = false;
+
+        try (InputStream source = open(input);
+                FileChannel target = FileChannel.open(
+                        outputPart,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.WRITE,
+                        StandardOpenOption.TRUNCATE_EXISTING,
+                        LinkOption.NOFOLLOW_LINKS
+                )) {
+
+            try {
+                sourceGuard.verify(input);
+            } catch (IOException e) {
+                if (e instanceof SourceReadException) {
+                    throw e;
+                }
+                throw new SourceReadException(e);
+            }
+            destinationGuard.verify(outputPart);
+
+            int read;
+
+            while ((read = read(source, in)) != -1) {
+                consumed += read;
+                write(target, out, cipher.processBytes(in, 0, read, out, 0));
+                progress.accept(consumed);
+            }
+
+            write(target, out, cipher.doFinal(out, 0));
+            target.force(true);
+            complete = true;
+            return consumed;
+
+        } finally {
+            Arrays.fill(in, (byte) 0);
+            Arrays.fill(out, (byte) 0);
+
+            if (!complete) {
+                Files.deleteIfExists(outputPart);
+            }
+        }
+    }
+
+    private static InputStream open(Path input) throws SourceReadException {
+        try {
+            return Channels.newInputStream(FileChannel.open(
+                    input,
+                    StandardOpenOption.READ,
+                    LinkOption.NOFOLLOW_LINKS
+            ));
+        } catch (IOException e) {
+            throw new SourceReadException(e);
+        }
+    }
+
+    private static int read(InputStream source, byte[] buffer) throws SourceReadException {
+        try {
+            return source.read(buffer);
+        } catch (IOException e) {
+            throw new SourceReadException(e);
+        }
+    }
+
+    private static void write(FileChannel target, byte[] bytes, int length) throws IOException {
+        ByteBuffer buffer = ByteBuffer.wrap(bytes, 0, length);
+
+        while (buffer.hasRemaining()) {
+            target.write(buffer);
+        }
+    }
+
+    private static GCMModeCipher cipher(
+            boolean encrypt,
+            byte[] fileKey,
+            byte[] nonce,
+            byte[] aad
+    ) {
+        if (fileKey == null
+                || fileKey.length != CryptoConstants.KEY_BYTES
+                || nonce == null
+                || nonce.length != CryptoConstants.GCM_NONCE_BYTES
+                || aad == null) {
+            throw new IllegalArgumentException("A 256-bit key, 96-bit nonce, and AAD are required.");
+        }
+
+        GCMModeCipher cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
+        cipher.init(encrypt, new AEADParameters(
+                new KeyParameter(fileKey),
+                CryptoConstants.GCM_TAG_BITS,
+                nonce,
+                aad
+        ));
+        return cipher;
+    }
+}

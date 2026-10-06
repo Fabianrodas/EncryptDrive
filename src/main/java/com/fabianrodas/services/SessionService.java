@@ -1,33 +1,63 @@
 package com.fabianrodas.services;
 
-import com.fabianrodas.models.User;
+import com.fabianrodas.models.UserSessionIdentity;
+import com.fabianrodas.security.SensitiveBytes;
 
 /**
- * Service class
- * 
- * @author Fabian Rodas
+ * The signed-in user of the open vault: a UI-safe identity plus the user
+ * master key (UMK), which is destroyed on logout.
  */
-
 public final class SessionService {
 
-    private static User currentUser;
+    private static UserSessionIdentity identity;
+    private static SensitiveBytes userMasterKey;
 
     private SessionService() {
     }
 
-    public static void startSession(User user) {
-        currentUser = user;
+    /** Takes ownership of {@code userMasterKey}; any previous session ends first. */
+    public static synchronized void start(
+            UserSessionIdentity identity,
+            SensitiveBytes userMasterKey
+    ) {
+        logout();
+        SessionService.identity = identity;
+        SessionService.userMasterKey = userMasterKey;
     }
 
-    public static User getCurrentUser() {
-        return currentUser;
+    public static synchronized boolean isActive() {
+        return identity != null;
     }
 
-    public static boolean hasActiveSession() {
-        return currentUser != null;
+    public static synchronized UserSessionIdentity identity() {
+        requireActive();
+        return identity;
     }
 
-    public static void closeSession() {
-        currentUser = null;
+    /** A copy of the UMK that the caller must close; refused if another account signed in meanwhile. */
+    public static synchronized SensitiveBytes copyUserMasterKey(UserSessionIdentity expected) {
+        requireActive();
+
+        if (!identity.equals(expected)) {
+            throw new IllegalStateException("A different account is signed in.");
+        }
+
+        return SensitiveBytes.wrap(userMasterKey.copy());
+    }
+
+    /** Destroys the UMK and forgets the identity. Idempotent. */
+    public static synchronized void logout() {
+        if (userMasterKey != null) {
+            userMasterKey.close();
+        }
+
+        userMasterKey = null;
+        identity = null;
+    }
+
+    private static void requireActive() {
+        if (identity == null) {
+            throw new IllegalStateException("No user is signed in.");
+        }
     }
 }

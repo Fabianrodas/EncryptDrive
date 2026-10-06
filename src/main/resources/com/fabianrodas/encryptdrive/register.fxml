@@ -109,6 +109,26 @@
 
                                 <Label styleClass="brand-note"
                                        text="LOCAL • PRIVATE • PORTABLE" />
+
+                                <VBox alignment="CENTER"
+                                      maxWidth="280.0"
+                                      spacing="2.0"
+                                      styleClass="vault-chip">
+                                    <children>
+                                        <Label styleClass="vault-chip-caption"
+                                               text="OPEN VAULT" />
+
+                                        <Label fx:id="vaultNameLabel"
+                                               styleClass="vault-chip-name"
+                                               text="No vault open" />
+
+                                        <Button fx:id="closeVaultButton"
+                                                mnemonicParsing="false"
+                                                onAction="#closeVault"
+                                                styleClass="vault-chip-link"
+                                                text="Close vault" />
+                                    </children>
+                                </VBox>
                             </children>
                         </VBox>
                     </children>
@@ -179,12 +199,10 @@
                                                     <children>
                                                         <TextField fx:id="visiblePasswordField"
                                                                    managed="false"
-                                                                   promptText="At least 8 characters"
                                                                    styleClass="input-field"
                                                                    visible="false" />
 
                                                         <PasswordField fx:id="passwordField"
-                                                                       promptText="At least 8 characters"
                                                                        styleClass="input-field" />
                                                     </children>
                                                 </StackPane>
@@ -234,12 +252,17 @@
                                     </children>
                                 </VBox>
 
+                                <Label styleClass="warning-note"
+                                       text="EncryptDrive cannot recover a lost account password."
+                                       wrapText="true" />
+
                                 <Label fx:id="feedbackLabel"
                                        minHeight="18.0"
                                        styleClass="feedback-label"
                                        wrapText="true" />
 
-                                <Button maxWidth="1.7976931348623157E308"
+                                <Button fx:id="registerButton"
+                                        maxWidth="1.7976931348623157E308"
                                         mnemonicParsing="false"
                                         onAction="#register"
                                         prefHeight="42.0"

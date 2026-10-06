@@ -2,6 +2,7 @@ package com.fabianrodas.encryptdrive;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.ResourceBundle;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
@@ -12,8 +13,9 @@ import javafx.scene.control.TextField;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
-import com.fabianrodas.controllers.UserController;
-import com.fabianrodas.models.User;
+import com.fabianrodas.services.AuthException;
+import com.fabianrodas.services.AuthService;
+import com.fabianrodas.services.VaultSessionService;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -65,11 +67,15 @@ public class RegisterController implements Initializable {
     @FXML
     private Label feedbackLabel;
 
+    @FXML
+    private Label vaultNameLabel;
+
+    @FXML
+    private Button closeVaultButton;
+
     private boolean passwordVisible = false;
     private boolean confirmPasswordVisible = false;
-    
-    private final UserController userController = new UserController();
-    
+
     private final WindowDragHandler windowDragHandler
         = new WindowDragHandler();
 
@@ -80,7 +86,13 @@ public class RegisterController implements Initializable {
 
         visibleConfirmPasswordField.textProperty()
                 .bindBidirectional(confirmPasswordField.textProperty());
-        
+
+        String hint = "At least " + AuthService.MIN_PASSWORD_LENGTH + " characters";
+        passwordField.setPromptText(hint);
+        visiblePasswordField.setPromptText(hint);
+
+        closeVaultButton.disableProperty().bind(Background.busyProperty());
+        vaultNameLabel.setText(App.openVaultName());
         configureResponsiveForm();
     }
 
@@ -96,11 +108,7 @@ public class RegisterController implements Initializable {
 
     @FXML
     private void close() {
-        Stage stage = getStage();
-
-        if (stage != null) {
-            stage.close();
-        }
+        App.requestClose(getStage());
     }
 
     @FXML
@@ -183,13 +191,13 @@ public class RegisterController implements Initializable {
             return;
         }
 
-        if (username.length() < 3) {
-            showError("Username must contain at least 3 characters.");
+        if (username.length() < AuthService.MIN_USERNAME_LENGTH) {
+            showError("Username must contain at least " + AuthService.MIN_USERNAME_LENGTH + " characters.");
             return;
         }
 
-        if (password.length() < 8) {
-            showError("Password must contain at least 8 characters.");
+        if (password.length() < AuthService.MIN_PASSWORD_LENGTH) {
+            showError("Password must contain at least " + AuthService.MIN_PASSWORD_LENGTH + " characters.");
             return;
         }
 
@@ -198,21 +206,46 @@ public class RegisterController implements Initializable {
             return;
         }
 
-        User user = new User(fullName, username, password);
-
-        int result = userController.create(user);
-
-        if (result == UserController.SUCCESS) {
-            showRegistrationSuccessPopup();
+        if (!VaultSessionService.isOpen()) {
+            showError("Open a vault before creating an account.");
             return;
         }
 
-        if (result == UserController.USERNAME_ALREADY_EXISTS) {
-            showError("That username is already in use.");
-            return;
-        }
+        char[] passwordChars = password.toCharArray();
+        passwordField.clear();
+        confirmPasswordField.clear();
+        AuthService authService = new AuthService(VaultSessionService.current());
+        formCard.setDisable(true);
 
-        showError("Could not create the account. Please try again.");
+        Background.run(
+                () -> {
+                    try {
+                        return authService.register(fullName, username, passwordChars);
+                    } finally {
+                        Arrays.fill(passwordChars, '\0');
+                    }
+                },
+                identity -> {
+                    formCard.setDisable(false);
+                    showRegistrationSuccessPopup();
+                },
+                failure -> {
+                    formCard.setDisable(false);
+                    showError(failure instanceof AuthException authError
+                            && authError.getReason() == AuthException.Reason.USERNAME_TAKEN
+                            ? "That username is already in use."
+                            : "Could not create the account. Please try again.");
+                }
+        );
+    }
+
+    @FXML
+    private void closeVault() {
+        try {
+            App.closeVault();
+        } catch (IOException e) {
+            showError("Could not return to vault selection.");
+        }
     }
 
     @FXML
@@ -229,14 +262,6 @@ public class RegisterController implements Initializable {
         feedbackLabel.getStyleClass().remove("success");
     }
 
-    private void showSuccess(String message) {
-        feedbackLabel.setText(message);
-
-        if (!feedbackLabel.getStyleClass().contains("success")) {
-            feedbackLabel.getStyleClass().add("success");
-        }
-    }
-    
     private void showRegistrationSuccessPopup() {
         try {
             FXMLLoader loader = new FXMLLoader(

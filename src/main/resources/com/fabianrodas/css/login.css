@@ -90,6 +90,37 @@
     -fx-text-fill: #BFDBFE;
 }
 
+.vault-chip {
+    -fx-background-color: rgba(255, 255, 255, 0.10);
+    -fx-background-radius: 12;
+    -fx-padding: 10 18 10 18;
+}
+
+.vault-chip-caption {
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #93C5FD;
+}
+
+.vault-chip-name {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+}
+
+.vault-chip-link {
+    -fx-background-color: transparent;
+    -fx-cursor: hand;
+    -fx-font-size: 11px;
+    -fx-padding: 2 0 0 0;
+    -fx-text-fill: #BFDBFE;
+    -fx-underline: true;
+}
+
+.vault-chip-link:hover {
+    -fx-text-fill: white;
+}
+
 /* Right panel */
 
 .auth-pane {
@@ -172,6 +203,10 @@
 .feedback-label {
     -fx-font-size: 11px;
     -fx-text-fill: #DC2626;
+}
+
+.feedback-label.notice {
+    -fx-text-fill: #B45309;
 }
 
 .muted-label {

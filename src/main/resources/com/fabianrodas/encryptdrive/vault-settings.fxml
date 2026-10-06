@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane fitToWidth="true"
+            hbarPolicy="NEVER"
+            styleClass="workspace-scroll"
+            stylesheets="@../css/workspace.css"
+            vbarPolicy="AS_NEEDED"
+            xmlns="http://javafx.com/javafx/21"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.fabianrodas.encryptdrive.VaultSettingsController">
+
+    <content>
+        <VBox fillWidth="true" spacing="18.0" styleClass="page-content">
+            <children>
+                <VBox spacing="5.0">
+                    <children>
+                        <Label styleClass="page-title" text="Vault settings" />
+
+                        <Label styleClass="page-subtitle"
+                               text="Details of the vault that is open in this window." />
+                    </children>
+                </VBox>
+
+                <GridPane hgap="18.0" styleClass="settings-card" vgap="12.0">
+                    <columnConstraints>
+                        <ColumnConstraints minWidth="130.0" />
+                        <ColumnConstraints hgrow="ALWAYS" />
+                    </columnConstraints>
+
+                    <children>
+                        <Label styleClass="detail-label" text="LOCATION" />
+                        <Label fx:id="locationLabel"
+                               styleClass="detail-value"
+                               wrapText="true"
+                               GridPane.columnIndex="1" />
+
+                        <Label styleClass="detail-label" text="VAULT ID" GridPane.rowIndex="1" />
+                        <Label fx:id="vaultIdLabel"
+                               styleClass="detail-value"
+                               wrapText="true"
+                               GridPane.columnIndex="1"
+                               GridPane.rowIndex="1" />
+
+                        <Label styleClass="detail-label" text="FORMAT VERSION" GridPane.rowIndex="2" />
+                        <Label fx:id="formatVersionLabel"
+                               styleClass="detail-value"
+                               GridPane.columnIndex="1"
+                               GridPane.rowIndex="2" />
+
+                        <Label styleClass="detail-label" text="CREATED" GridPane.rowIndex="3" />
+                        <Label fx:id="createdLabel"
+                               styleClass="detail-value"
+                               GridPane.columnIndex="1"
+                               GridPane.rowIndex="3" />
+
+                        <Label styleClass="detail-label" text="APP VERSION" GridPane.rowIndex="4" />
+                        <Label fx:id="appVersionLabel"
+                               styleClass="detail-value"
+                               GridPane.columnIndex="1"
+                               GridPane.rowIndex="4" />
+                    </children>
+                </GridPane>
+
+                <VBox styleClass="sync-note">
+                    <children>
+                        <Label styleClass="sync-note-text"
+                               text="Synced folders such as OneDrive only ever receive encrypted data. Never open or edit the same vault from two computers at the same time."
+                               wrapText="true" />
+                    </children>
+                </VBox>
+
+                <VBox spacing="14.0" styleClass="change-password-card">
+                    <children>
+                        <VBox spacing="4.0">
+                            <children>
+                                <Label styleClass="section-title"
+                                       text="Change vault password" />
+
+                                <Label styleClass="section-description"
+                                       text="Only the vault key is re-wrapped; accounts and files are not re-encrypted. EncryptDrive cannot recover a lost vault password."
+                                       wrapText="true" />
+                            </children>
+                        </VBox>
+
+                        <VBox spacing="6.0">
+                            <children>
+                                <Label styleClass="field-label"
+                                       text="Current vault password" />
+
+                                <PasswordField fx:id="currentPasswordField"
+                                               promptText="Enter the current vault password"
+                                               styleClass="profile-input-field" />
+                            </children>
+                        </VBox>
+
+                        <HBox spacing="14.0">
+                            <children>
+                                <VBox HBox.hgrow="ALWAYS" spacing="6.0">
+                                    <children>
+                                        <Label styleClass="field-label"
+                                               text="New vault password" />
+
+                                        <PasswordField fx:id="newPasswordField"
+                                                       styleClass="profile-input-field" />
+                                    </children>
+                                </VBox>
+
+                                <VBox HBox.hgrow="ALWAYS" spacing="6.0">
+                                    <children>
+                                        <Label styleClass="field-label"
+                                               text="Confirm new password" />
+
+                                        <PasswordField fx:id="confirmNewPasswordField"
+                                                       promptText="Repeat new password"
+                                                       styleClass="profile-input-field" />
+                                    </children>
+                                </VBox>
+                            </children>
+                        </HBox>
+
+                        <Label fx:id="passwordFeedbackLabel"
+                               minHeight="18.0"
+                               styleClass="profile-feedback"
+                               wrapText="true" />
+
+                        <HBox alignment="CENTER_RIGHT">
+                            <children>
+                                <Button fx:id="changePasswordButton"
+                                        mnemonicParsing="false"
+                                        onAction="#changeVaultPassword"
+                                        prefHeight="42.0"
+                                        styleClass="primary-button"
+                                        text="Change vault password" />
+                            </children>
+                        </HBox>
+                    </children>
+                </VBox>
+
+                <HBox alignment="CENTER_LEFT" spacing="14.0" styleClass="settings-card">
+                    <children>
+                        <VBox spacing="4.0" HBox.hgrow="ALWAYS">
+                            <children>
+                                <Label styleClass="section-title" text="Close vault" />
+
+                                <Label styleClass="section-description"
+                                       text="Signs you out, erases the vault keys from memory, and releases the vault."
+                                       wrapText="true" />
+                            </children>
+                        </VBox>
+
+                        <Region minWidth="10.0" />
+
+                        <Button fx:id="settingsCloseVaultButton"
+                                mnemonicParsing="false"
+                                minWidth="-Infinity"
+                                onAction="#closeVault"
+                                prefHeight="40.0"
+                                styleClass="danger-button"
+                                text="Close Vault" />
+                    </children>
+                </HBox>
+            </children>
+        </VBox>
+    </content>
+</ScrollPane>

@@ -1,29 +1,30 @@
 package com.fabianrodas.encryptdrive;
 
-import com.fabianrodas.controllers.UserController;
-import com.fabianrodas.models.User;
+import com.fabianrodas.models.UserSessionIdentity;
 import com.fabianrodas.services.SessionService;
+import com.fabianrodas.utils.WindowDragHandler;
 import java.io.IOException;
 import java.net.URL;
+import java.util.List;
 import java.util.ResourceBundle;
-import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.DoubleBinding;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.PasswordField;
-import javafx.scene.control.ScrollPane;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
-import com.fabianrodas.utils.WindowDragHandler;
 
 /**
- * FXML Controller class
- * 
+ * FXML Controller class. Owns the sidebar and swaps workspace views into
+ * {@code contentHost}; each view is loaded fresh so it shows current data.
+ *
  * @author Fabian Rodas
  */
 
@@ -36,25 +37,22 @@ public class DashboardController implements Initializable {
     private VBox sidebar;
 
     @FXML
-    private VBox workspaceContent;
-
-    @FXML
-    private ScrollPane workspaceScrollPane;
-
-    @FXML
-    private VBox dashboardView;
-
-    @FXML
-    private VBox profileView;
+    private StackPane contentHost;
 
     @FXML
     private Button overviewNavButton;
 
     @FXML
+    private Button filesNavButton;
+
+    @FXML
+    private Button trashNavButton;
+
+    @FXML
     private Button profileNavButton;
 
     @FXML
-    private Label welcomeLabel;
+    private Button settingsNavButton;
 
     @FXML
     private Label sidebarInitialsLabel;
@@ -65,35 +63,6 @@ public class DashboardController implements Initializable {
     @FXML
     private Label sidebarUsernameLabel;
 
-    @FXML
-    private Label profileInitialsLabel;
-
-    @FXML
-    private Label profileFullNameLabel;
-
-    @FXML
-    private Label profileUsernameLabel;
-
-    @FXML
-    private Label profileFullNameDetailLabel;
-
-    @FXML
-    private Label profileUsernameDetailLabel;
-
-    @FXML
-    private PasswordField currentPasswordField;
-
-    @FXML
-    private PasswordField newPasswordField;
-
-    @FXML
-    private PasswordField confirmNewPasswordField;
-
-    @FXML
-    private Label passwordFeedbackLabel;
-
-    private final UserController userController = new UserController();
-
     private final WindowDragHandler windowDragHandler
         = new WindowDragHandler();
 
@@ -101,129 +70,57 @@ public class DashboardController implements Initializable {
     public void initialize(URL url, ResourceBundle rb) {
         configureResponsiveLayout();
         loadUserInformation();
-        showDashboard();
-    }
 
-    private void configureResponsiveLayout() {
-        DoubleBinding sidebarWidth = Bindings.createDoubleBinding(
-                () -> Math.max(
-                        230,
-                        Math.min(290, root.getWidth() * 0.17)
-                ),
-                root.widthProperty()
-        );
+        // No navigation, logout, or vault close while files are being written.
+        sidebar.disableProperty().bind(Background.busyProperty());
 
-        sidebar.minWidthProperty().bind(sidebarWidth);
-        sidebar.prefWidthProperty().bind(sidebarWidth);
-        sidebar.maxWidthProperty().bind(sidebarWidth);
-
-        workspaceContent.minHeightProperty().bind(
-                Bindings.max(
-                        0,
-                        workspaceScrollPane.heightProperty().subtract(2)
-                )
-        );
+        showOverview();
     }
 
     @FXML
-    private void showDashboard() {
-        dashboardView.setVisible(true);
-        dashboardView.setManaged(true);
+    private void showOverview() {
+        OverviewController overview = show("overview", overviewNavButton);
 
-        profileView.setVisible(false);
-        profileView.setManaged(false);
+        if (overview != null) {
+            overview.setOnOpenFiles(this::showFiles);
+        }
+    }
 
-        setActiveNavigation(overviewNavButton);
-        scrollWorkspaceToTop();
+    @FXML
+    private void showFiles() {
+        show("files", filesNavButton);
+    }
+
+    @FXML
+    private void showTrash() {
+        show("trash", trashNavButton);
     }
 
     @FXML
     private void showProfile() {
-        dashboardView.setVisible(false);
-        dashboardView.setManaged(false);
-
-        profileView.setVisible(true);
-        profileView.setManaged(true);
-
-        passwordFeedbackLabel.setText("");
-        passwordFeedbackLabel.getStyleClass().remove("success");
-
-        setActiveNavigation(profileNavButton);
-        scrollWorkspaceToTop();
+        show("profile", profileNavButton);
     }
 
     @FXML
-    private void changePassword() {
-        User currentUser = SessionService.getCurrentUser();
-
-        if (currentUser == null) {
-            showPasswordError("Your session has expired. Please log in again.");
-            return;
-        }
-
-        String currentPassword = currentPasswordField.getText();
-        String newPassword = newPasswordField.getText();
-        String confirmNewPassword = confirmNewPasswordField.getText();
-
-        if (currentPassword.isBlank()
-                || newPassword.isBlank()
-                || confirmNewPassword.isBlank()) {
-
-            showPasswordError("Please complete all password fields.");
-            return;
-        }
-
-        if (newPassword.length() < 8) {
-            showPasswordError("Your new password must contain at least 8 characters.");
-            return;
-        }
-
-        if (!newPassword.equals(confirmNewPassword)) {
-            showPasswordError("The new passwords do not match.");
-            return;
-        }
-
-        if (currentPassword.equals(newPassword)) {
-            showPasswordError("Your new password must be different.");
-            return;
-        }
-
-        int result = userController.changePassword(
-                currentUser.getId(),
-                currentPassword,
-                newPassword
-        );
-
-        if (result == UserController.SUCCESS) {
-            currentPasswordField.clear();
-            newPasswordField.clear();
-            confirmNewPasswordField.clear();
-
-            showPasswordSuccess("Password updated successfully.");
-            return;
-        }
-
-        if (result == UserController.INCORRECT_CURRENT_PASSWORD) {
-            showPasswordError("Your current password is incorrect.");
-            return;
-        }
-
-        if (result == UserController.USER_NOT_FOUND) {
-            showPasswordError("Your account could not be found.");
-            return;
-        }
-
-        showPasswordError("Could not update your password. Please try again.");
+    private void showSettings() {
+        show("vault-settings", settingsNavButton);
     }
 
     @FXML
     private void logout() {
         try {
-            SessionService.closeSession();
-            App.setRoot("login");
-
+            App.logout();
         } catch (IOException e) {
             System.err.println("Could not return to the login screen.");
+        }
+    }
+
+    @FXML
+    private void closeVault() {
+        try {
+            App.closeVault();
+        } catch (IOException e) {
+            System.err.println("Could not return to vault selection.");
         }
     }
 
@@ -253,80 +150,61 @@ public class DashboardController implements Initializable {
 
     @FXML
     private void close() {
-        Stage stage = getStage();
+        App.requestClose(getStage());
+    }
 
-        if (stage != null) {
-            stage.close();
+    private <T> T show(String fxml, Button navigation) {
+        setActiveNavigation(navigation);
+
+        try {
+            FXMLLoader loader = new FXMLLoader(App.class.getResource(fxml + ".fxml"));
+            contentHost.getChildren().setAll((Node) loader.load());
+            return loader.getController();
+
+        } catch (IOException e) {
+            contentHost.getChildren().setAll(new Label("This view could not be opened."));
+            return null;
         }
+    }
+
+    private void configureResponsiveLayout() {
+        DoubleBinding sidebarWidth = Bindings.createDoubleBinding(
+                () -> Math.max(
+                        230,
+                        Math.min(290, root.getWidth() * 0.17)
+                ),
+                root.widthProperty()
+        );
+
+        sidebar.minWidthProperty().bind(sidebarWidth);
+        sidebar.prefWidthProperty().bind(sidebarWidth);
+        sidebar.maxWidthProperty().bind(sidebarWidth);
     }
 
     private void loadUserInformation() {
-        User currentUser = SessionService.getCurrentUser();
-
-        if (currentUser == null) {
-            welcomeLabel.setText("Welcome to EncryptDrive");
+        if (!SessionService.isActive()) {
             return;
         }
 
-        String fullName = currentUser.getFullName();
-        String username = currentUser.getUsername();
-        String initials = getInitials(fullName);
+        UserSessionIdentity user = SessionService.identity();
 
-        welcomeLabel.setText("Welcome back, " + fullName + "!");
-
-        sidebarInitialsLabel.setText(initials);
-        sidebarFullNameLabel.setText(fullName);
-        sidebarUsernameLabel.setText("@" + username);
-
-        profileInitialsLabel.setText(initials);
-        profileFullNameLabel.setText(fullName);
-        profileUsernameLabel.setText("@" + username);
-
-        profileFullNameDetailLabel.setText(fullName);
-        profileUsernameDetailLabel.setText(username);
+        sidebarInitialsLabel.setText(Formats.initials(user.fullName()));
+        sidebarFullNameLabel.setText(user.fullName());
+        sidebarUsernameLabel.setText("@" + user.username());
     }
 
     private void setActiveNavigation(Button activeButton) {
-        overviewNavButton.getStyleClass().remove("active");
-        profileNavButton.getStyleClass().remove("active");
-
-        if (!activeButton.getStyleClass().contains("active")) {
-            activeButton.getStyleClass().add("active");
-        }
-    }
-
-    private void scrollWorkspaceToTop() {
-        Platform.runLater(() -> workspaceScrollPane.setVvalue(0));
-    }
-
-    private String getInitials(String fullName) {
-        if (fullName == null || fullName.isBlank()) {
-            return "U";
+        for (Button button : List.of(
+                overviewNavButton,
+                filesNavButton,
+                trashNavButton,
+                profileNavButton,
+                settingsNavButton
+        )) {
+            button.getStyleClass().remove("active");
         }
 
-        String[] parts = fullName.trim().split("\\s+");
-
-        if (parts.length == 1) {
-            return parts[0].substring(0, 1).toUpperCase();
-        }
-
-        String firstInitial = parts[0].substring(0, 1);
-        String lastInitial = parts[parts.length - 1].substring(0, 1);
-
-        return (firstInitial + lastInitial).toUpperCase();
-    }
-
-    private void showPasswordError(String message) {
-        passwordFeedbackLabel.setText(message);
-        passwordFeedbackLabel.getStyleClass().remove("success");
-    }
-
-    private void showPasswordSuccess(String message) {
-        passwordFeedbackLabel.setText(message);
-
-        if (!passwordFeedbackLabel.getStyleClass().contains("success")) {
-            passwordFeedbackLabel.getStyleClass().add("success");
-        }
+        activeButton.getStyleClass().add("active");
     }
 
     private Stage getStage() {

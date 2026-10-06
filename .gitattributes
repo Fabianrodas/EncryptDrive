@@ -1,0 +1,10 @@
+# Text is stored and checked out with LF on every platform, so Windows
+# checkouts (core.autocrlf=true) no longer show false modifications.
+* text=auto eol=lf
+
+# Binary assets are never converted.
+*.png binary
+*.ico binary
+*.jar binary
+*.zip binary
+*.exe binary

@@ -1,0 +1,40 @@
+/* Extends login.css with the vault selection controls. */
+
+.vault-auth-pane {
+    -fx-padding: 28 42 28 42;
+}
+
+.vault-form-card {
+    -fx-padding: 26 34 26 34;
+}
+
+.mode-switch {
+    -fx-background-color: #EEF2F7;
+    -fx-background-radius: 10;
+    -fx-padding: 4;
+}
+
+.mode-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+    -fx-cursor: hand;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-padding: 8 14 8 14;
+    -fx-text-fill: #64748B;
+}
+
+.mode-button:hover {
+    -fx-text-fill: #1D4ED8;
+}
+
+.mode-button:selected {
+    -fx-background-color: white;
+    -fx-effect: dropshadow(gaussian, rgba(15, 23, 42, 0.10), 6, 0.1, 0, 1);
+    -fx-text-fill: #2563EB;
+}
+
+.warning-note {
+    -fx-font-size: 11px;
+    -fx-text-fill: #B45309;
+}

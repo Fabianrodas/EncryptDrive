@@ -1,0 +1,18 @@
+{
+  "formatVersion": 1,
+  "vaultId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+  "createdAt": "2026-10-05T12:00:00Z",
+  "kdf": {
+    "algorithm": "Argon2id",
+    "memoryKiB": 65536,
+    "iterations": 3,
+    "parallelism": 1,
+    "salt": "AAECAwQFBgcICQoLDA0ODw=="
+  },
+  "wrappedRegistryKey": {
+    "version": 1,
+    "algorithm": "AES/GCM/NoPadding",
+    "nonce": "EBESExQVFhcYGRob",
+    "ciphertext": "/jKPTpqJAELlpfWg/77rGekz3gMq5OEG1Pesy95H6rqiturdTjza94pIUDMRYde+"
+  }
+}
