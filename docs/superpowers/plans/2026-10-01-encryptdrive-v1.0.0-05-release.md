@@ -290,11 +290,11 @@ git commit -m "chore: set release version 1.0.0"
 
 **Purpose:** Spec 6.3 ("release-ready commit is on main"); superpowers:finishing-a-development-branch.
 
-- [ ] **Step 1:** `git checkout main && git merge --ff-only origin/main` (local `main` equals the possibly rewritten `origin/main`).
-- [ ] **Step 2:** `git merge --no-ff feature/encryptdrive-1.0 -m "Merge EncryptDrive v1.0.0 release work" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"`
-- [ ] **Step 3: Gate B on `main` in the existing checkout** — per the user's no-new-worktree preference, run `mvn -B clean verify`, the specified 1 GiB test, `build-release.ps1 -Release -Channel rc.1`, and `verify-package.ps1 -Channel rc.1 -Launch -Install` after the merge. Record the merge commit id and all results. AUTOMATED_GATES_COMPLETE = DONE.
-- [ ] **Step 4:** `git push origin main` (approved at H2; if H2 option 3 was chosen, stop: Git-hosting human gate). Watch the `Build` workflow for the merge commit via the public API (T22 Step 6 command with `branch=main`); both jobs must succeed.
-- [ ] **Step 5: Ledger** — REPOSITORY_SECURITY_READY = DONE when Gate C items are all satisfied (H2 resolved, hygiene clean, version `1.0.0`, docs complete); PACKAGING_COMPLETE confirmed on `main`. Commit the ledger on `main`: `git commit -m "docs: record v1.0.0 gate results" -m "Co-Authored-By: ..."` and push.
+- [x] **Step 1:** fast-forward local `main` to `origin/main` at rewritten tip `e73bc90a7478aec1f80bc9e70ee1d29945d00f12`.
+- [x] **Step 2:** merge `feature/encryptdrive-1.0` with `--no-ff`; merge commit `905dbe1082b336de9e0b1e30848f425015f5a555`. Omitted the stale Claude co-author trailer.
+- [x] **Step 3: Gate B on `main` in the existing checkout** — `mvn -B clean verify` passed (412 tests, 0 failures/errors, 3 opt-in skips); the specified 1 GiB test passed 2/2 (77.90 s); `build-release.ps1 -Release -Channel rc.1` created the packages; and `verify-package.ps1 -Channel rc.1 -Launch -Install` returned 0 under a temporary standard-user profile. AUTOMATED_GATES_COMPLETE = DONE.
+- [x] **Step 4:** pushed `main` normally. Build run `37409411019` for merge SHA `905dbe1082b336de9e0b1e30848f425015f5a555` completed successfully; both `verify` and `package` jobs succeeded.
+- [x] **Step 5: Ledger** — Gate C items passed (H2 resolved, T25 hygiene clean, version `1.0.0`, release/security docs complete); REPOSITORY_SECURITY_READY and PACKAGING_COMPLETE are DONE. Record results in `V1_RELEASE_STATE.md` and push this ledger commit on `main`.
 
 ---
 

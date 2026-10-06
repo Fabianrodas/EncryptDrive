@@ -6,12 +6,12 @@ Updated after every task. Git history and test output are the record; this is th
 
 | Key | Value |
 |---|---|
-| branch | `feature/encryptdrive-1.0` (rewritten and published; H2 push tip recorded below) |
+| branch | `main` (T27 merge `905dbe1` pushed; Gate B and CI passed) |
 | maven version | `1.0.0` |
 | current phase | 05 - Cleanup, documentation, release gates, and tagging |
-| current task | T27: integrate the rewritten feature branch into `main`; H2 is DONE |
-| last completed commit | T26 version release commit `b55d570` |
-| tests last run | post-H2 rewrite `mvn -B clean verify` (2026-10-05, 2 min 50 s) |
+| current task | T28: create and push `v1.0.0-rc.1` after recording T27; H2 is DONE |
+| last completed commit | T27 merge `905dbe1082b336de9e0b1e30848f425015f5a555` |
+| tests last run | T27 `mvn -B clean verify` on `main` (2026-10-05, 3 min 40 s) |
 | test result | BUILD SUCCESS - 412 tests, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
 
 ## Release states
@@ -20,10 +20,11 @@ Updated after every task. Git history and test output are the record; this is th
 |---|---|
 | FORMAT_V1_READY | DONE - T19A, T19B, and T19C verified and committed; all format and portability tests pass; clean full verification passed; benchmarks recorded; working tree clean after this commit |
 | IMPLEMENTATION_COMPLETE | DONE - T1–T24 committed; T25 branch audit, hygiene, review, spec coverage, clean verification, large-file check, package rebuild, and current-artifact Setup.exe install/uninstall gate passed. Existing checkout used per the user's preference. |
-| AUTOMATED_GATES_COMPLETE | TODO |
-| PACKAGING_COMPLETE | TODO - local T20/T21 build and end-to-end checks pass; mark DONE only after both CI jobs pass for the pushed branch head |
-| REPOSITORY_SECURITY_READY | TODO |
+| AUTOMATED_GATES_COMPLETE | DONE - T27 clean Maven verification and 1 GiB streaming test passed on the pushed main merge commit |
+| PACKAGING_COMPLETE | DONE - T27 RC.1 artifacts passed local `verify-package -Launch -Install`; both CI jobs succeeded for the pushed main merge commit |
+| REPOSITORY_SECURITY_READY | DONE - H2 history rewrite, T25 hygiene, version `1.0.0`, and release/security documentation are complete |
 | H2 | DONE - history rewritten and verified locally and on origin before v1.0.0 |
+| T27 | DONE - merged and pushed to `main`; Gate B passed; both CI jobs succeeded |
 | RC_CREATED | TODO |
 | MANUAL_VALIDATION_COMPLETE | TODO |
 | FINAL_TAG_CREATED | TODO |
@@ -65,6 +66,13 @@ Updated after every task. Git history and test output are the record; this is th
 | T26 clean verification | PASS 2026-10-05: `mvn -B clean verify` → BUILD SUCCESS, 412 tests, 0 failures, 0 errors, 3 opt-in skips; 2 min 52 s. Run in host context because sandbox Maven could not download the pinned plugins. |
 | T26 RC dry run | PASS 2026-10-05: `build-release.ps1 -DryRun -Release -Channel rc.1` exited 0; derived installer `target/release/1.0.0/EncryptDrive-1.0.0-rc.1-Setup.exe`, portable ZIP, and checksums under `target/release/1.0.0`. No package was produced. |
 | H2 history cleanup (`data/users.json`) | DONE (history rewritten) 2026-10-05. Pre-rewrite bundle: `data/pre-h2-20261005.bundle` (956,423 bytes; SHA-256 `57BBA684A10148317FE2E2679A12B36D7999F4165E04048045C942C2EF844E9E`; `git bundle verify` reported complete history). Pre-rewrite refs are listed above. Post-rewrite refs at H2 push: `main`, `origin/main`, and `origin/HEAD` = `e73bc90a7478aec1f80bc9e70ee1d29945d00f12`; `feature/encryptdrive-1.0`, `origin/feature/encryptdrive-1.0`, and `HEAD` = `ee708e43d2018f5a3ff26a6f54c4530c597d2377`; `stash` = `ffede83b89b03fb0b4af3e9c41b53e916c8b33ab`; Codex tree refs = `9c14abac83f2238a6e1ea0de88a91048fe51b3b7`. Local `git log --all -- data/users.json`, reachable-object path scan, branch-tree checks, and `git status --porcelain` were empty; feature tip differed from its pre-rewrite tip only by deletion of this file and was 66 commits ahead of rewritten main. Post-rewrite `mvn -B clean verify`: BUILD SUCCESS, 412 tests, 0 failures/errors, 3 opt-in skips. Before the lease update, fetched `origin` and confirmed `origin/main` still equaled audited SHA `0f913d25b82fea4a1d41605325fbe9e140654cf9`; only `main` was updated with `--force-with-lease=main:0f913d25b82fea4a1d41605325fbe9e140654cf9`. Feature was pushed normally. `git ls-remote` verified the refs above; fetched `origin/main` history and reachable-object scan contain no `data/users.json`. No tags existed or were moved. Bundle retained locally until stable release. |
+| T27 main merge | PASS 2026-10-05: merge commit `905dbe1082b336de9e0b1e30848f425015f5a555` integrates the rewritten feature branch; pushed normally to `origin/main`. `git log --all -- data/users.json` and the reachable-object path scan remained empty. |
+| T27 Gate B clean verification | PASS on merge commit `905dbe1082b336de9e0b1e30848f425015f5a555`: `mvn -B clean verify` → BUILD SUCCESS, 412 tests, 0 failures, 0 errors, 3 opt-in skips; 3 min 40 s. |
+| T27 1 GiB streaming gate | PASS on merge commit `905dbe1082b336de9e0b1e30848f425015f5a555`: `mvn -B test "-Dtest=LargeFileStreamingTest" "-Dencryptdrive.largeFileCheck=true" "-DargLine=-Xmx256m"` → 2 tests, 0 failures/errors/skips; 77.90 s. |
+| T27 RC.1 rebuild | PASS on `main`: `build-release.ps1 -Release -Channel rc.1`; Maven BUILD SUCCESS (412 tests, 0 failures/errors, 3 opt-in skips) and RC.1 packages created. WiX 3.14.1.8722 was already verified locally and added to the build process PATH. Setup: 37,790,208 bytes, SHA-256 `70db72a4c5bfb08f1d74857354d4252956d8528db1232b1259f88c797c92eaff`; portable ZIP: 35,809,678 bytes, SHA-256 `3b2bd116dcd975721b74011289ca52a76ebd478b4b2c4e4f089cf5f83e8ba7ec`. |
+| T27 package verifier | PASS: `verify-package.ps1 -Channel rc.1 -Launch -Install` returned 0 under a temporary Medium-integrity standard user (Users enabled; no Administrators membership). The staged Setup, ZIP, and checksums matched source SHA-256 hashes; portable and installed launches worked without system Java; version, Start Menu shortcut, uninstall, and sentinel vault preservation passed. Temporary test account/profile removed. Installer signature is `NotSigned`. |
+| T27 Gate C hygiene recheck | PASS on merged `main`: no tracked credential/key/ciphertext artifacts outside allowlisted public Format 1 vectors, no private-key markers, only the exact synthetic Argon2 test fixture password assignment, and 0 tracked CRLF files. |
+| T27 GitHub CI | PASS: Build run `37409411019` for head `905dbe1082b336de9e0b1e30848f425015f5a555` completed with overall `success`; both `verify` and `package` jobs concluded `success`. https://github.com/Fabianrodas/EncryptDrive/actions/runs/37409411019 |
 | host-path persistence and compatibility contract | PASS - T19C; `docs/COMPATIBILITY.md`, `Format1PathPersistenceTest`, and logical-name tests pass on Windows 11 / NTFS / Java 21.0.2; no persistent model serializes a host `Path`; no format ruling required |
 | folder-import link/lock tests (T15) | all ran, none skipped, on Windows 11 / NTFS / JDK 21.0.2: junction (outside the tree and a loop back into it), symbolic link (file and directory — created because the build shell was elevated; Developer Mode is off, so a non-elevated run skips this one test), locked file, Kelvin-sign clash (file and folder), differently-cased vault path. Fix round 1, also all ran: vault reached through the `\\localhost\C$` share alias (reachable here; skips cleanly where the administrative share is not), folder swapped for a junction after the scan, source that is a junction with a missing target |
 | history cleanup (`data/users.json`) | DONE (history rewritten); copies may remain in forks, clones, caches, or elsewhere; treat any reused development password as compromised |
@@ -78,9 +86,8 @@ Updated after every task. Git history and test output are the record; this is th
 
 ## Remaining blockers
 
-1. T27: integrate into `main`, rerun Gate B, rebuild and verify RC.1 artifacts, push, and require both CI jobs to pass.
-2. T28: create and push the annotated RC tag only when every T28 precondition is DONE.
-3. H3–H6: manual validation matrix on the accepted RC.
+1. T28: create and push the annotated RC tag only when every T28 precondition is DONE; all preconditions are now recorded DONE.
+2. H3–H6: manual validation matrix on the accepted RC.
 
 ### T25 rulings and review record
 
