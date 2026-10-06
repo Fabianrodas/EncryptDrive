@@ -2,9 +2,9 @@
 Checks release artifacts written by build-release.ps1, or downloaded from a
 release, without trusting how they were built.
 
-  (default)  checksums match; the portable ZIP holds only EncryptDrive/ with a
-             bundled runtime, no build-machine paths, and no vault, account,
-             or test data; the installer exists
+  (default)  checksums match; the portable ZIP has safe entries under
+             EncryptDrive/ with a bundled runtime, no build-machine paths,
+             and no vault, account, or test data; the installer exists
   -Launch    also starts the portable EncryptDrive.exe with no Java on PATH and
              no JAVA_HOME, and waits for its window
   -Install   also installs Setup.exe silently for the current user into a
@@ -44,6 +44,35 @@ $uninstallKeys = @(
 
 function Fail([string] $message) {
     $failures.Add($message)
+}
+
+function Test-SafeArchiveEntry([string] $entry) {
+    if ([string]::IsNullOrEmpty($entry) -or $entry.Contains("\") -or
+            -not $entry.StartsWith("EncryptDrive/", [System.StringComparison]::Ordinal)) {
+        return $false
+    }
+
+    $path = if ($entry.EndsWith("/", [System.StringComparison]::Ordinal)) {
+        $entry.Substring(0, $entry.Length - 1)
+    } else {
+        $entry
+    }
+    $components = @($path.Split('/'))
+
+    if ($components[0] -cne "EncryptDrive") { return $false }
+    if ($components.Count -eq 1) { return $entry -ceq "EncryptDrive/" }
+
+    foreach ($component in $components) {
+        if ($component -in @("", ".", "..") -or
+                $component -match '[<>:"|?*]' -or
+                $component -match '[\x00-\x1F]' -or
+                $component -match '[. ]$' -or
+                $component -match '^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])([ .].*)?$') {
+            return $false
+        }
+    }
+
+    return $true
 }
 
 function Get-UninstallEntry {
@@ -183,47 +212,59 @@ try {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip).Path)
         try { $entries = @($archive.Entries | ForEach-Object FullName) } finally { $archive.Dispose() }
-        if ($entries | Where-Object { -not $_.StartsWith("EncryptDrive/") }) { Fail "ZIP entries must all be under EncryptDrive/" }
-        if ($entries | Where-Object { $_.Contains("\") }) { Fail "ZIP entries must use forward slashes" }
+        $unsafeEntries = @($entries | Where-Object { -not (Test-SafeArchiveEntry $_) })
+        foreach ($entry in $unsafeEntries) { Fail "unsafe ZIP path entry: $entry" }
 
-        Expand-Archive $zip -DestinationPath $scratch
-        $image = Join-Path $scratch "EncryptDrive"
-
-        if (-not (Test-Path "$image/EncryptDrive.exe")) { Fail "EncryptDrive.exe is missing" }
-        if (-not (Test-Path "$image/runtime/bin/server/jvm.dll")) { Fail "the bundled Java runtime is missing" }
-
-        $top = (Get-ChildItem $image -Force | ForEach-Object Name | Sort-Object) -join ","
-        if ($top -ne "app,EncryptDrive.exe,runtime") { Fail "unexpected top-level content: $top" }
-
-        $release = "$image/runtime/release"
-        if (Test-Path $release) {
-            $modules = (Select-String -Path $release -Pattern '^MODULES=').Line
-            foreach ($module in "java.base", "javafx.controls", "javafx.fxml", "com.google.gson",
-                    "org.bouncycastle.provider", "com.fabianrodas.encryptdrive") {
-                if ($modules -notmatch "(^|[`" ])$([regex]::Escape($module))([`" ]|$)") { Fail "the runtime lacks module $module" }
+        if ($failures.Count -eq 0) {
+            Expand-Archive $zip -DestinationPath $scratch
+            $extractedTop = @(Get-ChildItem -LiteralPath $scratch -Force)
+            if ($extractedTop.Count -ne 1 -or
+                    $extractedTop[0].Name -cne "EncryptDrive" -or
+                    -not $extractedTop[0].PSIsContainer) {
+                $names = ($extractedTop | ForEach-Object Name | Sort-Object) -join ","
+                Fail "unexpected extraction-root content: $names"
             }
-        } else {
-            Fail "runtime/release is missing"
         }
 
-        # Nothing may point at the build machine's JDK or user folders.
-        foreach ($path in @("Program Files\Java", $env:USERPROFILE, $env:JAVA_HOME) | Where-Object { $_ }) {
-            if (Get-ChildItem "$image/app" -File -Recurse | Select-String -SimpleMatch $path) { Fail "app configuration references $path" }
+        if ($failures.Count -eq 0) {
+            $image = Join-Path $scratch "EncryptDrive"
+
+            if (-not (Test-Path "$image/EncryptDrive.exe")) { Fail "EncryptDrive.exe is missing" }
+            if (-not (Test-Path "$image/runtime/bin/server/jvm.dll")) { Fail "the bundled Java runtime is missing" }
+
+            $top = (Get-ChildItem $image -Force | ForEach-Object Name | Sort-Object) -join ","
+            if ($top -ne "app,EncryptDrive.exe,runtime") { Fail "unexpected top-level content: $top" }
+
+            $release = "$image/runtime/release"
+            if (Test-Path $release) {
+                $modules = (Select-String -Path $release -Pattern '^MODULES=').Line
+                foreach ($module in "java.base", "javafx.controls", "javafx.fxml", "com.google.gson",
+                        "org.bouncycastle.provider", "com.fabianrodas.encryptdrive") {
+                    if ($modules -notmatch "(^|[`" ])$([regex]::Escape($module))([`" ]|$)") { Fail "the runtime lacks module $module" }
+                }
+            } else {
+                Fail "runtime/release is missing"
+            }
+
+            # Nothing may point at the build machine's JDK or user folders.
+            foreach ($path in @("Program Files\Java", $env:USERPROFILE, $env:JAVA_HOME) | Where-Object { $_ }) {
+                if (Get-ChildItem "$image/app" -File -Recurse | Select-String -SimpleMatch $path) { Fail "app configuration references $path" }
+            }
+
+            # No vault, account, or test data may ship.
+            Get-ChildItem $image -Recurse -Force | Where-Object {
+                $_.Name -in @("vault.json", "users.enc", "users.json", ".encryptdrive", "lock") -or
+                $_.Extension -in @(".edv", ".enc", ".part", ".tmp")
+            } | ForEach-Object { Fail "packaged data file: $($_.FullName.Substring($image.Length))" }
+
+            if ((Get-Item $setup).Length -lt 10MB) { Fail "the installer is suspiciously small" }
+            $signature = (Get-AuthenticodeSignature $setup).Status
+            Write-Host "Installer signature: $signature"
+            if ($env:ENCRYPTDRIVE_SIGN_CERT_SHA1 -and $signature -ne "Valid") { Fail "the installer signature is $signature" }
+
+            if ($Launch -and $failures.Count -eq 0) { Test-Launch "$image/EncryptDrive.exe" }
+            if ($Install -and $failures.Count -eq 0) { Test-Install $setup }
         }
-
-        # No vault, account, or test data may ship.
-        Get-ChildItem $image -Recurse -Force | Where-Object {
-            $_.Name -in @("vault.json", "users.enc", "users.json", ".encryptdrive", "lock") -or
-            $_.Extension -in @(".edv", ".enc", ".part", ".tmp")
-        } | ForEach-Object { Fail "packaged data file: $($_.FullName.Substring($image.Length))" }
-
-        if ((Get-Item $setup).Length -lt 10MB) { Fail "the installer is suspiciously small" }
-        $signature = (Get-AuthenticodeSignature $setup).Status
-        Write-Host "Installer signature: $signature"
-        if ($env:ENCRYPTDRIVE_SIGN_CERT_SHA1 -and $signature -ne "Valid") { Fail "the installer signature is $signature" }
-
-        if ($Launch -and $failures.Count -eq 0) { Test-Launch "$image/EncryptDrive.exe" }
-        if ($Install -and $failures.Count -eq 0) { Test-Install $setup }
     }
 } finally {
     for ($attempt = 0; $attempt -lt 5 -and (Test-Path -LiteralPath $scratch); $attempt++) {
