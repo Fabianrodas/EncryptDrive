@@ -296,6 +296,8 @@ git commit -m "chore: set release version 1.0.0"
 - [x] **Step 4:** pushed `main` normally. Build run `37409411019` for merge SHA `905dbe1082b336de9e0b1e30848f425015f5a555` completed successfully; both `verify` and `package` jobs succeeded.
 - [x] **Step 5: Ledger** — Gate C items passed (H2 resolved, T25 hygiene clean, version `1.0.0`, release/security docs complete); REPOSITORY_SECURITY_READY and PACKAGING_COMPLETE are DONE. Record results in `V1_RELEASE_STATE.md` and push this ledger commit on `main`.
 
+**Post-ledger CI follow-up:** run `37410231209` for docs-only head `b483ca412e1c2765db5b9f3abf88ad79a3475574` failed in `verify` and skipped `package`; the public annotation only reported exit code 1, and GitHub required repository-admin rights to download logs. The exact clean Maven command passed locally on `b483ca4` (412 tests, 0 failures/errors, 3 opt-in skips). No cause is established. Hold T28 until a fresh `main` Build run has both jobs green.
+
 ---
 
 ### Task 28: Create `v1.0.0-rc.1`

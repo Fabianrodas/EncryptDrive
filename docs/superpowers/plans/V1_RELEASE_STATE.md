@@ -9,9 +9,9 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `main` (T27 merge `905dbe1` pushed; Gate B and CI passed) |
 | maven version | `1.0.0` |
 | current phase | 05 - Cleanup, documentation, release gates, and tagging |
-| current task | T28: create and push `v1.0.0-rc.1` after recording T27; H2 is DONE |
-| last completed commit | T27 merge `905dbe1082b336de9e0b1e30848f425015f5a555` |
-| tests last run | T27 `mvn -B clean verify` on `main` (2026-10-05, 3 min 40 s) |
+| current task | T28: hold RC tagging until the follow-up main CI run is green; H2 is DONE |
+| last completed commit | T27 ledger `b483ca412e1c2765db5b9f3abf88ad79a3475574` |
+| tests last run | local reproduction of GitHub `verify` on `b483ca4`: `mvn -B clean verify` (2026-10-05, 5 min 23 s) |
 | test result | BUILD SUCCESS - 412 tests, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
 
 ## Release states
@@ -73,6 +73,7 @@ Updated after every task. Git history and test output are the record; this is th
 | T27 package verifier | PASS: `verify-package.ps1 -Channel rc.1 -Launch -Install` returned 0 under a temporary Medium-integrity standard user (Users enabled; no Administrators membership). The staged Setup, ZIP, and checksums matched source SHA-256 hashes; portable and installed launches worked without system Java; version, Start Menu shortcut, uninstall, and sentinel vault preservation passed. Temporary test account/profile removed. Installer signature is `NotSigned`. |
 | T27 Gate C hygiene recheck | PASS on merged `main`: no tracked credential/key/ciphertext artifacts outside allowlisted public Format 1 vectors, no private-key markers, only the exact synthetic Argon2 test fixture password assignment, and 0 tracked CRLF files. |
 | T27 GitHub CI | PASS: Build run `37409411019` for head `905dbe1082b336de9e0b1e30848f425015f5a555` completed with overall `success`; both `verify` and `package` jobs concluded `success`. https://github.com/Fabianrodas/EncryptDrive/actions/runs/37409411019 |
+| T27 ledger-head CI follow-up | HOLD before RC tagging. Build run `37410231209` on docs-only head `b483ca412e1c2765db5b9f3abf88ad79a3475574` concluded `failure`: `verify` exited 1 and `package` was skipped. The public check annotation was generic; downloading job logs returned 403 requiring repository-admin rights. A local `mvn -B clean verify` on the exact `b483ca4` commit then passed (412 tests, 0 failures/errors, 3 opt-in skips; 5 min 23 s). No cause is established. Require a fresh Build run on the next `main` head with both jobs successful before T28. |
 | host-path persistence and compatibility contract | PASS - T19C; `docs/COMPATIBILITY.md`, `Format1PathPersistenceTest`, and logical-name tests pass on Windows 11 / NTFS / Java 21.0.2; no persistent model serializes a host `Path`; no format ruling required |
 | folder-import link/lock tests (T15) | all ran, none skipped, on Windows 11 / NTFS / JDK 21.0.2: junction (outside the tree and a loop back into it), symbolic link (file and directory — created because the build shell was elevated; Developer Mode is off, so a non-elevated run skips this one test), locked file, Kelvin-sign clash (file and folder), differently-cased vault path. Fix round 1, also all ran: vault reached through the `\\localhost\C$` share alias (reachable here; skips cleanly where the administrative share is not), folder swapped for a junction after the scan, source that is a junction with a missing target |
 | history cleanup (`data/users.json`) | DONE (history rewritten); copies may remain in forks, clones, caches, or elsewhere; treat any reused development password as compromised |
@@ -86,7 +87,7 @@ Updated after every task. Git history and test output are the record; this is th
 
 ## Remaining blockers
 
-1. T28: create and push the annotated RC tag only when every T28 precondition is DONE; all preconditions are now recorded DONE.
+1. T28: after the follow-up CI recovery is green, create and push the annotated RC tag only when every T28 precondition is DONE.
 2. H3–H6: manual validation matrix on the accepted RC.
 
 ### T25 rulings and review record
