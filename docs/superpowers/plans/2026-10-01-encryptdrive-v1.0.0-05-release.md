@@ -418,8 +418,8 @@ If the workflow fails: superpowers:systematic-debugging; the fix goes through T2
 ### Task 29: Release-candidate fix loop (only when a gate fails)
 
 - [x] **Step 1:** systematic debugging confirmed the PowerShell `$tag:refs` scoped-variable parse; `scripts/tests/Test-ReleaseTagRefspec.ps1` failed before and passed after bracing `${tag}`. The CI guard is added to the Windows Build workflow.
-- [ ] **Step 2:** `git checkout -b release-fix/rc.<N+1>-<topic> main`; TDD fix; `mvn -B clean verify`; commit `fix: <what>`.
-- [ ] **Step 3:** merge into `main` (`--no-ff`), push, re-run T27 Step 3 (Gate B on `main`) and the 1 GiB test on the new `main` commit.
+- [x] **Step 2:** created `release-fix/rc.2-tag-refspec` from `main`; regression test RED→GREEN; `mvn -B clean verify` passed (412 tests, 0 failures/errors, 3 opt-in skips); committed `6d1acb6a5cdf3c7d0d37d7e115eda9a403b557c4` (`fix: correct release tag refspec interpolation`).
+- [ ] **Step 3:** no-ff merge `9f9226fd53a517c79cded3e2506283b108f66596` is complete; post-merge Gate B passed (412 tests, 0 failures/errors, 3 opt-in skips) and the 1 GiB test passed 2/2 in 114.5 s. Fetch and confirm `origin/main` has not changed, push `main` normally, then require both Build jobs to pass.
 - [ ] **Step 4:** T28 with `v1.0.0-rc.<N+1>` on the new commit (the old tag stays untouched).
 - [ ] **Step 5:** repeat **all** of H3–H6 on the new RC (any code fix resets Gate E; spec 23).
 

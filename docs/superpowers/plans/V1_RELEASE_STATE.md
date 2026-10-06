@@ -6,13 +6,13 @@ Updated after every task. Git history and test output are the record; this is th
 
 | Key | Value |
 |---|---|
-| branch | `release-fix/rc.2-tag-refspec` (T29 fix branch from `main` `cc9d7f0`) |
+| branch | `main` at local T29 merge `9f9226fd53a517c79cded3e2506283b108f66596` (verification ledger update pending push) |
 | maven version | `1.0.0` |
 | current phase | 05 - Cleanup, documentation, release gates, and tagging |
-| current task | T29: fix the `Check the tag` PowerShell refspec expansion; keep `v1.0.0-rc.1` fixed; diagnostic root cause and red/green regression test are recorded below |
-| last completed commit | main CI recovery ledger `cc9d7f02dd57b321473341950043ea170c636e9d` |
-| tests last run | `mvn -B clean verify` on the pending T29 refspec fix atop `cc9d7f0` |
-| test result | BUILD SUCCESS; 412 tests, 0 failures/errors, 3 opt-in skips. Post-merge Gate B, 1 GiB, package verification, and remote CI remain required. |
+| current task | T28: fetch and confirm `origin/main`, push the tested T29 merge normally, wait for both Build jobs, then create `v1.0.0-rc.2`; keep `v1.0.0-rc.1` fixed |
+| last completed commit | T29 no-fast-forward merge `9f9226fd53a517c79cded3e2506283b108f66596` (local; push pending) |
+| tests last run | 1 GiB `LargeFileStreamingTest` on T29 merge `9f9226fd53a517c79cded3e2506283b108f66596` |
+| test result | PASS, 2/2 tests, 0 failures/errors/skips, 114.5 s. Post-merge Gate B passed (412 tests, 0 failures/errors, 3 opt-in skips); rc.2 package build and standard-user `-Launch -Install` verification passed. Remote push/CI and T28 remain. |
 
 ## Release states
 
@@ -25,8 +25,8 @@ Updated after every task. Git history and test output are the record; this is th
 | REPOSITORY_SECURITY_READY | DONE - H2 history rewrite, T25 hygiene, version `1.0.0`, and release/security documentation are complete |
 | H2 | DONE - history rewritten and verified locally and on origin before v1.0.0 |
 | T27 | DONE - merged and pushed to `main`; Gate B passed; both CI jobs succeeded |
-| T28 | BLOCKED - `v1.0.0-rc.1` remains unchanged on `905dbe1`; Release run `37412149363` failed in `Check the tag` because PowerShell produced an invalid tag-fetch refspec; use `rc.2` after T29 gates pass |
-| T29 | IN PROGRESS - root cause reproduced and regression test passes after the braced-variable fix; branch/commit, merge, main gates, CI, and `rc.2` remain |
+| T28 | BLOCKED - `v1.0.0-rc.1` remains unchanged on `905dbe1`; diagnosed fix and local gates pass; confirm remote main, push the fix normally, require both CI jobs, then use `rc.2` |
+| T29 | TECHNICAL FIX COMPLETE - commit `6d1acb6` merged locally to main as `9f9226f`; Gate B, 1 GiB, rc.2 rebuild, and standard-user package install/launch/uninstall passed; remote push/CI and repeat of H3-H6 on rc.2 remain |
 | RC_CREATED | DONE - annotated `v1.0.0-rc.1` points to `905dbe1082b336de9e0b1e30848f425015f5a555`; its Release workflow failed before artifact build/draft creation |
 | MANUAL_VALIDATION_COMPLETE | TODO |
 | FINAL_TAG_CREATED | TODO |
@@ -79,7 +79,11 @@ Updated after every task. Git history and test output are the record; this is th
 | T28 RC tag and Release workflow | Tag `v1.0.0-rc.1` was created as an annotated tag and pushed normally; remote tag object `67dbf83f5f3f67830f3abdf48ca92ab61ae96fa2` peels to tested T27 merge commit `905dbe1082b336de9e0b1e30848f425015f5a555`, an ancestor of remote `main` `cc9d7f02dd57b321473341950043ea170c636e9d`. Release run `37412149363` failed in `Check the tag`; user supplied the minimum failing log on 2026-10-06. PowerShell parsed `$tag:refs` as a scoped-variable reference, yielding `refs/tags//tags/v1.0.0-rc.1` and Git's `fatal: invalid refspec`; setup, checkout, and Java setup succeeded, and later steps were skipped. The tag remains unchanged. |
 | T28 local validation reproduction | Earlier fresh-clone checks passed the tag name, annotated-object, trigger-SHA, main-ancestry, and Maven-version predicates but did not exercise PowerShell's fetch-refspec expansion. The user-provided log exposed the missed interpolation; no second credential-backed GitHub request was made. |
 | T29 tag refspec regression | RED then GREEN: `scripts/tests/Test-ReleaseTagRefspec.ps1` extracted the production refspec and reproduced `refs/tags//tags/v1.0.0-rc.2` before the fix; after changing to `${tag}`, it passed with `refs/tags/v1.0.0-rc.2:refs/tags/v1.0.0-rc.2`. Executed with Windows PowerShell 5.1 (PowerShell 7 is not installed locally); the actual PowerShell 7 failure output was supplied by the user. Added the check to the Windows Build workflow. |
-| T29 Gate B working-tree verification | PASS on the pending release-fix changes atop `cc9d7f02dd57b321473341950043ea170c636e9d`: `mvn -B clean verify` → BUILD SUCCESS, 412 tests, 0 failures, 0 errors, 3 opt-in skips; 3 min 50 s. Full post-merge Gate B and 1 GiB checks still required before tagging. |
+| T29 fix branch and merge | PASS: release-fix commit `6d1acb6a5cdf3c7d0d37d7e115eda9a403b557c4` (`fix: correct release tag refspec interpolation`) merged no-ff into local `main` as `9f9226fd53a517c79cded3e2506283b108f66596`; no remote refs changed yet. |
+| T29 post-merge Gate B | PASS on `9f9226fd53a517c79cded3e2506283b108f66596`: `mvn -B clean verify` → BUILD SUCCESS, 412 tests, 0 failures/errors, 3 opt-in skips; 3 min 57 s. |
+| T29 1 GiB streaming gate | PASS on `9f9226fd53a517c79cded3e2506283b108f66596`: `mvn -B test "-Dtest=LargeFileStreamingTest" "-Dencryptdrive.largeFileCheck=true" "-DargLine=-Xmx256m"` → 2 tests, 0 failures/errors/skips; 114.5 s. |
+| T29 rc.2 package rebuild | PASS on local `main`: `build-release.ps1 -Release -SkipTests -Channel rc.2` after the same-commit clean verify; setup 37,790,208 bytes, SHA-256 `4327e69ff6d9a331d26bbf09808714f611901b778d55d46ad4975810f0ab25d3`; portable ZIP 36,375,932 bytes, SHA-256 `6fdabb182f28f3cd848a6f16b38aba81cb6116fc3290bb7dd8006d0e4956f492`. WiX 3.14.1.8722 download matched the pinned release-plan SHA-256. |
+| T29 rc.2 package verification | PASS: `verify-package.ps1 -Channel rc.2 -Launch -Install` returned 0 under a temporary Medium-integrity standard user with `BUILTIN\Users` enabled and no Administrators membership. Checksums matched; portable and installed launches worked without system Java; install version, Start Menu shortcut, uninstall, and sentinel-vault preservation passed; signature `NotSigned`. The first sandbox-token run returned MSI 1603 with rollback-key access denied; the documented standard-user run passed. Temporary account/profile/stage were removed and `msiserver` restored to Stopped/Manual. |
 | host-path persistence and compatibility contract | PASS - T19C; `docs/COMPATIBILITY.md`, `Format1PathPersistenceTest`, and logical-name tests pass on Windows 11 / NTFS / Java 21.0.2; no persistent model serializes a host `Path`; no format ruling required |
 | folder-import link/lock tests (T15) | all ran, none skipped, on Windows 11 / NTFS / JDK 21.0.2: junction (outside the tree and a loop back into it), symbolic link (file and directory — created because the build shell was elevated; Developer Mode is off, so a non-elevated run skips this one test), locked file, Kelvin-sign clash (file and folder), differently-cased vault path. Fix round 1, also all ran: vault reached through the `\\localhost\C$` share alias (reachable here; skips cleanly where the administrative share is not), folder swapped for a junction after the scan, source that is a junction with a missing target |
 | history cleanup (`data/users.json`) | DONE (history rewritten); copies may remain in forks, clones, caches, or elsewhere; treat any reused development password as compromised |
@@ -93,7 +97,7 @@ Updated after every task. Git history and test output are the record; this is th
 
 ## Remaining blockers
 
-1. T29/T28: create and commit the diagnosed fix, merge and push `main`, rerun Gate B and the 1 GiB test, require both CI jobs to pass, then create the next unused RC tag; preserve `v1.0.0-rc.1` unchanged.
+1. T28: fetch and confirm `origin/main` is still `cc9d7f02dd57b321473341950043ea170c636e9d`, push the tested main update normally, require both Build jobs to pass, create `v1.0.0-rc.2` without moving rc.1, and require its Release workflow to succeed.
 2. H3–H6: manual validation matrix on the first RC whose Release workflow succeeds.
 
 ### T25 rulings and review record
