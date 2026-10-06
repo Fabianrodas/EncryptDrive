@@ -17,10 +17,10 @@ disk, a USB drive, or a folder synced by OneDrive. Several people can have
 accounts in the same vault, and each person can only ever decrypt their own
 files.
 
-Everything that reaches the vault folder is encrypted: account names, file and
-folder names, and file contents. The only plaintext file is a small technical
-header needed to unlock the vault. EncryptDrive works fully offline: there is
-no server, cloud account, telemetry, or network access.
+Account names, file and folder names, and file contents in the vault are
+encrypted. The only plaintext vault metadata is a small `vault.json` header;
+EncryptDrive also uses a lock file while the vault is open. It works fully
+offline: there is no server, cloud account, telemetry, or network access.
 
 ## Screenshots
 
@@ -49,6 +49,25 @@ The screenshots use a demo vault and a fictional account.
 The details are in [docs/SECURITY.md](docs/SECURITY.md) and the exact file
 format is in [docs/VAULT_FORMAT.md](docs/VAULT_FORMAT.md).
 
+## Download and install
+
+The Windows release has two editions:
+
+- **Installer:** run `EncryptDrive-<version>-Setup.exe`. If SmartScreen reports
+  an unknown publisher, verify the SHA-256 checksum first, then choose **More
+  info → Run anyway**. The per-user wizard lets you choose the install folder,
+  add a Start Menu entry, and optionally add a desktop shortcut. It does not
+  ask for administrator access.
+- **Portable:** unzip `EncryptDrive-<version>-Windows-Portable.zip` anywhere
+  and run `EncryptDrive\EncryptDrive.exe`. It also works from a USB drive.
+
+Both editions bundle Java and need no separate Java installation. Installing
+EncryptDrive does not choose, create, or move a vault; uninstalling it never
+deletes a vault. Create and open vaults from inside the app.
+
+Verify the downloaded installer against `SHA256SUMS.txt` using the PowerShell
+commands in [the release notes footer](docs/testing/release-notes-footer.md).
+
 ## Using EncryptDrive
 
 ### Create or open a vault
@@ -69,7 +88,9 @@ EncryptDrive starts on **Vault Selection**.
 ### Accounts
 
 - **Create account** adds a local account to the open vault (username of at
-  least 3 characters, password of at least 8).
+  least 3 characters, password of at least 12). Accounts created by pre-release
+  builds with shorter passwords still work; change those passwords in Personal
+  Profile.
 - **Log in** opens that account's workspace.
 - **Log Out** ends the account session and returns to login; the vault stays
   open for the next person.
@@ -81,48 +102,62 @@ EncryptDrive starts on **Vault Selection**.
 The workspace sidebar has **Overview**, **Files**, **Trash**,
 **Personal Profile**, and **Vault Settings**.
 
-- **Import Files** encrypts copies of the selected files into the current
-  folder, with a progress bar. The originals are left untouched; delete them
-  yourself if needed.
+- **Import** offers **Files…** and **Folder…**. Files encrypt copies into the
+  current folder. Folder imports include subfolders and empty folders; links
+  and junctions are skipped. Both actions show progress, and originals stay
+  where they are.
 - **New Folder**, double-click to open a folder, and use the breadcrumbs to go
-  back.
+  back. **Rename** and **Move** change items inside your encrypted workspace.
+- **Search** searches only your own files. Press Enter to search; select
+  **Clear** to return to the current folder. Results show their location, and
+  double-clicking a result opens its folder.
 - **Export** writes decrypted copies to a location you choose, after warning
-  that exported files are no longer protected by EncryptDrive. Files are never
-  opened as temporary plaintext.
+  that exported files are no longer protected by EncryptDrive. Exports into the
+  vault folder are refused. Files are never opened as temporary plaintext.
 - **Move to Trash** hides items but keeps them encrypted. In **Trash** you can
-  **Restore** them or **Permanently Delete** them after a confirmation.
+  **Restore**, **Permanently Delete**, or **Empty Trash** after confirmation.
 - **Personal Profile** changes your account password; **Vault Settings**
   shows the vault details and changes the vault password.
 
 ### USB drives and OneDrive
 
 A vault is just a folder, so you can keep it on a USB drive and open it on
-another Windows computer with the portable build. In a OneDrive (or similar)
-folder, the provider only ever receives encrypted data.
+another Windows computer with the portable build. Keep the portable app on the
+USB drive beside the vault if convenient. Close the vault and EncryptDrive
+before ejecting the drive.
 
-Open a synced vault on **one computer at a time**. EncryptDrive prevents two
-processes on the same computer from opening a vault, but it cannot coordinate
-two computers.
+In a OneDrive (or similar) folder, the provider only ever receives encrypted
+data.
+
+**Never open the same synced vault on two computers at the same time. Close
+EncryptDrive and wait for sync to finish before switching computers.**
+
+## Versions and tags
+
+- `1.0.0-SNAPSHOT` is the development version.
+- `v1.0.0-rc.N` tags a release candidate for testing; it is a prerelease.
+- `v1.0.0` tags the stable release.
 
 ## Building and running
 
 Requirements: JDK 21 and Maven for source work; Windows release packaging also
-needs WiX 3.14 on `PATH`. The portable and installed builds need no Java on the
-computer that runs them.
+needs WiX Toolset 3.14 on `PATH`. The portable and installed builds bundle a
+Java runtime and need no separate Java installation on the computer that runs
+them.
 
 ```bash
 # Run from source
 mvn javafx:run
 
 # Run all tests
-mvn clean verify
+mvn -B clean verify
 ```
 
 Build the portable and installer Windows editions with their own Java runtime.
 Artifacts are written to `target/release/<version>/`.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-package.ps1 -Launch -Install
 ```
 
@@ -132,19 +167,21 @@ move the vault.
 
 ### Tests
 
-`mvn clean verify` runs the unit and integration tests: key derivation against
+`mvn -B clean verify` runs the unit and integration tests: key derivation against
 reference vectors, AES-GCM tamper cases, vault and account lifecycles,
 encrypted storage, cross-account isolation, a corruption and recovery matrix,
 and JavaFX layout and flow checks. The JavaFX tests are skipped automatically
 where no desktop session is available.
 
-A 1 GiB streaming check is opt-in:
+A 1 GiB streaming check is opt-in and uses a 256 MiB Java heap:
 
 ```bash
-mvn -Dtest=LargeFileStreamingTest -Dencryptdrive.largeFileCheck=true -DargLine=-Xmx256m test
+mvn -B test "-Dtest=LargeFileStreamingTest" "-Dencryptdrive.largeFileCheck=true" "-DargLine=-Xmx256m"
 ```
 
-The manual checklist is in [docs/testing/manual-ui.md](docs/testing/manual-ui.md).
+The manual UI checklist is in [docs/testing/manual-ui.md](docs/testing/manual-ui.md).
+The release gates and hardware checks are in
+[docs/testing/release-checklist.md](docs/testing/release-checklist.md).
 
 ## Project structure
 
@@ -162,8 +199,9 @@ src/main/resources/com/fabianrodas/
 ├── css/            stylesheets
 └── images/         logo
 
-scripts/            portable Windows packaging and its verification
-docs/               security model, vault format, manual test checklist
+packaging/windows/  Windows installer resources
+scripts/            portable Windows packaging and package verification
+docs/               security model, vault format, compatibility, and test checklists
 ```
 
 ## Known limitations

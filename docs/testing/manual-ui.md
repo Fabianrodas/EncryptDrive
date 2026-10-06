@@ -4,6 +4,8 @@ Run the app with `mvn javafx:run` (or the portable build). Repeat every section
 twice: once at the minimum window size (1000x600, the size the app opens with)
 and once maximized (title bar `□` button). `UiLayoutTest` checks every screen
 automatically at 1000x600 and 1920x1040 when a desktop session is available.
+Installer, removable-drive, OneDrive, and clean-Windows checks are in
+[release-checklist.md](release-checklist.md).
 
 ## Window chrome (every screen)
 
@@ -44,8 +46,9 @@ automatically at 1000x600 and 1920x1040 when a desktop session is available.
 - [ ] Both screens show the open vault's name with a **Close vault** link that returns to
       Vault Selection and closes the vault.
 - [ ] Register shows "EncryptDrive cannot recover a lost account password."
-- [ ] Registration errors (empty fields, username under 3 characters, password under 8,
-      mismatch, username taken in any letter case) are shown and create nothing.
+- [ ] Registration errors (empty fields, username under 3 characters, password under 12,
+      mismatch, username taken in any letter case) are shown and create nothing. A
+      password of 12 characters succeeds.
 - [ ] After registering, the popup's `×` stays on Register; **Go to Log In** opens Login.
 - [ ] A wrong password or unknown username shows exactly "Invalid username or password."
 - [ ] If the vault data was restored from a backup, Login shows the recovery notice once.
@@ -58,10 +61,19 @@ automatically at 1000x600 and 1920x1040 when a desktop session is available.
       storage, items in trash. **Open Files** opens Files.
 - [ ] Files: **New Folder** (Cancel creates nothing; duplicate or invalid names are
       rejected), double-click a folder to enter it, breadcrumbs go back.
-- [ ] Files: **Import Files** with several files shows progress, disables the toolbar and
-      sidebar while running, and leaves the original files in place. Cancelling the file
-      dialog does nothing.
+- [ ] Files: **Rename** a file and folder. A name already used by a sibling, including
+      a clash that differs only by letter case, is rejected.
+- [ ] Files: **Move** a file or folder with the destination picker. Moving a folder into
+      itself or one of its descendants is refused.
+- [ ] Files: **Import → Files…** with several files shows progress, disables the toolbar
+      and sidebar while running, and leaves the original files in place. Cancelling the
+      file dialog does nothing.
+- [ ] Files: **Import → Folder…** imports a folder with a subfolder and an empty
+      subfolder, shows progress, and skips a junction without following it.
 - [ ] Files: double-clicking a file only suggests Export; no temporary copy is created.
+- [ ] Files: **Search** is case-insensitive. Results show their location; double-click
+      opens the result's folder; **Clear** returns to the current folder. Search only
+      shows the signed-in account's files.
 - [ ] Files: **Export** first shows "Exported files are not encrypted by EncryptDrive at the
       selected destination." Cancel there, or in the file/folder dialog, writes nothing.
       Exporting into a folder with existing items asks before replacing them.
@@ -69,22 +81,29 @@ automatically at 1000x600 and 1920x1040 when a desktop session is available.
 - [ ] Trash: **Restore** puts items back (into the top-level folder if the original folder
       is gone, renamed if the name is taken). **Permanently Delete** names the items, says
       recovery will no longer be possible, and does nothing on Cancel.
-- [ ] Personal Profile: wrong current password, short or mismatched new password, and a
-      successful change each show the expected message.
+- [ ] Trash: **Empty Trash** confirmation states the number of items; confirming empties
+      Trash.
+- [ ] During a long import, title-bar **×**, Alt+F4, **Log Out**, and **Close Vault** are
+      blocked with exactly "Please wait for the current file operation to finish before
+      closing EncryptDrive." The sidebar is disabled until the operation finishes.
+- [ ] Personal Profile: wrong current password, an 11-character new password, a
+      mismatched password, and a successful 12-character password change each show the
+      expected message.
 - [ ] Vault Settings: location, vault ID, format version, created date, the synced-folder
-      warning, vault password change (12+ characters), and **Close Vault**.
+      warning, **APP VERSION**, vault password change (12+ characters), and **Close
+      Vault**. The app version is the release version.
 - [ ] **Log Out** returns to Login with the vault still open; **Close Vault** returns to
       Vault Selection.
 
 ## Acceptance matrix
 
-Automated coverage runs in `mvn clean verify`; the rest needs a person or hardware.
+Automated coverage runs in `mvn -B clean verify`; the rest needs a person or hardware.
 
 | # | Check | Covered by |
 |---|---|---|
 | 1 | Create a vault in a local folder | `VaultServiceTest`; the Create form itself is manual |
-| 2 | Create a vault on a removable USB drive | Manual |
-| 3 | Vault in a OneDrive folder: only ciphertext syncs | At-rest scans in `VaultServiceTest`, `AuthServiceTest`, `FileServiceTest`; sync itself is manual |
+| 2 | Create a vault on a removable USB drive | Manual; see H4 in [release-checklist.md](release-checklist.md) |
+| 3 | Vault in a OneDrive folder: only ciphertext syncs | At-rest scans in `VaultServiceTest`, `AuthServiceTest`, `FileServiceTest`; sync itself is manual; see H5 in [release-checklist.md](release-checklist.md) |
 | 4 | Register accounts A and B | `AuthServiceTest` |
 | 5 | B cannot list, export, or decrypt A's file | `FileServiceTest.anotherUserCannotListExportOrDecryptTheFile` |
 | 6 | A exports a file byte-for-byte | `FileServiceTest`, `StreamingFileCryptoServiceTest` (SHA-256) |
@@ -95,4 +114,12 @@ Automated coverage runs in `mvn clean verify`; the rest needs a person or hardwa
 | 11 | Second process is refused as busy | `VaultLockServiceTest` (separate JVM) |
 | 12 | Close Vault: login impossible until reopened | `UiFlowTest` |
 | 13 | Screens at 1000x600 and maximized | `UiLayoutTest` (1000x600 and 1920x1040) |
-| 14 | Portable app runs without installed Java | `scripts/verify-portable-package.ps1 -Launch` locally; a clean Windows VM is manual |
+| 14 | Portable app runs without installed Java | `scripts/verify-package.ps1 -Launch` locally; see H6 in [release-checklist.md](release-checklist.md) |
+| 15 | Permanent deletion removes manifest entries from every backup before blob cleanup; failed cleanup resumes | `PermanentDeleteTest` |
+| 16 | Rename updates the selected item and rejects sibling name clashes | `RenameTest` |
+| 17 | Move uses a destination folder and rejects invalid descendant moves | `MoveTest` |
+| 18 | Folder import preserves empty folders, skips links, and batches manifest saves | `FolderImportTest` |
+| 19 | Search is case-insensitive and returns only the signed-in account's entries | `SearchTest` |
+| 20 | Close, Log Out, and Close Vault are blocked during file operations | `CloseGuardTest` |
+| 21 | Large-file import and export stream within a bounded heap | `StreamingMemoryTest` |
+| 22 | File operations load the manifest once per operation | `MetadataLoadCountTest` |

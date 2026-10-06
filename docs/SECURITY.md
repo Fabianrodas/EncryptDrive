@@ -90,7 +90,10 @@ A ciphertext copied to another vault, account, or file fails authentication.
 
 ## Passwords
 
-- Vault passwords need at least 12 characters; account passwords at least 8.
+- Vault and account passwords need at least 12 characters. Passwords are used
+  exactly as entered: they are not trimmed or Unicode-normalized. Accounts
+  created by pre-release builds with shorter passwords still work until the
+  account owner changes the password.
 - **There is no password recovery.** EncryptDrive stores no hint, reset key, or
   copy of any password. A lost vault password makes the whole vault unreadable;
   a lost account password makes that account's files unreadable. The app warns
@@ -101,14 +104,40 @@ A ciphertext copied to another vault, account, or file fails authentication.
   cleared, and the JVM and JCE may keep transient copies. Memory inspection is
   outside the threat model.
 
+### Account password change
+
+Changing an account password wraps the same user master key (UMK) with a key
+derived from the new password. It does not re-encrypt the manifest or file
+blobs. The active registry and all three registry backups are replaced with
+the new registry, so the old password cannot open any retained registry
+generation in the current vault. The backups are written before the active
+registry; if the operation is interrupted before the active registry is
+replaced, the old password remains valid and the change must be repeated.
+
+This does not revoke a UMK that someone already extracted from memory. It also
+does not rewrite copies of the vault kept outside EncryptDrive. For example,
+OneDrive version history, your own backups, or an attacker's earlier copy may
+still contain a registry that opens with the old password.
+
+### Vault password change
+
+Changing the vault password wraps the same registry master key with a new salt
+and derived key, and replaces `vault.json`. There are no `vault.json` backups,
+so an older header copy is not retained by EncryptDrive. A copy of the whole
+vault made outside EncryptDrive before the change can still be opened with the
+old vault password.
+
 ## Sessions
 
 - **Log Out** destroys the account's UMK and keeps the vault unlocked for the
   next account.
 - **Close Vault** also destroys the RMK and releases the vault lock. Closing
   the window, or quitting the app, does the same.
-- Background work (imports, exports) disables Log Out and Close Vault until it
-  finishes.
+- While a file operation runs, closing the window, Alt+F4, Log Out, and Close
+  Vault are blocked with: "Please wait for the current file operation to
+  finish before closing EncryptDrive." The sidebar is disabled too. Once the
+  session closes, EncryptDrive wipes the account and vault keys from memory
+  and releases the vault lock.
 
 ## What the vault reveals
 
@@ -125,13 +154,17 @@ The vault hides names and contents, but not everything:
 ## Import, export, and previews
 
 - Import encrypts a copy and never modifies or deletes the source file.
+- Folder import never follows symbolic links or junctions, and refuses a
+  source folder that contains the vault.
 - Files are never opened as temporary plaintext previews.
 - Export is the only operation that writes plaintext, only to a destination
   you choose, after the warning "Exported files are not encrypted by
-  EncryptDrive at the selected destination." Each file is decrypted into a
-  temporary `.part` file beside the destination and renamed only after the GCM
-  tag verifies. If verification fails, the partial file is deleted and nothing
-  is exported.
+  EncryptDrive at the selected destination." Exporting into the vault folder
+  is refused. Each file is decrypted into a temporary `.part` file beside the
+  destination and renamed only after the GCM tag verifies. If an export is
+  interrupted, a plaintext `<name>.<digits>.part` file can remain beside the
+  chosen destination; delete it. If verification fails, the partial file is
+  deleted and nothing is exported.
 
 ## Integrity and recovery
 
@@ -144,11 +177,27 @@ The vault hides names and contents, but not everything:
 - `vault.json` is not backed up, so an old copy cannot keep an old vault
   password working. If it is damaged, the vault cannot be opened: keep an
   external backup of the vault folder.
-- Registry backups can still contain an account key wrapped under that
-  account's previous password until three more registry changes have happened.
-  Someone with a copy of the vault and both the vault password and the old
-  account password could use such a backup. The UMK itself never changes, so a
-  password change does not revoke access for anyone who already had it.
+- `vault.json` is limited to 256 KiB; `users.enc` and each registry backup to
+  16 MiB; each encrypted manifest and each manifest backup to 64 MiB. Limits
+  are checked before reading and before writing. Oversized or malformed
+  metadata is treated as damage; recovery uses an authentic backup when one is
+  available. The only contractual size limit is that one account's encrypted
+  manifest may not exceed 64 MiB; the other values are defensive metadata
+  bounds.
+- Registry password changes replace the active registry and every backup with
+  the new state. See [Account password change](#account-password-change) for
+  the behavior of interrupted changes and copies outside EncryptDrive.
+
+## Permanent deletion
+
+Permanent deletion first removes the selected entries from the encrypted
+manifest and replaces all three manifest backups with that same state. It then
+deletes the entries' encrypted blobs. Blob IDs still awaiting removal are kept
+in the encrypted manifest's `pendingDeletions` journal. Cleanup is retried
+after login, before and after later permanent deletions, and when Empty Trash is
+used. A failed removal can leave orphaned ciphertext, but metadata never points
+to a blob that has already been deleted. SSDs and flash drives do not guarantee
+physical erasure of deleted data.
 
 ## Synced folders and USB drives
 
@@ -161,11 +210,28 @@ The vault hides names and contents, but not everything:
 
 ## Distribution
 
-- The portable Windows app-image bundles its own Java runtime and needs no
-  installed Java.
+- The per-user Windows installer and the portable ZIP both bundle their own
+  Java runtime and need no installed Java. Installing or uninstalling the app
+  never creates, moves, or deletes a vault. The installer lets you choose its
+  own install folder and shortcuts; uninstalling removes the app and shortcuts
+  but leaves vault folders untouched.
+- Release artifacts are not code-signed. Windows SmartScreen may show an
+  unknown publisher; verify the SHA-256 value in `SHA256SUMS.txt` before
+  choosing **More info → Run anyway**.
+- JavaFX writes native libraries to `%USERPROFILE%\.openjfx\cache` on each
+  computer where EncryptDrive runs. The portable edition leaves this cache on
+  the host computer.
 - The Bouncy Castle JAR is signed, but jlink cannot link signed modular JARs,
   so the image is built with `--ignore-signing-information`. EncryptDrive uses
   Bouncy Castle's lightweight API directly and never registers it as a JCE
   provider, so the provider signature is not needed.
-- JavaFX extracts its native libraries into `%USERPROFILE%\.openjfx\cache`
-  the first time it runs.
+
+## Repository history
+
+An early development build stored a plaintext account list in
+`data/users.json`, including account identifiers, usernames, password hashes,
+full names, and salts. Current builds do not use that file, and it is not
+included in release packages. As of the local reference check on 2026-10-05,
+the file remains in the history of `main`; the history-rewrite decision is
+pending. Treat any password used for one of those development accounts as
+compromised.

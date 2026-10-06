@@ -9,9 +9,9 @@ Updated after every task. Git history and test output are the record; this is th
 | branch | `feature/encryptdrive-1.0` (unpushed) |
 | maven version | `1.0.0-SNAPSHOT` (becomes `1.0.0` in T26) |
 | current phase | 05 - Cleanup, documentation, release gates, and tagging |
-| current task | T24 documentation; H2 still gates history rewrite, push, merge, and tags |
-| last completed commit | T23 dead-code audit and cleanup (recorded in this revision) |
-| tests last run | T23 `mvn -B clean verify` (2026-10-05, 3 min 4 s) |
+| current task | T25 Gates A–C from a fresh worktree; H2 still gates history rewrite, push, merge, and tags |
+| last completed commit | T24 documentation (recorded in this revision) |
+| tests last run | T24 `mvn -B clean verify` (2026-10-05, 2 min 57 s) |
 | test result | BUILD SUCCESS - 406 tests, 0 failures, 0 errors, 3 skipped (opt-in LargeFileStreamingTest x2 and FolderImportBenchmarkTest) |
 
 ## Release states
@@ -48,6 +48,7 @@ Updated after every task. Git history and test output are the record; this is th
 | folder-import benchmark environment | Windows build 10.0.26200.9457, NTFS, Java 21.0.2 64-bit HotSpot, Intel64 Family 6 Model 154 Stepping 3, 16 logical processors. CPU marketing name was unavailable in the sandbox. The handoff-reported scaling (1,000 about 36 s through 8,000 about 910 s) has no local benchmark artifact in this checkout. |
 | Format 1 conformance vectors | PASS - 2026-10-05; public fixtures under `test-vectors/format-v1/`, independent Argon2id/AES generation, repository/blob/name tests pass |
 | dead-code/resource audit (T23) | PASS - all production classes, FXML/CSS resources, and CSS selectors have references; removed only unused `assertNull` static import from `FileServiceTest`; other heuristic member matches are initializer calls, and `FxTestSupport.fireAndAnswerPopup` is used by `UiFlowTest`. Remaining pattern matches are intentional: `users.json` packaging deny-list, `1.0-SNAPSHOT` regression assertion, and `System.exit` in the isolated streaming probe. |
+| release documentation (T24) | PASS - README, SECURITY, VAULT_FORMAT, CHANGELOG, manual UI checklist, release checklist, and release-notes footer cover v1.0.0 editions, security semantics, metadata limits, manual gates, and checksums. Stale-text scan found no old password minimums or packaging script names; every relative link in the changed docs resolves. `mvn -B clean verify`: BUILD SUCCESS, 406 tests, 0 failures/errors, 3 opt-in skips. |
 | host-path persistence and compatibility contract | PASS - T19C; `docs/COMPATIBILITY.md`, `Format1PathPersistenceTest`, and logical-name tests pass on Windows 11 / NTFS / Java 21.0.2; no persistent model serializes a host `Path`; no format ruling required |
 | folder-import link/lock tests (T15) | all ran, none skipped, on Windows 11 / NTFS / JDK 21.0.2: junction (outside the tree and a loop back into it), symbolic link (file and directory — created because the build shell was elevated; Developer Mode is off, so a non-elevated run skips this one test), locked file, Kelvin-sign clash (file and folder), differently-cased vault path. Fix round 1, also all ran: vault reached through the `\\localhost\C$` share alias (reachable here; skips cleanly where the administrative share is not), folder swapped for a junction after the scan, source that is a junction with a missing target |
 | history cleanup (`data/users.json`) | local copy deleted; still in history and in origin/main tip — decision at H2 |

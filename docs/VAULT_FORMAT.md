@@ -52,17 +52,19 @@ opened. Nothing else is ever deleted by that cleanup.
   `/`, with `=` padding) with no line breaks. Decoded lengths are stated for
   each field below.
 - Writers omit absent optional fields rather than writing JSON `null`. They
-  write only the fields defined for Format 1. Readers ignore unknown members
-  in `vault.json` and the decrypted registry/manifest objects. This does not
-  make new fields part of Format 1: a new mandatory field or changed meaning
-  requires a format-version increase.
+  write only the fields defined for Format 1. Every required `vault.json`
+  member must exist with its exact JSON type; unknown header members and
+  unknown decrypted registry/manifest members are ignored for forward
+  compatibility. A new mandatory field or changed meaning requires a
+  format-version increase.
 - The on-disk envelope in `users.enc` and each manifest file is stricter: it
   is exactly one JSON object with one each of `version`, `algorithm`, `nonce`,
   and `ciphertext`. Missing, duplicate, extra, wrongly typed, or trailing
   JSON data is rejected. Its syntax is strict JSON; comments, single-quoted
   strings, unquoted member names, and trailing commas are invalid. The
-  `wrappedRegistryKey` envelope is nested in `vault.json`; writers use the
-  same four fields, while the current header reader ignores unknown members.
+  `wrappedRegistryKey` envelope is nested in `vault.json` and follows the same
+  strict four-member rule. The header reader ignores other unknown top-level
+  header members.
 - Writers serialize integer fields as integer number tokens, not quoted
   strings. Readers reject values that are not exact integers or exceed the
   field range.
@@ -70,10 +72,25 @@ opened. Nothing else is ever deleted by that cleanup.
   `Z`. UUIDs are canonical lowercase `8-4-4-4-12` text; IDs are generated as
   random UUID version 4 values.
 
-`vault.json`, `users.enc`, and each manifest are limited to 256 KiB, 16 MiB,
-and 64 MiB respectively, including their JSON envelopes. A reader rejects an
-oversized file before parsing it; a writer refuses to create one that exceeds
-the corresponding limit.
+After decryption, a registry must have Format 1, complete user records, and
+unique user IDs, usernames, and manifest IDs. A manifest must have Format 1,
+one root folder, unique entry IDs, and a tree in which every entry is reachable
+from that root through a folder. Every file entry must include a nonnegative
+size, blob ID, wrapped file key, and a valid 12-byte content nonce. Writers
+serialize UUID values in canonical lowercase form. A malformed or incomplete
+registry or manifest is treated as damaged metadata.
+
+The limits apply to the complete encrypted JSON file, including its envelope,
+and are checked before reading and before writing:
+
+| File | Maximum size |
+|---|---:|
+| `vault.json` | 256 KiB |
+| `users.enc` and each registry backup | 16 MiB |
+| Each manifest and each manifest backup | 64 MiB |
+
+An oversized file or backup is treated as damaged. Recovery skips an oversized
+backup and tries the next generation.
 
 ## Encrypted envelope
 
@@ -226,7 +243,10 @@ with AAD `EncryptDrive|manifest|v1|<vaultId>|<userId>`. Decrypted:
   UMK with AAD `EncryptDrive|file-key|v1|<vaultId>|<userId>|<entryId>`.
 - `pendingDeletions` is an encrypted list of blob IDs whose manifest entries
   have already been removed but whose physical deletion still needs to be
-  completed. Writers include an empty array when there is no pending cleanup.
+  completed. The field is optional for older Format 1 manifests; if absent it
+  means an empty list. Format version stays `1`, and older readers ignore the
+  unknown field. Writers include an empty array when there is no pending
+  cleanup.
 - `plainSize` is the original file length as a nonnegative signed 64-bit
   integer. The blob ciphertext length is exactly `plainSize + 16` bytes.
 
@@ -286,6 +306,10 @@ hexadecimal characters of the blob UUID without hyphens form the shard name.
 - Before `users.enc` or a manifest is replaced, the previous version is
   rotated into `backups/`: `.2` → `.3`, `.1` → `.2`, current → `.1`. Backups
   are verbatim ciphertext.
+- Normal saves rotate three backup generations. An account password change
+  replaces `users.enc` and all three registry backups with the new registry.
+  Permanent deletion replaces the manifest and all three of its backups with
+  the updated manifest before deleting any blob.
 - When `users.enc` or a manifest fails authenticated decryption, `.1`, `.2`,
   and `.3` are tried in order. The first that authenticates and parses is
   copied back over the damaged file. Backups that fail authentication are
@@ -293,6 +317,24 @@ hexadecimal characters of the blob UUID without hyphens form the shard name.
 - While a vault is open, EncryptDrive holds an exclusive `FileChannel` lock on
   `.encryptdrive/lock`. A second process that cannot take the lock refuses to
   open the vault.
+
+### Permanent deletion lifecycle
+
+1. Validate that the selected entries are in Trash and collect their
+   descendants and blob IDs.
+2. Add those blob IDs to the manifest's encrypted `pendingDeletions` list.
+3. Remove the selected entries and descendants from the manifest.
+4. Write the updated manifest.
+5. Replace all three manifest backups with that same updated manifest.
+6. Delete the queued blob files; a missing blob counts as already deleted.
+7. Remove successfully deleted blob IDs from `pendingDeletions`.
+8. Write the shorter journal to the manifest and all three backups.
+9. Keep failed blob IDs queued and retry after login, around later permanent
+   deletions, or when Empty Trash is used.
+
+If a write or delete is interrupted, encrypted blobs may remain orphaned. The
+manifest and its backups are updated before blob deletion, so they do not refer
+to ciphertext that has already been removed.
 
 ## Versioning
 

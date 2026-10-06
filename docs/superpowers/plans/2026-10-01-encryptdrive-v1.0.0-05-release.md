@@ -104,7 +104,7 @@ git commit -m "refactor: remove unused code and resources" -m "Co-Authored-By: C
 
 **Interfaces:** `release.yml` (T22) reads `CHANGELOG.md` section `## [<version>]` and `docs/testing/release-notes-footer.md`.
 
-- [ ] **Step 1: `CHANGELOG.md`**
+- [x] **Step 1: `CHANGELOG.md`**
 
 ```markdown
 # Changelog
@@ -142,7 +142,7 @@ First stable release.
 ```
 (T26 replaces `Unreleased` with the release date.)
 
-- [ ] **Step 2: `docs/testing/release-notes-footer.md`**
+- [x] **Step 2: `docs/testing/release-notes-footer.md`**
 
 ```markdown
 ### Downloads
@@ -171,7 +171,7 @@ protected your PC" and show an unknown publisher. Check the SHA-256 hash first;
 then choose **More info → Run anyway**.
 ```
 
-- [ ] **Step 3: `README.md`** — rewrite these sections (keep logo, screenshots, author):
+- [x] **Step 3: `README.md`** — rewrite these sections (keep logo, screenshots, author):
   - **Download and install:** the two editions; installer steps (unknown-publisher note, choose folder, Start Menu, optional desktop shortcut); portable steps; "Installing EncryptDrive does not choose, create, or move a vault; uninstalling it never deletes a vault."; checksum verification (point to the footer text).
   - **Create or open a vault:** unchanged meaning; vault password ≥ 12; no recovery warning kept verbatim.
   - **Accounts:** password ≥ 12 characters; accounts created by pre-release builds with shorter passwords still log in and should change their password.
@@ -181,7 +181,7 @@ then choose **More info → Run anyway**.
   - **Building:** `mvn javafx:run`, `mvn -B clean verify`, `scripts/build-release.ps1`, `scripts/verify-package.ps1 -Launch -Install`, WiX 3.14 requirement, the opt-in 1 GiB test command.
   - **Project structure:** add `packaging/windows/` and the two scripts.
 
-- [ ] **Step 4: `docs/SECURITY.md`** — update:
+- [x] **Step 4: `docs/SECURITY.md`** — update:
   - **Passwords:** both minimums 12; not trimmed; pre-release accounts keep working until changed.
   - **Password change (new subsection):** rewraps the same UMK; the active registry and all three registry backups are replaced, so the old password opens no retained generation; files are not re-encrypted; limitation: anyone who already extracted the UMK (memory compromise) keeps access; the backups are replaced before the live registry, so an interrupted change leaves the old password valid and must be repeated; copies of the vault kept outside EncryptDrive (OneDrive version history, your own backups, an attacker's earlier copy) still open with the old password. Keep the OneDrive version-history caveat explicit. State the size limit exactly as the spec defines it: one account's encrypted manifest may not exceed 64 MiB. That bound is the only contractual limit. If an entry count is mentioned at all, it must be worded as a rough estimate that depends on name lengths ("on the order of 90,000 files and folders with typical names"), never as a guaranteed or enforced number.
   - **Vault password change:** unchanged semantics (no `vault.json` backups).
@@ -192,16 +192,16 @@ then choose **More info → Run anyway**.
   - **Distribution:** installer vs portable; per-user install; uninstall keeps vaults; unsigned artifacts and SmartScreen; SHA-256 verification; JavaFX writes native libraries to `%USERPROFILE%\.openjfx\cache` on each computer where it runs (the portable edition leaves this trace on the host).
   - **History (new subsection):** an early development build stored a plaintext user list (`data/users.json`, with password hashes and salts) in this repository's history; current builds never use it and it is not packaged; outcome of H2 (rewritten on <date> / still in history); treat any password used for those development accounts as compromised.
 
-- [ ] **Step 5: `docs/VAULT_FORMAT.md`** — add:
+- [x] **Step 5: `docs/VAULT_FORMAT.md`** — add:
   - Manifest member `pendingDeletions` (optional, array of `{ "blobId": "<uuid>", "queuedAt": "<instant>" }`), its meaning, and that format version stays `1` (older readers ignore it; absent means empty).
   - Size limits table (vault.json 256 KiB; users.enc and each backup 16 MiB; each manifest and backup 64 MiB) applied before reading and refused on writing.
   - Strictness: `vault.json` and envelopes require every member with its exact JSON type; decrypted registries/manifests must be well-formed (canonical ids, one root, reachable tree, complete file fields).
   - Backups: normal saves rotate three generations; password changes (registry) and permanent deletions (manifest) replace all generations with the new state.
   - Lifecycle of a permanent delete (9 steps) in one short list.
 
-- [ ] **Step 6: `docs/testing/manual-ui.md`** — add checklist items for Rename, Move (picker, invalid moves), Import Folder (progress, empty folders, junction skipped), Search (case-insensitive, location column, double-click, Clear), Empty Trash (count in confirmation), close guard (X / Alt+F4 / Log Out / Close Vault blocked during a long import with the exact message), Vault Settings version row, 12-character messages; extend the acceptance matrix with the new automated tests (`PermanentDeleteTest`, `RenameTest`, `MoveTest`, `FolderImportTest`, `SearchTest`, `CloseGuardTest`, `StreamingMemoryTest`, `MetadataLoadCountTest`) and point manual hardware rows to `release-checklist.md`.
+- [x] **Step 6: `docs/testing/manual-ui.md`** — add checklist items for Rename, Move (picker, invalid moves), Import Folder (progress, empty folders, junction skipped), Search (case-insensitive, location column, double-click, Clear), Empty Trash (count in confirmation), close guard (X / Alt+F4 / Log Out / Close Vault blocked during a long import with the exact message), Vault Settings version row, 12-character messages; extend the acceptance matrix with the new automated tests (`PermanentDeleteTest`, `RenameTest`, `MoveTest`, `FolderImportTest`, `SearchTest`, `CloseGuardTest`, `StreamingMemoryTest`, `MetadataLoadCountTest`) and point manual hardware rows to `release-checklist.md`.
 
-- [ ] **Step 7: `docs/testing/release-checklist.md`** — sections, in order:
+- [x] **Step 7: `docs/testing/release-checklist.md`** — sections, in order:
   1. Release states (copy the table from the master plan).
   2. Gate commands (exact): fresh worktree verify; 1 GiB test (PowerShell form `mvn -B test "-Dtest=LargeFileStreamingTest" "-Dencryptdrive.largeFileCheck=true" "-DargLine=-Xmx256m"`); `build-release.ps1 -Release -Channel rc.N`; `verify-package.ps1 -Channel rc.N -Launch -Install`; hygiene commands from T25.
   3. Tagging: annotated tag commands for `v1.0.0-rc.N` and `v1.0.0` (from T28/T30), "never move a tag", RC fix loop (T29).
@@ -209,14 +209,14 @@ then choose **More info → Run anyway**.
   5. Final artifact smoke (T31) and publishing (T32).
   6. Release notes: the GitHub release body is the CHANGELOG section plus `release-notes-footer.md` (generated by `release.yml`); before publishing, replace `<version>` in the footer text if the draft shows it literally, and confirm the asset list.
 
-- [ ] **Step 8: Consistency checks**
+- [x] **Step 8: Consistency checks**
 
 ```bash
 git grep -nE "at least 8|8 characters|package-windows|verify-portable-package|1\.0-SNAPSHOT" -- README.md docs ':!docs/superpowers'
 ```
 Expected: no output. Check every relative link in the changed docs resolves: `git grep -oE "\]\(([^)#]+)" -- README.md docs/*.md docs/testing/*.md` and test each path exists.
 
-- [ ] **Step 9: Verify + commit**
+- [x] **Step 9: Verify + commit**
 
 Run: `mvn -B clean verify` → BUILD SUCCESS.
 
