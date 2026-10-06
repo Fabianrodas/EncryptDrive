@@ -3,7 +3,7 @@
 All notable changes to EncryptDrive. Versions follow MAJOR.MINOR.PATCH; release
 candidates are Git tags `vX.Y.Z-rc.N` of the same version.
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-10-05
 
 First stable release.
 

@@ -229,39 +229,40 @@ git commit -m "docs: document v1.0.0 editions, security semantics, and release p
 
 ---
 
-### Task 25: Gates A–C on the branch from a fresh worktree (no commit of its own)
+### Task 25: Gates A–C on the branch in the existing checkout (no commit of its own)
 
 **Purpose:** Spec 23 Gates A–C before integration; superpowers:verification-before-completion and superpowers:requesting-code-review for the whole release branch.
 
-- [ ] **Step 1: Fresh checkout verify**
+- [x] **Step 1: Clean verify and package gates (existing checkout per user's preference)**
 
 ```powershell
-git worktree add ..\EncryptDrive-gate HEAD
-Push-Location ..\EncryptDrive-gate
 mvn -B clean verify
 mvn -B test "-Dtest=LargeFileStreamingTest" "-Dencryptdrive.largeFileCheck=true" "-DargLine=-Xmx256m"
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1 -SkipTests
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-package.ps1 -Launch -Install
-Pop-Location
-git worktree remove ..\EncryptDrive-gate --force
 ```
 Expected: BUILD SUCCESS (0 failures); `LargeFileStreamingTest` `Tests run: 2, Failures: 0, Skipped: 0`; artifacts verified. Record counts and durations.
 
-- [ ] **Step 2: Repository/security hygiene**
+**T25 execution record (2026-10-05):** Per the user's prior preference, all commands ran in the existing checkout; no fresh worktree was created. `mvn -B clean verify` passed with 412 tests, 0 failures/errors, and 3 opt-in skips (2:59); the specified 1 GiB test passed 2/2 (66.52 s); `build-release.ps1 -SkipTests` succeeded; and `verify-package.ps1 -Launch` passed without system Java. Local verifier hardening and its nine-case ZIP regression are in `26e3da9`. The current-artifact `-Launch -Install` gate now passes as a standard user: the test token had Medium integrity and enabled `BUILTIN\Users` membership, with no Administrators membership. The unchanged verifier returned 0, reported the installer as `NotSigned`, launched both portable and installed apps without system Java, and completed its install version, Start Menu shortcut, uninstall, and sentinel-vault checks. The tested Setup SHA-256 is `0338018889b3acb9e2c4c486417dbd4aa5b0062eb93026d0087c8ac764392cdb`; the portable ZIP SHA-256 is `64b712bcde93dab60943d4baae2322bf13d080946bb5cddd84ded2210d41f3cd`. Source and staged artifact hashes matched. The temporary account, profile, package staging directory, install, and verifier scratch were removed; no product registration or installer processes remain, and `msiserver` is Stopped / Manual. Earlier sandbox evidence (1719 at `JpFindRelatedProducts`, sandbox identity and Windows 8.1 compatibility view) and an elevated-context stall were environment diagnostics only; the former valid host test needed its process environment set to the standard user's profile and Windows PowerShell 5.1 module path. The exact embedded MSI had also passed direct install/launch/uninstall with sentinel-vault preservation. Step 1 is complete in the existing checkout under the user's worktree preference.
+
+- [x] **Step 2: Repository/security hygiene**
 
 ```bash
-git status --porcelain --ignored                     # only nb-configuration.xml and target/ ignored
-git ls-files | grep -iE "\.(pfx|p12|pem|key|cer|jks|keystore)$|users\.json|\.enc$|\.edv$"   # expect: no output
-git grep -nIE "BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|password\s*=\s*\"[^\"]+\"" -- . ':!docs' ':!src/test'   # expect: no output
+git status --porcelain --ignored                     # repository ignores: nb-configuration.xml and target/; local .superpowers/ and target_test-classes/ may also appear
+git ls-files | grep -iE "\.(pfx|p12|pem|key|cer|jks|keystore)$|users\.json|\.enc$|\.edv$" | grep -vE '^test-vectors/format-v1/.*\.(enc|edv)$'   # expect: no output; public conformance vectors are allowlisted
+git grep -nIE 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' -- .   # expect: no output
+git grep -nE 'password[[:space:]]*=[[:space:]]["][^"]+["]' -- . | grep -vF 'src/test/java/com/fabianrodas/security/Argon2KeyDeriverTest.java:48:'   # expect: no output; synthetic fixture allowlisted
 git log --all --oneline -- data/users.json           # empty if H2 rewrote; otherwise the documented commits
 cat .gitattributes; git ls-files --eol | awk '$2=="w/crlf"' | wc -l   # expect 0
 ```
 
-- [ ] **Step 3: Whole-branch review** — superpowers:requesting-code-review over `main..HEAD` with the spec as the requirement source; every finding fixed as its own commit with a test, then Step 1 repeated.
+**Result:** no tracked secret/artifact candidates outside public Format 1 vectors, no private-key markers, no literal credential assignments found beyond the synthetic test fixture, and 0 tracked CRLF files. H2 history still includes the three documented `data/users.json` commits. The credential scan covers the full tree, with only the exact synthetic test fixture line allowlisted. The local ZIP-layout regression rejects all 9 crafted unsafe entries before extraction; the current real package passes normal verification and portable launch.
 
-- [ ] **Step 4: Spec coverage re-check** — walk the master plan's "Spec coverage map" row by row against the actual commits (`git log --oneline main..HEAD`) and tests; any uncovered row becomes a new task before continuing.
+- [x] **Step 3: Whole-branch review** — reviewer found one Important import/export path-swap race; TDD regressions failed before and passed after fix `77b3310`, followed by a 412-test clean suite. No Critical finding. The two Minor findings were fixed in local commit `26e3da9` and recorded in `V1_RELEASE_STATE.md`.
 
-- [ ] **Step 5: Ledger** — IMPLEMENTATION_COMPLETE = DONE (Gate A); record Gate B/C evidence gathered so far (final Gate B/C are re-run on `main` in T27).
+- [x] **Step 4: Spec coverage re-check** — all 39 master-plan map rows traced to the 63 branch commits and mapped tests; all 22 mapped release test classes exist. No uncovered implementation row found; later release-gate rows remain pending.
+
+- [x] **Step 5: Ledger** — IMPLEMENTATION_COMPLETE = DONE (Gate A); record Gate B/C evidence gathered so far (final Gate B/C are re-run on `main` in T27).
 
 **Acceptance:** all of the above green with evidence in the ledger.
 
@@ -271,16 +272,16 @@ cat .gitattributes; git ls-files --eol | awk '$2=="w/crlf"' | wc -l   # expect 0
 
 **Purpose:** Gate C ("version is release-ready"); RC and final tags are built from a non-SNAPSHOT version (`build-release.ps1 -Release`).
 
-**Files:** `pom.xml` (`<version>1.0.0</version>`), `CHANGELOG.md` (`## [1.0.0] - <YYYY-MM-DD>` of the planned RC date), ledger.
+**Files:** `pom.xml` (`<version>1.0.0</version>`), `CHANGELOG.md` (`## [1.0.0] - <YYYY-MM-DD>` of the planned RC date), `ReleaseMetadataTest.java`, release checklist, and ledger.
 
-- [ ] **Step 1:** edit both files.
-- [ ] **Step 2:** `mvn -B clean verify` → BUILD SUCCESS (`ReleaseMetadataTest` now asserts `1.0.0`; `-DryRun -Release` succeeds).
-- [ ] **Step 3:** `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1 -DryRun -Release -Channel rc.1` → `installer=target/release/1.0.0/EncryptDrive-1.0.0-rc.1-Setup.exe`.
-- [ ] **Step 4: Commit**
+- [x] **Step 1:** set the Maven version and changelog date to `1.0.0` and `2026-10-05`.
+- [x] **Step 2:** `mvn -B clean verify` → BUILD SUCCESS: 412 tests, 0 failures/errors, 3 opt-in skips (2:52). The first run exposed `ReleaseMetadataTest` trying to read the new `scripts/tests` directory as a file; filtering the version scan to regular files fixed it, and the focused class passed 3/3.
+- [x] **Step 3:** `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1 -DryRun -Release -Channel rc.1` → exit 0 and `installer=target/release/1.0.0/EncryptDrive-1.0.0-rc.1-Setup.exe`.
+- [ ] **Step 4: Commit** — include the version update, regression fix, T25 evidence, and release checklist updates.
 
 ```bash
-git add pom.xml CHANGELOG.md docs/superpowers/plans/V1_RELEASE_STATE.md
-git commit -m "chore: set release version 1.0.0" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+git add pom.xml CHANGELOG.md src/test/java/com/fabianrodas/encryptdrive/ReleaseMetadataTest.java docs/superpowers/plans/2026-10-01-encryptdrive-v1.0.0-05-release.md docs/superpowers/plans/V1_RELEASE_STATE.md docs/testing/release-checklist.md
+git commit -m "chore: set release version 1.0.0"
 ```
 
 ---
@@ -291,7 +292,7 @@ git commit -m "chore: set release version 1.0.0" -m "Co-Authored-By: Claude Opus
 
 - [ ] **Step 1:** `git checkout main && git merge --ff-only origin/main` (local `main` equals the possibly rewritten `origin/main`).
 - [ ] **Step 2:** `git merge --no-ff feature/encryptdrive-1.0 -m "Merge EncryptDrive v1.0.0 release work" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"`
-- [ ] **Step 3: Gate B on `main` from a fresh worktree** — repeat T25 Step 1 with `git worktree add ..\EncryptDrive-gate main` and `build-release.ps1 -Release -Channel rc.1` / `verify-package.ps1 -Channel rc.1 -Launch -Install`. Record the merge commit id and all results. AUTOMATED_GATES_COMPLETE = DONE.
+- [ ] **Step 3: Gate B on `main` in the existing checkout** — per the user's no-new-worktree preference, run `mvn -B clean verify`, the specified 1 GiB test, `build-release.ps1 -Release -Channel rc.1`, and `verify-package.ps1 -Channel rc.1 -Launch -Install` after the merge. Record the merge commit id and all results. AUTOMATED_GATES_COMPLETE = DONE.
 - [ ] **Step 4:** `git push origin main` (approved at H2; if H2 option 3 was chosen, stop: Git-hosting human gate). Watch the `Build` workflow for the merge commit via the public API (T22 Step 6 command with `branch=main`); both jobs must succeed.
 - [ ] **Step 5: Ledger** — REPOSITORY_SECURITY_READY = DONE when Gate C items are all satisfied (H2 resolved, hygiene clean, version `1.0.0`, docs complete); PACKAGING_COMPLETE confirmed on `main`. Commit the ledger on `main`: `git commit -m "docs: record v1.0.0 gate results" -m "Co-Authored-By: ..."` and push.
 

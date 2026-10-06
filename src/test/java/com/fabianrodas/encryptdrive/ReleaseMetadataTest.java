@@ -45,7 +45,9 @@ class ReleaseMetadataTest {
 
         try (Stream<Path> scripts = Files.list(Path.of("scripts"));
                 Stream<Path> workflows = Files.list(Path.of(".github", "workflows"))) {
-            files = Stream.concat(scripts, workflows).toList();
+            files = Stream.concat(scripts, workflows)
+                    .filter(Files::isRegularFile)
+                    .toList();
         }
 
         for (Path file : files) {

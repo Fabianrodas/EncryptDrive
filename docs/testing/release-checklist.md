@@ -61,9 +61,10 @@ Run the following from the repository root. Review each result against its
 expected output before tagging:
 
 ```bash
-git status --porcelain --ignored                     # only nb-configuration.xml and target/ ignored
-git ls-files | grep -iE "\.(pfx|p12|pem|key|cer|jks|keystore)$|users\.json|\.enc$|\.edv$"   # expect: no output
-git grep -nIE "BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|password\s*=\s*\"[^\"]+\"" -- . ':!docs' ':!src/test'   # expect: no output
+git status --porcelain --ignored                     # repository ignores: nb-configuration.xml and target/; local .superpowers/ and target_test-classes/ may also appear
+git ls-files | grep -iE "\.(pfx|p12|pem|key|cer|jks|keystore)$|users\.json|\.enc$|\.edv$" | grep -vE '^test-vectors/format-v1/.*\.(enc|edv)$'   # expect: no output; public conformance vectors are allowlisted
+git grep -nIE 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' -- .   # expect: no output
+git grep -nE 'password[[:space:]]*=[[:space:]]*["][^"]+["]' -- . | grep -vF 'src/test/java/com/fabianrodas/security/Argon2KeyDeriverTest.java:48:'   # expect: no output; the synthetic fixture is allowlisted
 git log --all --oneline -- data/users.json           # empty after H2 rewrite; otherwise document the retained history
 cat .gitattributes; git ls-files --eol | awk '$2=="w/crlf"' | wc -l   # expect: 0
 ```
