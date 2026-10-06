@@ -296,7 +296,7 @@ git commit -m "chore: set release version 1.0.0"
 - [x] **Step 4:** pushed `main` normally. Build run `37409411019` for merge SHA `905dbe1082b336de9e0b1e30848f425015f5a555` completed successfully; both `verify` and `package` jobs succeeded.
 - [x] **Step 5: Ledger** — Gate C items passed (H2 resolved, T25 hygiene clean, version `1.0.0`, release/security docs complete); REPOSITORY_SECURITY_READY and PACKAGING_COMPLETE are DONE. Record results in `V1_RELEASE_STATE.md` and push this ledger commit on `main`.
 
-**Post-ledger CI follow-up:** run `37410231209` for docs-only head `b483ca412e1c2765db5b9f3abf88ad79a3475574` failed in `verify` and skipped `package`; the public annotation only reported exit code 1, and GitHub required repository-admin rights to download logs. The exact clean Maven command passed locally on `b483ca4` (412 tests, 0 failures/errors, 3 opt-in skips). No cause is established. Hold T28 until a fresh `main` Build run has both jobs green.
+**Post-ledger CI follow-up:** run `37410231209` for docs-only head `b483ca412e1c2765db5b9f3abf88ad79a3475574` failed in `verify` and skipped `package`; the public annotation only reported exit code 1, and GitHub required repository-admin rights to download logs. The exact clean Maven command passed locally on `b483ca4` (412 tests, 0 failures/errors, 3 opt-in skips). No cause was established. Build run `37411430952` on the next `main` head `cc9d7f02dd57b321473341950043ea170c636e9d` later completed successfully with both `verify` and `package` green, satisfying the T28 CI precondition.
 
 ---
 
@@ -304,16 +304,17 @@ git commit -m "chore: set release version 1.0.0"
 
 **Preconditions (all must be DONE in the ledger):** IMPLEMENTATION_COMPLETE, AUTOMATED_GATES_COMPLETE, PACKAGING_COMPLETE, REPOSITORY_SECURITY_READY; the 1 GiB test PASSED on the exact commit being tagged; that commit is on `origin/main`.
 
-- [ ] **Step 1:** identify the commit: the merge commit from T27 (`git rev-parse <merge>`); confirm `git merge-base --is-ancestor <commit> origin/main`.
-- [ ] **Step 2:** `git tag -a v1.0.0-rc.1 <commit> -m "EncryptDrive 1.0.0 release candidate 1"` then `git cat-file -t v1.0.0-rc.1` → `tag`.
-- [ ] **Step 3:** `git push origin v1.0.0-rc.1`.
-- [ ] **Step 4:** watch the `Release` workflow run for the tag:
+- [x] **Step 1:** identified T27 merge commit `905dbe1082b336de9e0b1e30848f425015f5a555`; confirmed it is an ancestor of `origin/main` at `cc9d7f02dd57b321473341950043ea170c636e9d`.
+- [x] **Step 2:** created annotated `v1.0.0-rc.1` on the T27 merge commit; `git cat-file -t` returned `tag`, and the tag peeled to `905dbe1082b336de9e0b1e30848f425015f5a555`.
+- [x] **Step 3:** pushed `v1.0.0-rc.1` normally; remote tag object is `67dbf83f5f3f67830f3abdf48ca92ab61ae96fa2`.
+- [x] **Step 4:** Release run `37412149363` failed in `Check the tag`; user supplied its failing log on 2026-10-06. PowerShell parsed `$tag:refs` as a scoped-variable reference, expanding the fetch refspec to `refs/tags//tags/v1.0.0-rc.1`; Git reported `fatal: invalid refspec`. The prior fresh-clone check covered tag type, trigger SHA, main ancestry, and Maven version but not this interpolation. The fix uses `${tag}` and has a red/green regression test. Preserve `v1.0.0-rc.1` unchanged; route the fix through T29 and use `rc.2` for the next candidate.
+  Watch the `Release` workflow run for the next candidate tag:
   ```powershell
   (Invoke-RestMethod "https://api.github.com/repos/Fabianrodas/EncryptDrive/actions/runs?event=push&per_page=5").workflow_runs | Select-Object name, head_branch, status, conclusion, html_url
   ```
-  Expected: `Release` / `v1.0.0-rc.1` / `completed` / `success`. (Drafts are invisible to the unauthenticated API; the user confirms the draft prerelease and its three assets at H3.)
-- [ ] **Step 5:** ledger: RC_CREATED = DONE (`v1.0.0-rc.1` → `<commit>`); commit + push the ledger on `main`.
-- [ ] **Step 6:** stop at Human Gates H3–H6 (all four may be done in parallel by the user).
+  Expected for the next candidate: `Release` / `v1.0.0-rc.2` / `completed` / `success`. (Drafts are invisible to the unauthenticated API; the user confirms the draft prerelease and its three assets at H3.)
+- [ ] **Step 5:** after a candidate's Release workflow succeeds, ledger: RC_CREATED = DONE (`v1.0.0-rc.N` → `<commit>`); commit + push the ledger on `main`.
+- [ ] **Step 6:** after a successful Release workflow, stop at Human Gates H3–H6 (all four may be done in parallel by the user).
 
 If the workflow fails: superpowers:systematic-debugging; the fix goes through T29; the failed tag stays as it is (never moved) and the next candidate is `rc.2`.
 
@@ -416,7 +417,7 @@ If the workflow fails: superpowers:systematic-debugging; the fix goes through T2
 
 ### Task 29: Release-candidate fix loop (only when a gate fails)
 
-- [ ] **Step 1:** superpowers:systematic-debugging on the reported failure; reproduce with a test where at all possible.
+- [x] **Step 1:** systematic debugging confirmed the PowerShell `$tag:refs` scoped-variable parse; `scripts/tests/Test-ReleaseTagRefspec.ps1` failed before and passed after bracing `${tag}`. The CI guard is added to the Windows Build workflow.
 - [ ] **Step 2:** `git checkout -b release-fix/rc.<N+1>-<topic> main`; TDD fix; `mvn -B clean verify`; commit `fix: <what>`.
 - [ ] **Step 3:** merge into `main` (`--no-ff`), push, re-run T27 Step 3 (Gate B on `main`) and the 1 GiB test on the new `main` commit.
 - [ ] **Step 4:** T28 with `v1.0.0-rc.<N+1>` on the new commit (the old tag stays untouched).

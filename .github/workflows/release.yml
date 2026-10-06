@@ -41,7 +41,7 @@ jobs:
           $channel = if ($Matches[2]) { $Matches[2] } else { "" }
 
           # actions/checkout stores the pushed tag as a plain commit ref; fetch the real tag object.
-          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
+          git fetch --force origin "refs/tags/${tag}:refs/tags/${tag}"
           if ($LASTEXITCODE -ne 0) { throw "could not fetch $tag" }
           $tagObjectType = (git cat-file -t "refs/tags/$tag" | Out-String).Trim()
           if ($LASTEXITCODE -ne 0 -or $tagObjectType -ne "tag") { throw "$tag must be an annotated tag" }
