@@ -159,7 +159,8 @@ class FileServiceTest {
         StreamingFileCryptoService failing = new StreamingFileCryptoService() {
             @Override
             public EncryptedFileDescriptor encrypt(
-                    Path source, Path part, byte[] key, byte[] nonce, byte[] aad, LongConsumer progress
+                    Path source, Path part, byte[] key, byte[] nonce, byte[] aad, LongConsumer progress,
+                    PathGuard sourceGuard
             ) throws IOException {
                 Files.write(part, new byte[100]);
                 throw new IOException("disk full");
@@ -207,10 +208,11 @@ class FileServiceTest {
         StreamingFileCryptoService deletesSource = new StreamingFileCryptoService() {
             @Override
             public EncryptedFileDescriptor encrypt(
-                    Path source, Path part, byte[] key, byte[] nonce, byte[] aad, LongConsumer progress
+                    Path source, Path part, byte[] key, byte[] nonce, byte[] aad, LongConsumer progress,
+                    PathGuard sourceGuard
             ) throws IOException {
                 Files.delete(source);
-                return super.encrypt(source, part, key, nonce, aad, progress);
+                return super.encrypt(source, part, key, nonce, aad, progress, sourceGuard);
             }
         };
         FileService files = new FileService(
@@ -225,6 +227,79 @@ class FileServiceTest {
 
         assertEquals(List.of(), files(alice).listChildren(files.rootFolderId()));
         assertEquals(List.of(), blobFiles());
+    }
+
+    @Test
+    void sourceSwappedForASymbolicLinkAfterValidationIsNotImported() throws Exception {
+        Path source = source("selected.txt", "selected".getBytes(UTF_8));
+        Path outside = Files.write(tempDir.resolve("outside.txt"), "outside secret".getBytes(UTF_8));
+        StreamingFileCryptoService swapsSource = new StreamingFileCryptoService() {
+            @Override
+            public EncryptedFileDescriptor encrypt(
+                    Path input, Path part, byte[] key, byte[] nonce, byte[] aad, LongConsumer progress,
+                    PathGuard sourceGuard
+            ) throws IOException {
+                Files.delete(input);
+                Files.createSymbolicLink(input, outside);
+                return super.encrypt(input, part, key, nonce, aad, progress, sourceGuard);
+            }
+        };
+        FileService files = new FileService(
+                vault, alice.identity(), alice.key(),
+                new ManifestRepository(vault), new BlobRepository(), swapsSource
+        );
+
+        assertReason(FileServiceException.Reason.SOURCE_UNREADABLE,
+                () -> files.importFile(source, files.rootFolderId()));
+
+        assertEquals(List.of(), files.listChildren(files.rootFolderId()));
+        assertEquals(List.of(), blobFiles());
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void folderImportRejectsAFileMovedOutsideTheSelectedTreeBeforeOpen() throws Exception {
+        Path folder = Files.createDirectories(tempDir.resolve("Photos").resolve("sub"));
+        Files.writeString(folder.resolve("selected.txt"), "selected content");
+        Path moved = tempDir.resolve("sub-before-swap");
+        Path outside = Files.createDirectories(tempDir.resolve("outside"));
+        Files.writeString(outside.resolve("selected.txt"), "outside secret");
+        boolean[] swapped = new boolean[1];
+        StreamingFileCryptoService swapsParent = new StreamingFileCryptoService() {
+            @Override
+            public EncryptedFileDescriptor encrypt(
+                    Path input, Path part, byte[] key, byte[] nonce, byte[] aad, LongConsumer progress,
+                    PathGuard sourceGuard
+            ) throws IOException {
+                Path parent = input.getParent();
+                Files.move(parent, moved);
+                try {
+                    junction(parent, outside);
+                    swapped[0] = true;
+                } catch (Exception e) {
+                    throw new IOException(e);
+                }
+                return super.encrypt(input, part, key, nonce, aad, progress, sourceGuard);
+            }
+        };
+        FileService files = new FileService(
+                vault, alice.identity(), alice.key(),
+                new ManifestRepository(vault), new BlobRepository(), swapsParent
+        );
+
+        try {
+            FileService.FolderImport result = files.importFolder(
+                    folder.getParent(), files.rootFolderId(), (a, b, c, d) -> { });
+
+            assertTrue(swapped[0]);
+            assertEquals(0, result.filesImported());
+            assertEquals(FileServiceException.Reason.SOURCE_UNREADABLE, result.failures().get(0).reason());
+            assertEquals(List.of(), blobFiles());
+        } finally {
+            if (swapped[0]) {
+                Files.deleteIfExists(folder);
+            }
+        }
     }
 
     @Test
@@ -384,6 +459,44 @@ class FileServiceTest {
         Path beside = vault.root().resolveSibling("exported.txt");
         files.exportEntry(entry.getEntryId(), beside);
         assertEquals("plain", Files.readString(beside));
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void exportDoesNotWritePlaintextIfItsParentBecomesAJunctionIntoTheVault() throws Exception {
+        FileService initial = files(alice);
+        ManifestEntry entry = initial.importFile(
+                source("secret.txt", "plaintext must stay outside".getBytes(UTF_8)), initial.rootFolderId());
+        Path target = Files.createDirectory(tempDir.resolve("export"));
+        Path moved = tempDir.resolve("export-before-swap");
+        Path leak = Files.createDirectories(vault.root().resolve("storage").resolve("leak"));
+        StreamingFileCryptoService swapsTarget = new StreamingFileCryptoService() {
+            @Override
+            public void decrypt(
+                    Path blob, Path part, byte[] key, byte[] nonce, byte[] aad, PathGuard destinationGuard
+            )
+                    throws IOException, CryptoException {
+                Files.move(part.getParent(), moved);
+                try {
+                    junction(part.getParent(), leak);
+                } catch (Exception e) {
+                    throw new IOException(e);
+                }
+                super.decrypt(blob, part, key, nonce, aad, destinationGuard);
+            }
+        };
+        FileService files = new FileService(
+                vault, alice.identity(), alice.key(),
+                new ManifestRepository(vault), new BlobRepository(), swapsTarget
+        );
+
+        try {
+            assertReason(FileServiceException.Reason.INSIDE_VAULT,
+                    () -> files.exportEntry(entry.getEntryId(), target.resolve("secret.txt")));
+            assertEquals(List.of(), names(leak));
+        } finally {
+            Files.deleteIfExists(target);
+        }
     }
 
     @Test

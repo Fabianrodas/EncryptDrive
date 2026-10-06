@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.fabianrodas.models.EncryptedFileDescriptor;
 import com.fabianrodas.models.EncryptedPayload;
@@ -17,6 +18,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.DigestInputStream;
@@ -69,6 +71,58 @@ class StreamingFileCryptoServiceTest {
         for (int i = 1; i < reported.size(); i++) {
             assertTrue(reported.get(i) > reported.get(i - 1), "progress must grow");
         }
+    }
+
+    @Test
+    void encryptDoesNotFollowASourceSymbolicLink() throws Exception {
+        Path target = Files.write(dir.resolve("outside.txt"), MARKER);
+        Path source = dir.resolve("source.txt");
+
+        try {
+            Files.createSymbolicLink(source, target.getFileName());
+        } catch (UnsupportedOperationException | IOException | SecurityException e) {
+            assumeTrue(false, "symbolic links are not available: " + e.getMessage());
+        }
+
+        Path part = dir.resolve("blob.part");
+        assertTrue(Files.isSymbolicLink(source));
+        assertThrows(StreamingFileCryptoService.SourceReadException.class,
+                () -> crypto.encrypt(source, part, fileKey, nonce, AAD));
+        assertFalse(Files.exists(part, LinkOption.NOFOLLOW_LINKS));
+    }
+
+    @Test
+    void encryptChecksTheOpenedSourceBeforeReadingIt() throws Exception {
+        Path source = Files.write(dir.resolve("source.txt"), MARKER);
+        Path part = dir.resolve("blob.part");
+        boolean[] checked = new boolean[1];
+
+        assertThrows(StreamingFileCryptoService.SourceReadException.class,
+                () -> crypto.encrypt(source, part, fileKey, nonce, AAD, bytes -> { }, opened -> {
+                    checked[0] = true;
+                    throw new IOException("source no longer resolves inside its selected tree");
+                }));
+
+        assertTrue(checked[0]);
+        assertFalse(Files.exists(part, LinkOption.NOFOLLOW_LINKS));
+    }
+
+    @Test
+    void decryptChecksTheOpenedDestinationBeforeWritingPlaintext() throws Exception {
+        Path source = Files.write(dir.resolve("source.txt"), MARKER);
+        Path blob = dir.resolve("blob");
+        Path part = dir.resolve("export.part");
+        crypto.encrypt(source, blob, fileKey, nonce, AAD);
+        boolean[] checked = new boolean[1];
+
+        assertThrows(IOException.class,
+                () -> crypto.decrypt(blob, part, fileKey, nonce, AAD, opened -> {
+                    checked[0] = true;
+                    throw new IOException("destination parent no longer resolves outside the vault");
+                }));
+
+        assertTrue(checked[0]);
+        assertFalse(Files.exists(part, LinkOption.NOFOLLOW_LINKS));
     }
 
     @Test

@@ -284,7 +284,8 @@ public final class FileService {
             byte[] contentNonce = randomBytes(CryptoConstants.GCM_NONCE_BYTES);
 
             try {
-                long plainSize = writeBlob(source, blobId, fileId, fileKey, contentNonce, progress);
+                long plainSize = writeBlob(
+                        source, blobId, fileId, fileKey, contentNonce, progress, source.getParent());
 
                 try {
                     return modify(manifest -> {
@@ -488,10 +489,9 @@ public final class FileService {
             long before = bytesDone;
 
             try {
-                // The tree can change after the scan. A swap in the instant between
-                // this check and the open inside importChecked would still be followed.
-                // The folder's root was checked against the vault, so its files are not walked again.
-                if (!SourceTree.isUnlinkedFile(file.path())) {
+                // The tree can change after its initial scan. Check it now and again
+                // after the source handle opens, immediately before reading.
+                if (!SourceTree.isUnlinkedFileWithin(tree.root().path(), file.path())) {
                     throw new FileServiceException(FileServiceException.Reason.SOURCE_UNREADABLE);
                 }
 
@@ -505,8 +505,10 @@ public final class FileService {
                 boolean blobQueued = false;
 
                 try {
-                    long plainSize = writeBlob(file.path(), blobId, fileId, fileKey, contentNonce, bytes ->
-                            progress.update(filesDone, tree.fileCount(), before + bytes, tree.totalBytes()));
+                    long plainSize = writeBlob(
+                            file.path(), blobId, fileId, fileKey, contentNonce,
+                            bytes -> progress.update(filesDone, tree.fileCount(), before + bytes, tree.totalBytes()),
+                            tree.root().path());
                     blobCommitted = true;
 
                     ManifestEntry entry = new ManifestEntry(
@@ -1005,7 +1007,8 @@ public final class FileService {
             UUID fileId,
             byte[] fileKey,
             byte[] contentNonce,
-            LongConsumer progress
+            LongConsumer progress,
+            Path selectedRoot
     ) throws FileServiceException {
 
         Path part = null;
@@ -1018,7 +1021,12 @@ public final class FileService {
                     fileKey,
                     contentNonce,
                     Aad.fileContent(vaultId(), userId(), fileId.toString()),
-                    progress
+                    progress,
+                    openedSource -> {
+                        if (!SourceTree.isUnlinkedFileWithin(selectedRoot, openedSource)) {
+                            throw new IOException("Source path left the selected tree before it was read.");
+                        }
+                    }
             ).plainSize();
             blobRepository.commit(vault.root(), blobId);
             return plainSize;
@@ -1105,12 +1113,21 @@ public final class FileService {
                     part,
                     fileKey,
                     contentNonce,
-                    Aad.fileContent(vaultId(), userId(), entry.getEntryId().toString())
+                    Aad.fileContent(vaultId(), userId(), entry.getEntryId().toString()),
+                    openedPart -> {
+                        try {
+                            requireOutsideVault(openedPart.getParent(), false);
+                        } catch (FileServiceException e) {
+                            throw new ExportPathValidationException(e);
+                        }
+                    }
             );
             moveIntoPlace(part, destination);
 
         } catch (CryptoException | IllegalArgumentException e) {
             throw new FileServiceException(FileServiceException.Reason.INTEGRITY, e);
+        } catch (ExportPathValidationException e) {
+            throw e.failure;
         } catch (IOException e) {
             throw new FileServiceException(FileServiceException.Reason.STORAGE, e);
         } finally {
@@ -1132,6 +1149,16 @@ public final class FileService {
             );
         } catch (AtomicMoveNotSupportedException e) {
             Files.move(part, destination, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private static final class ExportPathValidationException extends IOException {
+
+        private final FileServiceException failure;
+
+        ExportPathValidationException(FileServiceException failure) {
+            super(failure.getMessage(), failure);
+            this.failure = failure;
         }
     }
 

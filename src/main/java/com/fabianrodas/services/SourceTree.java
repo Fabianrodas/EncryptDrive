@@ -116,11 +116,17 @@ final class SourceTree {
         return attributes.isSymbolicLink() || !entry.toRealPath().equals(entry) ? null : attributes;
     }
 
-    /** Whether {@code file} is, as when it was scanned, a regular file reached without any link. */
-    static boolean isUnlinkedFile(Path file) {
+    /** Whether the opened file still resolves to a regular file below the selected tree root. */
+    static boolean isUnlinkedFileWithin(Path root, Path file) {
         try {
             BasicFileAttributes attributes = unlinked(file);
-            return attributes != null && attributes.isRegularFile();
+            if (attributes == null || !attributes.isRegularFile()) {
+                return false;
+            }
+
+            Path realRoot = root.toRealPath();
+            Path realFile = file.toRealPath();
+            return root.toAbsolutePath().normalize().equals(realRoot) && realFile.startsWith(realRoot);
         } catch (IOException e) {
             return false;
         }

@@ -6,8 +6,10 @@ import com.fabianrodas.security.CryptoException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
@@ -31,6 +33,13 @@ import org.bouncycastle.crypto.params.KeyParameter;
 public class StreamingFileCryptoService {
 
     private static final int BUFFER_BYTES = 64 * 1024;
+    private static final PathGuard NO_GUARD = path -> { };
+
+    /** A path check performed after its file handle is opened and before any bytes are copied. */
+    @FunctionalInterface
+    interface PathGuard {
+        void verify(Path path) throws IOException;
+    }
 
     /** Reading the input failed, as opposed to writing the output. */
     public static final class SourceReadException extends IOException {
@@ -60,10 +69,24 @@ public class StreamingFileCryptoService {
             LongConsumer progress
     ) throws IOException {
 
+        return encrypt(source, destinationPart, fileKey, nonce, aad, progress, NO_GUARD);
+    }
+
+    /** Like {@link #encrypt(Path, Path, byte[], byte[], byte[], LongConsumer)}, guarding the opened source path. */
+    EncryptedFileDescriptor encrypt(
+            Path source,
+            Path destinationPart,
+            byte[] fileKey,
+            byte[] nonce,
+            byte[] aad,
+            LongConsumer progress,
+            PathGuard sourceGuard
+    ) throws IOException {
+
         GCMModeCipher cipher = cipher(true, fileKey, nonce, aad);
 
         try {
-            long plainSize = stream(cipher, source, destinationPart, progress);
+            long plainSize = stream(cipher, source, destinationPart, progress, sourceGuard, NO_GUARD);
             return new EncryptedFileDescriptor(plainSize, Files.size(destinationPart));
 
         } catch (InvalidCipherTextException e) {
@@ -83,8 +106,22 @@ public class StreamingFileCryptoService {
             byte[] aad
     ) throws IOException, CryptoException {
 
+        decrypt(encryptedBlob, destinationPart, fileKey, nonce, aad, NO_GUARD);
+    }
+
+    /** Like {@link #decrypt(Path, Path, byte[], byte[], byte[])}, guarding the opened plaintext destination. */
+    void decrypt(
+            Path encryptedBlob,
+            Path destinationPart,
+            byte[] fileKey,
+            byte[] nonce,
+            byte[] aad,
+            PathGuard destinationGuard
+    ) throws IOException, CryptoException {
+
         try {
-            stream(cipher(false, fileKey, nonce, aad), encryptedBlob, destinationPart, bytes -> { });
+            stream(cipher(false, fileKey, nonce, aad), encryptedBlob, destinationPart,
+                    bytes -> { }, NO_GUARD, destinationGuard);
         } catch (InvalidCipherTextException e) {
             throw new CryptoException();
         }
@@ -94,7 +131,9 @@ public class StreamingFileCryptoService {
             GCMModeCipher cipher,
             Path input,
             Path outputPart,
-            LongConsumer progress
+            LongConsumer progress,
+            PathGuard sourceGuard,
+            PathGuard destinationGuard
     ) throws IOException, InvalidCipherTextException {
 
         byte[] in = new byte[BUFFER_BYTES];
@@ -107,8 +146,19 @@ public class StreamingFileCryptoService {
                         outputPart,
                         StandardOpenOption.CREATE,
                         StandardOpenOption.WRITE,
-                        StandardOpenOption.TRUNCATE_EXISTING
+                        StandardOpenOption.TRUNCATE_EXISTING,
+                        LinkOption.NOFOLLOW_LINKS
                 )) {
+
+            try {
+                sourceGuard.verify(input);
+            } catch (IOException e) {
+                if (e instanceof SourceReadException) {
+                    throw e;
+                }
+                throw new SourceReadException(e);
+            }
+            destinationGuard.verify(outputPart);
 
             int read;
 
@@ -135,7 +185,11 @@ public class StreamingFileCryptoService {
 
     private static InputStream open(Path input) throws SourceReadException {
         try {
-            return Files.newInputStream(input);
+            return Channels.newInputStream(FileChannel.open(
+                    input,
+                    StandardOpenOption.READ,
+                    LinkOption.NOFOLLOW_LINKS
+            ));
         } catch (IOException e) {
             throw new SourceReadException(e);
         }
