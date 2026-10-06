@@ -6,10 +6,10 @@ Updated after every task. Git history and test output are the record; this is th
 
 | Key | Value |
 |---|---|
-| branch | `main`; tested T29 source-fix commit `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` is pushed and both Build jobs passed; CI result is recorded in this ledger |
+| branch | `main`; latest release-code commit `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` is the tested RC2 target; following commits only update release records |
 | maven version | `1.0.0` |
 | current phase | 05 - Cleanup, documentation, release gates, and tagging |
-| current task | T28: commit the completed CI evidence, confirm a clean tree, then create/push annotated `v1.0.0-rc.2` on tested source commit `3a6b206`; keep `v1.0.0-rc.1` fixed and stop for H3-H6 |
+| current task | Stop at H3-H6: manually validate the `v1.0.0-rc.2` candidate on physical/clean Windows environments; `rc.1` remains unchanged; no stable tag or release is authorized yet |
 | latest release-code commit | T29 test-only fix `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` (pushed normally) |
 | tests last run | `mvn -B clean verify` with the local T29 UI test synchronization fix |
 | test result | Both fresh clean verifies passed: 412 tests, 0 failures/errors, 3 opt-in skips (6:01 and 3:09). Focused UI regression passed 10/10; all 29 `UiFlowTest` cases passed in 3 consecutive runs. The exact CI failure on `d963805` was reproduced locally twice before the fix. 1 GiB streaming and rebuilt RC2 package verification pass. GitHub Build run `37504756569` on pushed source-fix commit `3a6b206` passed both `verify` and `package`. |
@@ -25,9 +25,9 @@ Updated after every task. Git history and test output are the record; this is th
 | REPOSITORY_SECURITY_READY | DONE - H2 history rewrite, T25 hygiene, version `1.0.0`, and release/security documentation are complete |
 | H2 | DONE - history rewritten and verified locally and on origin before v1.0.0 |
 | T27 | DONE - merged and pushed to `main`; Gate B passed; both CI jobs succeeded |
-| T28 | READY - `v1.0.0-rc.1` remains unchanged on `905dbe1`; all source-fix gates and both Build jobs pass on `3a6b206`; this committed ledger records the evidence for annotated `v1.0.0-rc.2` on that tested source commit |
+| T28 | DONE - annotated `v1.0.0-rc.2` object `af2ebc6b4e13d07c6a0551ca13621b1e4422d6b2` points to tested source commit `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f`; pushed normally; Release run `37506968998` succeeded. `rc.1` stayed unchanged. |
 | T29 | DONE - CI failure was a test synchronization race in `UiFlowTest.aChangeMadeInTheResultsRerunsTheSearch`, reproduced twice and fixed with exact result-state waits. Focused 10/10, `UiFlowTest` 29/29 for 3 runs, clean Gate B twice, 1 GiB gate, rebuild, and standard-user `-Launch -Install` all pass. Fix commit `3a6b206` was pushed normally; Build run `37504756569` passed `verify` and `package`. |
-| RC_CREATED | DONE - annotated `v1.0.0-rc.1` points to `905dbe1082b336de9e0b1e30848f425015f5a555`; its Release workflow failed before artifact build/draft creation |
+| RC_CREATED | DONE - annotated `v1.0.0-rc.2` points to the T29 source-fix commit; Release build and draft jobs succeeded. Earlier `v1.0.0-rc.1` remains immutable and its Release workflow failure is recorded below. |
 | MANUAL_VALIDATION_COMPLETE | TODO |
 | FINAL_TAG_CREATED | TODO |
 | FINAL_ARTIFACT_SMOKE_COMPLETE | TODO |
@@ -87,10 +87,13 @@ Updated after every task. Git history and test output are the record; this is th
 | T29 GitHub failure and root cause | Build run `37422119830` on `d9638059b7e627c1560f26f06614cb22e18aa021` failed Maven `Verify` (412 tests, 1 failure, 0 errors, 3 skips); `package` was skipped. Exact failing test: `UiFlowTest.aChangeMadeInTheResultsRerunsTheSearch`, `java.lang.AssertionError: Timed out waiting for the UI` at the trash/refresh assertion. Root cause: the test waited for `rows.size() == 2`, which also matched the still-visible two root-folder rows while the asynchronous `invoice` search was pending. The test then selected `Docs`; when the search callback replaced the table with `invoice-a.pdf` and `invoice-b.pdf`, the selection was cleared, the trash button remained disabled, and `.fire()` made no mutation. The search request generation logic in `FilesController` correctly applies only the current request; no application defect was found. A local diagnostic reproduction twice showed `rows=[invoice-a.pdf, invoice-b.pdf], selected=[], query=invoice, clearVisible=true, feedback=, busy=false; trash=[]`. This was a deterministic test synchronization gap exposed nondeterministically by CI scheduling, not a discrepancy invalidated by local Gate B. |
 | T29 local regression and verification | Fix in `UiFlowTest`: await exact sorted search rows before selecting `invoice-a.pdf`; after trash, await exactly `invoice-b.pdf` and assert the trash contains exactly `invoice-a.pdf`. The original test failed twice locally before this fix; focused test passed 10/10 and all 29 `UiFlowTest` cases passed 3/3 consecutive runs. Two fresh `mvn -B clean verify` runs passed (412 tests, 0 failures/errors, 3 opt-in skips; 6:01 and 3:09). 1 GiB `LargeFileStreamingTest` passed 2/2 in 117.2 s with `-Xmx256m`. No production code changed. Commit `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` was pushed normally after fetching and confirming `origin/main` remained `d9638059b7e627c1560f26f06614cb22e18aa021`. |
 | T29 Build CI after test fix | PASS: public GitHub run `37504756569` for `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` completed `success`; both `verify` and `package` completed `success`. Read-only public run/job metadata only; no credentials or job logs were used. |
+| T28 Build CI after ledger commit | PASS: public Build run `37505939959` for docs-only `main` commit `adc331f2e3a9ee0914103634605801e0b1ee787f` completed `success`; both `verify` and `package` succeeded. |
+| T28 RC2 tag and Release workflow | Remote annotated tag object `af2ebc6b4e13d07c6a0551ca13621b1e4422d6b2` peels to tested source commit `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f`, which is on `origin/main`. Release run `37506968998` completed `success`; both `build` and `draft` jobs succeeded, including `Check the tag`, artifact verification, and bundle upload. Remote `rc.1` still has tag object `67dbf83f5f3f67830f3abdf48ca92ab61ae96fa2` peeling to `905dbe1082b336de9e0b1e30848f425015f5a555`. |
 | host-path persistence and compatibility contract | PASS - T19C; `docs/COMPATIBILITY.md`, `Format1PathPersistenceTest`, and logical-name tests pass on Windows 11 / NTFS / Java 21.0.2; no persistent model serializes a host `Path`; no format ruling required |
 | folder-import link/lock tests (T15) | all ran, none skipped, on Windows 11 / NTFS / JDK 21.0.2: junction (outside the tree and a loop back into it), symbolic link (file and directory — created because the build shell was elevated; Developer Mode is off, so a non-elevated run skips this one test), locked file, Kelvin-sign clash (file and folder), differently-cased vault path. Fix round 1, also all ran: vault reached through the `\\localhost\C$` share alias (reachable here; skips cleanly where the administrative share is not), folder swapped for a junction after the scan, source that is a junction with a missing target |
 | history cleanup (`data/users.json`) | DONE (history rewritten); copies may remain in forks, clones, caches, or elsewhere; treat any reused development password as compromised |
-| current RC tag | `v1.0.0-rc.1` → `905dbe1082b336de9e0b1e30848f425015f5a555` (annotated; Release run failed; do not move) |
+| current RC tag | `v1.0.0-rc.2` → `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` (annotated tag object `af2ebc6b4e13d07c6a0551ca13621b1e4422d6b2`; Release run succeeded) |
+| prior RC tag | `v1.0.0-rc.1` → `905dbe1082b336de9e0b1e30848f425015f5a555` (unchanged; do not move or replace) |
 | USB validation (H4) | TODO |
 | OneDrive validation (H5) | TODO |
 | clean-Windows validation (H6) | TODO |
@@ -100,8 +103,7 @@ Updated after every task. Git history and test output are the record; this is th
 
 ## Remaining blockers
 
-1. T28: push this CI-result ledger update if still local, verify the tree is clean, then create/push annotated `v1.0.0-rc.2` pointing to tested source commit `3a6b206`. Require its Release workflow to pass, then stop at H3-H6. Keep `rc.1` unchanged.
-2. H3–H6: manual validation matrix on the first RC whose Release workflow succeeds.
+1. H3–H6: manual installer, portable, USB/OneDrive, and clean-Windows RC2 validation must pass before T30. Stop here for the user's physical/manual validation; do not create or publish the stable `v1.0.0` release.
 
 ### T25 rulings and review record
 

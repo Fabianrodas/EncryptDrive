@@ -313,8 +313,8 @@ git commit -m "chore: set release version 1.0.0"
   (Invoke-RestMethod "https://api.github.com/repos/Fabianrodas/EncryptDrive/actions/runs?event=push&per_page=5").workflow_runs | Select-Object name, head_branch, status, conclusion, html_url
   ```
   Expected for the next candidate: `Release` / `v1.0.0-rc.2` / `completed` / `success`. (Drafts are invisible to the unauthenticated API; the user confirms the draft prerelease and its three assets at H3.)
-- [ ] **Step 5:** after a candidate's Release workflow succeeds, ledger: RC_CREATED = DONE (`v1.0.0-rc.N` → `<commit>`); commit + push the ledger on `main`.
-- [ ] **Step 6:** after a successful Release workflow, stop at Human Gates H3–H6 (all four may be done in parallel by the user).
+- [x] **Step 5:** created annotated `v1.0.0-rc.2`; remote tag object `af2ebc6b4e13d07c6a0551ca13621b1e4422d6b2` peels to T29 source-fix commit `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` on `origin/main`. Pushed the new tag normally and verified `v1.0.0-rc.1` stayed at object `67dbf83f5f3f67830f3abdf48ca92ab61ae96fa2` → `905dbe1082b336de9e0b1e30848f425015f5a555`. Release run `37506968998` completed `success`; `build` and `draft` jobs both succeeded, including `Check the tag`, artifact verification, and bundle upload. Updated and committed the ledger/plan before stopping at H3–H6.
+- [x] **Step 6:** stopped at Human Gates H3–H6 for physical/manual RC2 validation. The validation matrix is still pending user execution; no final `v1.0.0` tag or stable release was created or published.
 
 If the workflow fails: superpowers:systematic-debugging; the fix goes through T29; the failed tag stays as it is (never moved) and the next candidate is `rc.2`.
 
