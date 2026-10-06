@@ -6,13 +6,13 @@ Updated after every task. Git history and test output are the record; this is th
 
 | Key | Value |
 |---|---|
-| branch | `main` at local T29 merge `9f9226fd53a517c79cded3e2506283b108f66596` (verification ledger update pending push) |
+| branch | `main` at pushed T29 CI candidate `d9638059b7e627c1560f26f06614cb22e18aa021` (test synchronization fix and reconciled release notes are local; commit/push/CI pending) |
 | maven version | `1.0.0` |
 | current phase | 05 - Cleanup, documentation, release gates, and tagging |
-| current task | T28: fetch and confirm `origin/main`, push the tested T29 merge normally, wait for both Build jobs, then create `v1.0.0-rc.2`; keep `v1.0.0-rc.1` fixed |
-| last completed commit | T29 no-fast-forward merge `9f9226fd53a517c79cded3e2506283b108f66596` (local; push pending) |
-| tests last run | 1 GiB `LargeFileStreamingTest` on T29 merge `9f9226fd53a517c79cded3e2506283b108f66596` |
-| test result | PASS, 2/2 tests, 0 failures/errors/skips, 114.5 s. Post-merge Gate B passed (412 tests, 0 failures/errors, 3 opt-in skips); rc.2 package build and standard-user `-Launch -Install` verification passed. Remote push/CI and T28 remain. |
+| current task | T29: fix the reproduced `UiFlowTest` search-result synchronization race from Build run `37422119830`; verify the local gates, commit/push normally, and require both Build jobs green before T28; keep `v1.0.0-rc.1` fixed |
+| last completed commit | main T29 verification ledger `d9638059b7e627c1560f26f06614cb22e18aa021` (pushed) |
+| tests last run | `mvn -B clean verify` with the local T29 UI test synchronization fix |
+| test result | Both fresh clean verifies passed: 412 tests, 0 failures/errors, 3 opt-in skips (6:01 and 3:09). Focused UI regression passed 10/10; all 29 `UiFlowTest` cases passed in 3 consecutive runs. The exact CI failure on `d963805` was reproduced locally twice before the fix; root cause and evidence are recorded below. 1 GiB streaming and rebuilt RC2 package verification also pass. Fix commit/push and new Build CI remain pending. |
 
 ## Release states
 
@@ -25,8 +25,8 @@ Updated after every task. Git history and test output are the record; this is th
 | REPOSITORY_SECURITY_READY | DONE - H2 history rewrite, T25 hygiene, version `1.0.0`, and release/security documentation are complete |
 | H2 | DONE - history rewritten and verified locally and on origin before v1.0.0 |
 | T27 | DONE - merged and pushed to `main`; Gate B passed; both CI jobs succeeded |
-| T28 | BLOCKED - `v1.0.0-rc.1` remains unchanged on `905dbe1`; diagnosed fix and local gates pass; confirm remote main, push the fix normally, require both CI jobs, then use `rc.2` |
-| T29 | TECHNICAL FIX COMPLETE - commit `6d1acb6` merged locally to main as `9f9226f`; Gate B, 1 GiB, rc.2 rebuild, and standard-user package install/launch/uninstall passed; remote push/CI and repeat of H3-H6 on rc.2 remain |
+| T28 | BLOCKED - `v1.0.0-rc.1` remains unchanged on `905dbe1`; rc.2 waits for the T29 fix commit on `main` and both Build jobs to pass |
+| T29 | ROOT CAUSE FIXED LOCALLY - CI failure was a test synchronization race in `UiFlowTest.aChangeMadeInTheResultsRerunsTheSearch`, reproduced twice and fixed with exact result-state waits. Focused 10/10, `UiFlowTest` 29/29 for 3 runs, clean Gate B twice, 1 GiB gate, rebuild, and standard-user `-Launch -Install` all pass. Fix and ledger are not yet committed/pushed; new Build CI is pending. |
 | RC_CREATED | DONE - annotated `v1.0.0-rc.1` points to `905dbe1082b336de9e0b1e30848f425015f5a555`; its Release workflow failed before artifact build/draft creation |
 | MANUAL_VALIDATION_COMPLETE | TODO |
 | FINAL_TAG_CREATED | TODO |
@@ -82,8 +82,10 @@ Updated after every task. Git history and test output are the record; this is th
 | T29 fix branch and merge | PASS: release-fix commit `6d1acb6a5cdf3c7d0d37d7e115eda9a403b557c4` (`fix: correct release tag refspec interpolation`) merged no-ff into local `main` as `9f9226fd53a517c79cded3e2506283b108f66596`; no remote refs changed yet. |
 | T29 post-merge Gate B | PASS on `9f9226fd53a517c79cded3e2506283b108f66596`: `mvn -B clean verify` → BUILD SUCCESS, 412 tests, 0 failures/errors, 3 opt-in skips; 3 min 57 s. |
 | T29 1 GiB streaming gate | PASS on `9f9226fd53a517c79cded3e2506283b108f66596`: `mvn -B test "-Dtest=LargeFileStreamingTest" "-Dencryptdrive.largeFileCheck=true" "-DargLine=-Xmx256m"` → 2 tests, 0 failures/errors/skips; 114.5 s. |
-| T29 rc.2 package rebuild | PASS on local `main`: `build-release.ps1 -Release -SkipTests -Channel rc.2` after the same-commit clean verify; setup 37,790,208 bytes, SHA-256 `4327e69ff6d9a331d26bbf09808714f611901b778d55d46ad4975810f0ab25d3`; portable ZIP 36,375,932 bytes, SHA-256 `6fdabb182f28f3cd848a6f16b38aba81cb6116fc3290bb7dd8006d0e4956f492`. WiX 3.14.1.8722 download matched the pinned release-plan SHA-256. |
-| T29 rc.2 package verification | PASS: `verify-package.ps1 -Channel rc.2 -Launch -Install` returned 0 under a temporary Medium-integrity standard user with `BUILTIN\Users` enabled and no Administrators membership. Checksums matched; portable and installed launches worked without system Java; install version, Start Menu shortcut, uninstall, and sentinel-vault preservation passed; signature `NotSigned`. The first sandbox-token run returned MSI 1603 with rollback-key access denied; the documented standard-user run passed. Temporary account/profile/stage were removed and `msiserver` restored to Stopped/Manual. |
+| T29 RC2 package rebuild | PASS on the local T29 fix tree: `build-release.ps1 -Release -SkipTests -Channel rc.2`; Setup SHA-256 `d4b423c1ee67d9c9b677f039ba8133b44f621a6d713676bcb77905ce4947899f`; portable ZIP SHA-256 `05752523c7856ae91dbecf04799345433489623428057070fa1efde04605a0a0`. WiX 3.14.1.8722 download matched the pinned release-plan SHA-256. |
+| T29 RC2 package verification | PASS: `verify-package.ps1 -Channel rc.2 -Launch -Install` returned 0 under a temporary Medium-integrity standard user (`BUILTIN\Users`, not Administrators). Checksums matched; portable and installed launches worked without system Java; install version and Start Menu shortcut were verified; uninstall succeeded and the sentinel vault was unchanged. Signature `NotSigned`. Temporary account/profile/stage were removed. |
+| T29 GitHub failure and root cause | Build run `37422119830` on `d9638059b7e627c1560f26f06614cb22e18aa021` failed Maven `Verify` (412 tests, 1 failure, 0 errors, 3 skips); `package` was skipped. Exact failing test: `UiFlowTest.aChangeMadeInTheResultsRerunsTheSearch`, `java.lang.AssertionError: Timed out waiting for the UI` at the trash/refresh assertion. Root cause: the test waited for `rows.size() == 2`, which also matched the still-visible two root-folder rows while the asynchronous `invoice` search was pending. The test then selected `Docs`; when the search callback replaced the table with `invoice-a.pdf` and `invoice-b.pdf`, the selection was cleared, the trash button remained disabled, and `.fire()` made no mutation. The search request generation logic in `FilesController` correctly applies only the current request; no application defect was found. A local diagnostic reproduction twice showed `rows=[invoice-a.pdf, invoice-b.pdf], selected=[], query=invoice, clearVisible=true, feedback=, busy=false; trash=[]`. This was a deterministic test synchronization gap exposed nondeterministically by CI scheduling, not a discrepancy invalidated by local Gate B. |
+| T29 local regression and verification | Fix in `UiFlowTest`: await exact sorted search rows before selecting `invoice-a.pdf`; after trash, await exactly `invoice-b.pdf` and assert the trash contains exactly `invoice-a.pdf`. The original test failed twice locally before this fix; focused test passed 10/10 and all 29 `UiFlowTest` cases passed 3/3 consecutive runs. Two fresh `mvn -B clean verify` runs passed (412 tests, 0 failures/errors, 3 opt-in skips; 6:01 and 3:09). 1 GiB `LargeFileStreamingTest` passed 2/2 in 117.2 s with `-Xmx256m`. No production code changed. Fix commit, push, and Build CI result pending. |
 | host-path persistence and compatibility contract | PASS - T19C; `docs/COMPATIBILITY.md`, `Format1PathPersistenceTest`, and logical-name tests pass on Windows 11 / NTFS / Java 21.0.2; no persistent model serializes a host `Path`; no format ruling required |
 | folder-import link/lock tests (T15) | all ran, none skipped, on Windows 11 / NTFS / JDK 21.0.2: junction (outside the tree and a loop back into it), symbolic link (file and directory — created because the build shell was elevated; Developer Mode is off, so a non-elevated run skips this one test), locked file, Kelvin-sign clash (file and folder), differently-cased vault path. Fix round 1, also all ran: vault reached through the `\\localhost\C$` share alias (reachable here; skips cleanly where the administrative share is not), folder swapped for a junction after the scan, source that is a junction with a missing target |
 | history cleanup (`data/users.json`) | DONE (history rewritten); copies may remain in forks, clones, caches, or elsewhere; treat any reused development password as compromised |
@@ -97,7 +99,7 @@ Updated after every task. Git history and test output are the record; this is th
 
 ## Remaining blockers
 
-1. T28: fetch and confirm `origin/main` is still `cc9d7f02dd57b321473341950043ea170c636e9d`, push the tested main update normally, require both Build jobs to pass, create `v1.0.0-rc.2` without moving rc.1, and require its Release workflow to succeed.
+1. T29/T28: commit the verified test-only synchronization fix with these reconciled notes, fetch immediately before pushing and confirm `origin/main` is still the expected base, push `main` normally, and require both Build jobs to pass. Only then may T28 create `v1.0.0-rc.2`; keep `rc.1` unchanged.
 2. H3–H6: manual validation matrix on the first RC whose Release workflow succeeds.
 
 ### T25 rulings and review record

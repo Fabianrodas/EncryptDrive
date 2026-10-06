@@ -525,13 +525,22 @@ class UiFlowTest {
         click(scene, "#filesNavButton");
         waitForRows(scene);
         search(scene, "invoice");
-        FxTestSupport.waitUntil(() -> rows(scene).size() == 2);
-        selectFirstRow(scene);
+        FxTestSupport.waitUntil(() -> rowNames(scene).equals(List.of("invoice-a.pdf", "invoice-b.pdf")));
+        FxTestSupport.onFxThread(() -> {
+            TableView<ManifestEntry> table = (TableView<ManifestEntry>) scene.getRoot().lookup("#table");
+            ManifestEntry target = table.getItems().stream()
+                    .filter(entry -> entry.getName().equals("invoice-a.pdf"))
+                    .findFirst()
+                    .orElseThrow();
+            table.getSelectionModel().select(target);
+            return null;
+        });
 
         click(scene, "#trashButton");
 
-        FxTestSupport.waitUntil(() -> rows(scene).size() == 1);
-        assertEquals(1, files.listTrash().size());
+        FxTestSupport.waitUntil(() -> rowNames(scene).equals(List.of("invoice-b.pdf")));
+        assertEquals(List.of("invoice-a.pdf"),
+                files.listTrash().stream().map(ManifestEntry::getName).toList());
         assertTrue(FxTestSupport.onFxThread(() -> ((Node) scene.getRoot().lookup("#clearSearchButton")).isVisible()));
     }
 
@@ -767,6 +776,10 @@ class UiFlowTest {
     @SuppressWarnings("unchecked")
     private static List<ManifestEntry> rows(Scene scene) {
         return ((TableView<ManifestEntry>) scene.getRoot().lookup("#table")).getItems();
+    }
+
+    private static List<String> rowNames(Scene scene) {
+        return rows(scene).stream().map(ManifestEntry::getName).sorted().toList();
     }
 
     /** Types the query and presses Enter, the way a user searches. */
