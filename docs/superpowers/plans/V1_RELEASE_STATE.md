@@ -10,9 +10,9 @@ Updated after every task. Git history and test output are the record; this is th
 | maven version | `1.0.0` |
 | current phase | 05 - Cleanup, documentation, release gates, and tagging |
 | current task | T30: resolve RC2 H6 blank-window blocker; build and validate a new RC3 candidate; keep RC1/RC2 immutable; do not create stable `v1.0.0` |
-| latest release-code commit | T29 test-only fix `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` (pushed normally) |
-| tests last run | T30 release-config regression `scripts/tests/Test-ReleasePrismConfig.ps1` |
-| test result | Local Gate B passed (412 tests, 0 failures/errors, 3 opt-in skips); mandatory 1 GiB test passed (2/2); RC3 portable/installer build, static package verification, and portable launch passed. Installer `-Launch -Install` is still pending on a clean profile, Build CI is pending, and RC3 clean-Windows visual/vault validation is pending. The exact RC2 failure environment's Prism selection remains unobserved: this host selected D3D successfully, while the nested Sandbox automation session closed before its logon command ran. |
+| latest release-code commit | T30 software-rendering fix `b97876c` (pushed normally) |
+| tests last run | T30 `Test-ReleasePrismConfig.ps1`, `verify-package.ps1 -Channel rc.3`, and `verify-package.ps1 -Channel rc.3 -Launch`; Gate B, 1 GiB, and Build CI also passed on this commit |
+| test result | Local Gate B passed (412 tests, 0 failures/errors, 3 opt-in skips); mandatory 1 GiB test passed (2/2); RC3 portable/installer build, static package verification, and portable launch passed. Build CI `37581166971` passed both jobs, including clean-runner `-Launch -Install`. RC3 clean-Windows visual/vault validation is still pending. The exact RC2 failure environment's Prism selection remains unobserved: this host selected D3D successfully, while the nested Sandbox automation session closed before its logon command ran. |
 
 ## Release states
 
@@ -97,14 +97,14 @@ Updated after every task. Git history and test output are the record; this is th
 | T30 local Gate B | PASS on the RC3 candidate working tree: elevated `mvn -B clean verify` → BUILD SUCCESS, 412 tests, 0 failures, 0 errors, 3 skipped; 13:01. The restricted AppContainer run was not representative because it denied Windows file renames/junctions; the exact command passed without environment overrides in the normal host context. |
 | T30 mandatory large-file gate | PASS: elevated `mvn -B test "-Dtest=LargeFileStreamingTest" "-Dencryptdrive.largeFileCheck=true" "-DargLine=-Xmx256m"` → BUILD SUCCESS, 2 tests, 0 failures/errors/skips, 187.1 s. |
 | T30 RC3 candidate packages | PASS: `build-release.ps1 -Release -SkipTests -Channel rc.3` produced setup SHA-256 `bed801a303402ef6f5c9c378030c30aead1ca187cdea3fb8c8a45fb89685ea7a` and portable ZIP SHA-256 `8471372317542f6d5cae2b61a0393632b48ff862936e651d6da96974f867d20e`. Both app-image configs contain `java-options=-Dprism.order=sw`; RC2 packages/tags remain unchanged. |
-| T30 package verification | PASS: Prism regression and `verify-package.ps1 -Channel rc.3` static checks passed; `verify-package.ps1 -Channel rc.3 -Launch` started the portable app without system Java. Local `-Launch -Install` stopped at the verifier's existing-installation guard; no existing install was replaced or removed. Run the full install/uninstall/sentinel-preservation gate on a clean CI runner/profile. Installer reports `NotSigned`. |
+| T30 package verification | PASS: Prism regression and `verify-package.ps1 -Channel rc.3` static checks passed; `verify-package.ps1 -Channel rc.3 -Launch` started the portable app without system Java. Local `-Launch -Install` stopped at the verifier's existing-installation guard; no existing install was replaced or removed. The clean GitHub Windows runner passed the complete workflow `verify-package.ps1 -Launch -Install` step, covering portable and installed launches without system Java, install registration/version, Start Menu shortcut, uninstall, and sentinel-vault preservation. Installer reports `NotSigned`. |
 | T30 normal-host rendering comparison | D3D and software pipelines both rendered the same initial Vault Selection UI on this host. After one warmup per mode, three alternating launch-to-window measurements: D3D 1.209/1.434/1.933 s (median 1.434 s); SW 1.332/1.960/2.996 s (median 1.960 s). This does not measure sustained interaction latency; H3/H6 must confirm actual responsiveness. |
-| T30 Build CI | PENDING for the fix commit; require both `verify` and `package` jobs to succeed. |
+| T30 Build CI | PASS: run `37581166971` for commit `b97876c`; `verify` check `112660924002` and `package` check `112662078019` both completed `success`. The package job ran the clean-runner install/launch/uninstall/sentinel-preservation gate. |
 | host-path persistence and compatibility contract | PASS - T19C; `docs/COMPATIBILITY.md`, `Format1PathPersistenceTest`, and logical-name tests pass on Windows 11 / NTFS / Java 21.0.2; no persistent model serializes a host `Path`; no format ruling required |
 | folder-import link/lock tests (T15) | all ran, none skipped, on Windows 11 / NTFS / JDK 21.0.2: junction (outside the tree and a loop back into it), symbolic link (file and directory — created because the build shell was elevated; Developer Mode is off, so a non-elevated run skips this one test), locked file, Kelvin-sign clash (file and folder), differently-cased vault path. Fix round 1, also all ran: vault reached through the `\\localhost\C$` share alias (reachable here; skips cleanly where the administrative share is not), folder swapped for a junction after the scan, source that is a junction with a missing target |
 | history cleanup (`data/users.json`) | DONE (history rewritten); copies may remain in forks, clones, caches, or elsewhere; treat any reused development password as compromised |
 | current RC tag | `v1.0.0-rc.2` → `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` (annotated tag object `af2ebc6b4e13d07c6a0551ca13621b1e4422d6b2`; Release run succeeded) |
-| T30 RC status | RC2 is the latest tag but failed H6 and must not be moved. RC3 is not tagged; local Gate B, 1 GiB, build, static package verification, and portable launch passed. Full installer verification/CI and clean-Windows candidate validation remain required before RC3 is eligible. |
+| T30 RC status | RC2 is the latest tag but failed H6 and must not be moved. RC3 is not tagged; local Gate B, 1 GiB, build, static package verification, and portable launch passed; clean-runner install verification and both CI jobs passed. Only clean-Windows candidate validation remains before RC3 is eligible. |
 | prior RC tag | `v1.0.0-rc.1` → `905dbe1082b336de9e0b1e30848f425015f5a555` (unchanged; do not move or replace) |
 | USB validation (H4) | TODO |
 | OneDrive validation (H5) | TODO |
@@ -115,7 +115,7 @@ Updated after every task. Git history and test output are the record; this is th
 
 ## Remaining blockers
 
-1. T30 remaining automatic gates: run `verify-package -Launch -Install` on a clean profile/runner and require both Build CI jobs to pass for the committed fix.
+1. T30 automatic gates passed on commit `b97876c`; clean-Windows candidate validation on the actual untagged RC3 artifacts remains required before tagging.
 2. Clean-Windows validation of the RC3 candidate must pass before creating the annotated `v1.0.0-rc.3` tag. After RC3 exists, H3–H6 must be completed on those RC3 artifacts.
 3. Do not create or publish the stable `v1.0.0` release until every release gate passes.
 
