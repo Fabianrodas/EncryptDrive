@@ -25,6 +25,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
+Import-Module (Join-Path $PSScriptRoot "ReleasePackageConfig.psm1") -Force -ErrorAction Stop
 
 $version = ([xml](Get-Content pom.xml)).project.version
 $numeric = $version -replace '-SNAPSHOT$', ''
@@ -160,7 +161,14 @@ function Test-Install([string] $installer) {
         if ($entry.DisplayVersion -ne $numeric) { Fail "uninstall entry version is $($entry.DisplayVersion), expected $numeric" }
 
         $exe = Join-Path $installDir "EncryptDrive.exe"
-        if (Test-Path $exe) { Test-Launch $exe } else { Fail "EncryptDrive.exe was not installed into $installDir" }
+        if (Test-Path $exe) {
+            if (-not (Test-ReleasePrismConfiguration -AppConfigPath (Join-Path $installDir "app/EncryptDrive.cfg"))) {
+                Fail "the installed package must configure JavaFX Prism with java-options=-Dprism.order=sw"
+            }
+            Test-Launch $exe
+        } else {
+            Fail "EncryptDrive.exe was not installed into $installDir"
+        }
 
         $menu = Join-Path ([Environment]::GetFolderPath("Programs")) "EncryptDrive"
         if (-not (Get-ChildItem $menu -Filter *.lnk -ErrorAction SilentlyContinue)) { Fail "no Start Menu shortcut in $menu" }
@@ -231,6 +239,9 @@ try {
 
             if (-not (Test-Path "$image/EncryptDrive.exe")) { Fail "EncryptDrive.exe is missing" }
             if (-not (Test-Path "$image/runtime/bin/server/jvm.dll")) { Fail "the bundled Java runtime is missing" }
+            if (-not (Test-ReleasePrismConfiguration -AppConfigPath "$image/app/EncryptDrive.cfg")) {
+                Fail "the portable package must configure JavaFX Prism with java-options=-Dprism.order=sw"
+            }
 
             $top = (Get-ChildItem $image -Force | ForEach-Object Name | Sort-Object) -join ","
             if ($top -ne "app,EncryptDrive.exe,runtime") { Fail "unexpected top-level content: $top" }

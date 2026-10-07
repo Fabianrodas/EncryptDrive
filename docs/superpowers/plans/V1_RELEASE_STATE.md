@@ -6,13 +6,13 @@ Updated after every task. Git history and test output are the record; this is th
 
 | Key | Value |
 |---|---|
-| branch | `main`; latest release-code commit `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` is the tested RC2 target; following commits only update release records |
+| branch | `main`; `v1.0.0-rc.2` at `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` failed H6; T30 Prism configuration fix and its release gates are in progress |
 | maven version | `1.0.0` |
 | current phase | 05 - Cleanup, documentation, release gates, and tagging |
-| current task | Stop at H3-H6: manually validate the `v1.0.0-rc.2` candidate on physical/clean Windows environments; `rc.1` remains unchanged; no stable tag or release is authorized yet |
+| current task | T30: resolve RC2 H6 blank-window blocker; build and validate a new RC3 candidate; keep RC1/RC2 immutable; do not create stable `v1.0.0` |
 | latest release-code commit | T29 test-only fix `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` (pushed normally) |
-| tests last run | `mvn -B clean verify` with the local T29 UI test synchronization fix |
-| test result | Both fresh clean verifies passed: 412 tests, 0 failures/errors, 3 opt-in skips (6:01 and 3:09). Focused UI regression passed 10/10; all 29 `UiFlowTest` cases passed in 3 consecutive runs. The exact CI failure on `d963805` was reproduced locally twice before the fix. 1 GiB streaming and rebuilt RC2 package verification pass. GitHub Build run `37504756569` on pushed source-fix commit `3a6b206` passed both `verify` and `package`. |
+| tests last run | T30 release-config regression `scripts/tests/Test-ReleasePrismConfig.ps1` |
+| test result | Local Gate B passed (412 tests, 0 failures/errors, 3 opt-in skips); mandatory 1 GiB test passed (2/2); RC3 portable/installer build, static package verification, and portable launch passed. Installer `-Launch -Install` is still pending on a clean profile, Build CI is pending, and RC3 clean-Windows visual/vault validation is pending. The exact RC2 failure environment's Prism selection remains unobserved: this host selected D3D successfully, while the nested Sandbox automation session closed before its logon command ran. |
 
 ## Release states
 
@@ -27,6 +27,7 @@ Updated after every task. Git history and test output are the record; this is th
 | T27 | DONE - merged and pushed to `main`; Gate B passed; both CI jobs succeeded |
 | T28 | DONE - annotated `v1.0.0-rc.2` object `af2ebc6b4e13d07c6a0551ca13621b1e4422d6b2` points to tested source commit `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f`; pushed normally; Release run `37506968998` succeeded. `rc.1` stayed unchanged. |
 | T29 | DONE - CI failure was a test synchronization race in `UiFlowTest.aChangeMadeInTheResultsRerunsTheSearch`, reproduced twice and fixed with exact result-state waits. Focused 10/10, `UiFlowTest` 29/29 for 3 runs, clean Gate B twice, 1 GiB gate, rebuild, and standard-user `-Launch -Install` all pass. Fix commit `3a6b206` was pushed normally; Build run `37504756569` passed `verify` and `package`. |
+| T30 | IN PROGRESS - RC2 failed H6: default renderer shows blank in Sandbox, software renderer works, restoring the default reproduces the blank window. RC2 remains unchanged. Selected package-level software rendering with a deterministic config regression; remaining automatic and clean-Windows gates are pending. |
 | RC_CREATED | DONE - annotated `v1.0.0-rc.2` points to the T29 source-fix commit; Release build and draft jobs succeeded. Earlier `v1.0.0-rc.1` remains immutable and its Release workflow failure is recorded below. |
 | MANUAL_VALIDATION_COMPLETE | TODO |
 | FINAL_TAG_CREATED | TODO |
@@ -89,21 +90,34 @@ Updated after every task. Git history and test output are the record; this is th
 | T29 Build CI after test fix | PASS: public GitHub run `37504756569` for `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` completed `success`; both `verify` and `package` completed `success`. Read-only public run/job metadata only; no credentials or job logs were used. |
 | T28 Build CI after ledger commit | PASS: public Build run `37505939959` for docs-only `main` commit `adc331f2e3a9ee0914103634605801e0b1ee787f` completed `success`; both `verify` and `package` succeeded. |
 | T28 RC2 tag and Release workflow | Remote annotated tag object `af2ebc6b4e13d07c6a0551ca13621b1e4422d6b2` peels to tested source commit `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f`, which is on `origin/main`. Release run `37506968998` completed `success`; both `build` and `draft` jobs succeeded, including `Check the tag`, artifact verification, and bundle upload. Remote `rc.1` still has tag object `67dbf83f5f3f67830f3abdf48ca92ab61ae96fa2` peeling to `905dbe1082b336de9e0b1e30848f425015f5a555`. |
+| T30 RC2 H6 reproduction | FAIL on the user's exact RC2 artifacts in Windows Sandbox: distributed config launches a blank/invisible JavaFX window; adding `-Dprism.order=sw` renders it; restoring the original config and starting a new process makes it blank again. Both prior RC tags and their assets remain unchanged. |
+| T30 Prism diagnostics | RC2 portable ZIP SHA-256 `05752523c7856ae91dbecf04799345433489623428057070fa1efde04605a0a0` was copied for temporary diagnostics. With `-Dprism.verbose=true` on the available Windows host, Prism reported init order `d3d sw`, selected `com.sun.prism.d3d.D3DPipeline`, `Loading D3D native library ... succeeded`, `Direct3D initialization succeeded`, and `Initialized prism pipeline: ...D3DPipeline`; driver Intel Iris Xe, `igdumdim64.dll` 32.0.101.7088. No software fallback occurred. With software order, the pipeline was `com.sun.prism.sw.SWPipeline`. Both screenshots showed the same rendered Vault Selection UI. These logs are from the available host, not the failing H6 Sandbox. A fresh nested Sandbox guest was attempted with a read-only repository mount and a minimal mapped-folder boot marker; the guest window reported `El entorno remoto está cerrando la sesión. Se cerrará la conexión.` and the marker was never written. Therefore the failing Sandbox's selected pipeline and D3D initialization status remain unobserved; clean-Windows validation remains a human gate. |
+| T30 option evaluation and responsiveness | Selected `-Dprism.order=sw` for the Windows app-image. JavaFX 21's default Windows order is `d3d sw`; source confirms it advances only if pipeline creation/initialization fails. A silent blank frame after successful D3D init has no supported automatic blank-frame fallback; runtime Sandbox detection/relaunch would be undocumented and difficult to test. `sw,d3d` is supported but still selects SW first and adds no useful hardware-first behavior. After a warmup per mode, three alternating launch-to-window measurements per mode on the available host: D3D 1.209/1.434/1.933 s (median 1.434 s), SW 1.332/1.960/2.996 s (median 1.960 s). Both modes produced visually equivalent initial screens. This is a startup proxy, not a sustained interaction benchmark; clean-Windows validation remains required. |
+| T30 config regression | RED before helper: `Test-ReleasePrismConfig.ps1` failed because the package-config module did not exist. GREEN after `ReleasePackageConfig.psm1`: both portable and installed app-image fixtures reject missing cfg and RC2's default config and accept `java-options=-Dprism.order=sw` in `[JavaOptions]`. The release verifier now checks the option in both extracted portable and installed app images; Build CI runs the focused regression. |
+| T30 local Gate B | PASS on the RC3 candidate working tree: elevated `mvn -B clean verify` → BUILD SUCCESS, 412 tests, 0 failures, 0 errors, 3 skipped; 13:01. The restricted AppContainer run was not representative because it denied Windows file renames/junctions; the exact command passed without environment overrides in the normal host context. |
+| T30 mandatory large-file gate | PASS: elevated `mvn -B test "-Dtest=LargeFileStreamingTest" "-Dencryptdrive.largeFileCheck=true" "-DargLine=-Xmx256m"` → BUILD SUCCESS, 2 tests, 0 failures/errors/skips, 187.1 s. |
+| T30 RC3 candidate packages | PASS: `build-release.ps1 -Release -SkipTests -Channel rc.3` produced setup SHA-256 `bed801a303402ef6f5c9c378030c30aead1ca187cdea3fb8c8a45fb89685ea7a` and portable ZIP SHA-256 `8471372317542f6d5cae2b61a0393632b48ff862936e651d6da96974f867d20e`. Both app-image configs contain `java-options=-Dprism.order=sw`; RC2 packages/tags remain unchanged. |
+| T30 package verification | PASS: Prism regression and `verify-package.ps1 -Channel rc.3` static checks passed; `verify-package.ps1 -Channel rc.3 -Launch` started the portable app without system Java. Local `-Launch -Install` stopped at the verifier's existing-installation guard; no existing install was replaced or removed. Run the full install/uninstall/sentinel-preservation gate on a clean CI runner/profile. Installer reports `NotSigned`. |
+| T30 normal-host rendering comparison | D3D and software pipelines both rendered the same initial Vault Selection UI on this host. After one warmup per mode, three alternating launch-to-window measurements: D3D 1.209/1.434/1.933 s (median 1.434 s); SW 1.332/1.960/2.996 s (median 1.960 s). This does not measure sustained interaction latency; H3/H6 must confirm actual responsiveness. |
+| T30 Build CI | PENDING for the fix commit; require both `verify` and `package` jobs to succeed. |
 | host-path persistence and compatibility contract | PASS - T19C; `docs/COMPATIBILITY.md`, `Format1PathPersistenceTest`, and logical-name tests pass on Windows 11 / NTFS / Java 21.0.2; no persistent model serializes a host `Path`; no format ruling required |
 | folder-import link/lock tests (T15) | all ran, none skipped, on Windows 11 / NTFS / JDK 21.0.2: junction (outside the tree and a loop back into it), symbolic link (file and directory — created because the build shell was elevated; Developer Mode is off, so a non-elevated run skips this one test), locked file, Kelvin-sign clash (file and folder), differently-cased vault path. Fix round 1, also all ran: vault reached through the `\\localhost\C$` share alias (reachable here; skips cleanly where the administrative share is not), folder swapped for a junction after the scan, source that is a junction with a missing target |
 | history cleanup (`data/users.json`) | DONE (history rewritten); copies may remain in forks, clones, caches, or elsewhere; treat any reused development password as compromised |
 | current RC tag | `v1.0.0-rc.2` → `3a6b2066f83d43701c1a7f4b3df6d64169a1f88f` (annotated tag object `af2ebc6b4e13d07c6a0551ca13621b1e4422d6b2`; Release run succeeded) |
+| T30 RC status | RC2 is the latest tag but failed H6 and must not be moved. RC3 is not tagged; local Gate B, 1 GiB, build, static package verification, and portable launch passed. Full installer verification/CI and clean-Windows candidate validation remain required before RC3 is eligible. |
 | prior RC tag | `v1.0.0-rc.1` → `905dbe1082b336de9e0b1e30848f425015f5a555` (unchanged; do not move or replace) |
 | USB validation (H4) | TODO |
 | OneDrive validation (H5) | TODO |
-| clean-Windows validation (H6) | TODO |
+| clean-Windows validation (H6) | RC2 FAIL; RC3 candidate validation pending |
 | installer validation (H3) | TODO |
 | portable validation (H4/H6) | TODO |
 | final tag | none |
 
 ## Remaining blockers
 
-1. H3–H6: manual installer, portable, USB/OneDrive, and clean-Windows RC2 validation must pass before T30. Stop here for the user's physical/manual validation; do not create or publish the stable `v1.0.0` release.
+1. T30 remaining automatic gates: run `verify-package -Launch -Install` on a clean profile/runner and require both Build CI jobs to pass for the committed fix.
+2. Clean-Windows validation of the RC3 candidate must pass before creating the annotated `v1.0.0-rc.3` tag. After RC3 exists, H3–H6 must be completed on those RC3 artifacts.
+3. Do not create or publish the stable `v1.0.0` release until every release gate passes.
 
 ### T25 rulings and review record
 
@@ -115,4 +129,8 @@ Updated after every task. Git history and test output are the record; this is th
 ### T26 rulings
 
 - Ruling: date the changelog `2026-10-05` as the planned RC work date because no separate RC date was supplied; cost if the RC schedule moves, the changelog date must be updated before tagging.
+
+### T30 rulings
+
+- Ruling: proceed with the package-level software-renderer fix while leaving the exact failing-Sandbox Prism initialization unresolved; the user's RC2 A/B/A establishes that the shipped default renders blank and `prism.order=sw` renders, while the nested Sandbox remote session closed before its diagnostic command ran. Cost if wrong: a different Sandbox-specific issue may contribute, so RC3 must still pass clean-Windows H6 before it can be tagged.
 - Ruling: omit the plan's stale `Claude Opus 5.5` co-author trailer; this T26 work was performed by Codex and the commit uses the configured repository identity. Cost if wrong: that requested attribution is absent, while the recorded authorship remains accurate.

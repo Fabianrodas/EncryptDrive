@@ -483,3 +483,78 @@ git push origin main
 ```
 
 **Acceptance (Definition of Done, spec 24):** every state in the ledger is DONE; `v1.0.0` (annotated) points to the accepted RC commit on `main`; the published release has both editions and checksums; planning documents archived.
+
+---
+
+### Task 30: RC2 H6 blank JavaFX window and RC3 rendering fix
+
+**Trigger:** H6 reported an A/B/A result on the exact RC2 artifacts in Windows
+Sandbox: the shipped configuration produced a blank window, adding
+`-Dprism.order=sw` rendered the UI, and restoring the shipped configuration
+made the next process blank again. The RC2 SHA-256 checks were already verified.
+RC1 and RC2 stay immutable; do not retag either.
+
+**Prism investigation and limits:**
+
+- RC2's `EncryptDrive.cfg` has no `prism.order`, so it uses the JavaFX 21
+  Windows default order `d3d sw`. The diagnostic copy was run with
+  `-Dprism.verbose=true` on the available Windows host. It selected
+  `com.sun.prism.d3d.D3DPipeline`, printed `Direct3D initialization succeeded`,
+  and did not fall back. The driver reported Intel Iris Xe, driver
+  `32.0.101.7088`. The UI was visible in this environment.
+- `prism.order=sw` selected `com.sun.prism.sw.SWPipeline` and the UI was visible.
+  Captures of the initial Vault Selection screen showed the same controls and
+  layout under both pipelines.
+- A network-disabled Windows Sandbox diagnostic was attempted using a copy of
+  RC2 and a mapped output folder. The Windows Sandbox feature was enabled, but
+  the guest's logon command produced no output or captures when launched from
+  this Codex-managed Windows sandbox. Therefore the selected pipeline and D3D
+  initialization status in the user's failing Sandbox are **not directly
+  observed**. Do not claim that D3D initialization succeeded there. The user's
+  A/B/A result establishes that the default configuration is unreliable in
+  that environment and that the software pipeline fixes its visible output.
+- JavaFX 21 source confirms that Windows defaults to `d3d sw`, that
+  `prism.order` overrides this order, and that pipeline creation proceeds to the
+  next option only when the prior pipeline cannot be created or initialized:
+  [PrismSettings.java](https://github.com/openjdk/jfx/blob/jfx21/modules/javafx.graphics/src/main/java/com/sun/prism/impl/PrismSettings.java)
+  and [GraphicsPipeline.java](https://github.com/openjdk/jfx/blob/jfx21/modules/javafx.graphics/src/main/java/com/sun/prism/GraphicsPipeline.java).
+
+**Fix decision:**
+
+- A. Force `-Dprism.order=sw`: selected. It matches the observed successful
+  Sandbox workaround and avoids relying on D3D's ability to detect an
+  unsupported presentation path.
+- B. Keep D3D first and add a runtime fallback: JavaFX already falls through
+  when D3D initialization fails. A blank frame with a pipeline that reports
+  successful initialization has no supported automatic blank-frame detector;
+  Prism cannot be switched in place after toolkit startup. Detecting Sandbox
+  from an undocumented environment signal or relaunching after inspecting
+  pixels would add untestable behavior.
+- C. Use `prism.order=sw,d3d`: this is a supported ordering, but it still starts
+  with software on ordinary PCs and falls through to D3D only if software
+  initialization fails. It does not preserve hardware acceleration as the
+  normal path and is not more appropriate than the direct `sw` setting for the
+  supplied evidence.
+- Trade-off: software rendering uses CPU resources and can be slower for
+  graphics-heavy scenes. EncryptDrive is a conventional file-management UI.
+  On the available Windows host, both initial screens rendered. After one warmup
+  per mode, three alternating UI-ready launches per mode measured D3D at
+  1.209/1.434/1.933 s (median 1.434 s) and software at 1.332/1.960/2.996 s
+  (median 1.960 s). This is a launch-to-window proxy, not a full interaction or
+  sustained-render benchmark; H6 must still confirm responsiveness in a clean
+  Windows environment.
+
+**Regression:** `scripts/tests/Test-ReleasePrismConfig.ps1` was added first and
+ran RED because `ReleasePackageConfig.psm1` did not yet exist. After adding the
+validator, it ran GREEN for both portable and installed app-image config cases:
+missing config and RC2's default config are rejected; the `JavaOptions` entry
+`java-options=-Dprism.order=sw` is accepted. The package verifier now applies
+the same check to the extracted portable image and the installed image, and the
+Build workflow runs the deterministic config regression.
+
+**Release gate:** build the new `rc.3` candidate from the fix commit, run clean
+Gate B, the mandatory 1 GiB test, rebuild portable and installer packages, and
+run `verify-package.ps1 -Launch -Install`. Push source changes normally and
+require both CI Build jobs to pass. Do not tag `v1.0.0-rc.3` until clean-Windows
+validation of the candidate has passed. After the tag exists, run H3–H6 again
+using the RC3 artifacts. Keep RC1/RC2 tags and the pre-H2 bundle unchanged.

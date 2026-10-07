@@ -178,17 +178,29 @@ nothing and no `JAVA_HOME`). Easiest on Windows 11 Pro: enable Windows Sandbox
 (Windows Features → Windows Sandbox; administrator; reboot), start it, and copy
 both artifacts into it. A spare PC or VM also works. **Blocks release:** yes.
 
+**RC2 result:** `v1.0.0-rc.2` failed this gate: its distributed default Prism
+configuration opened a blank window in Windows Sandbox. Adding
+`-Dprism.order=sw` made the UI visible; restoring the original configuration
+reproduced the blank window. RC1 and RC2 remain immutable and are not accepted
+for release. Run this gate on the new RC3 artifacts after they are created;
+launch both packages as shipped, without editing `EncryptDrive.cfg`.
+
 | # | Step | Expected result | Evidence |
 |---:|---|---|---|
 | 1 | `where java` and `echo %JAVA_HOME%` in cmd. | No Java found; variable empty. | |
 | 2 | Run Setup.exe; install with defaults. | Installs (SmartScreen note as in H3). | |
-| 3 | Start EncryptDrive from the Start Menu. | Vault Selection appears. | |
-| 4 | Unzip the portable ZIP to `C:\Portable`; run `C:\Portable\EncryptDrive\EncryptDrive.exe`. | Vault Selection appears. | |
-| 5 | Create a vault in `C:\Vaults\Clean`; register; import a file; export it. | Byte-identical export. | |
-| 6 | Close; uninstall from Settings → Apps. | Uninstall succeeds; `C:\Vaults\Clean` unchanged. | |
+| 3 | Start EncryptDrive from the Start Menu. | The complete Vault Selection UI is visible; the window is not blank. | |
+| 4 | Unzip the portable ZIP to `C:\Portable`; run `C:\Portable\EncryptDrive\EncryptDrive.exe`. | The complete Vault Selection UI is visible; the window is not blank. | |
+| 5 | In the installed app, create a vault in `C:\Vaults\Clean`; register; import a file; export it. | UI remains responsive; exported bytes match the source. | |
+| 6 | Close the installed app; open the same vault from the portable app. | Vault reopens; account and files remain available. | |
+| 7 | Close; uninstall from Settings → Apps. | Uninstall succeeds; `C:\Vaults\Clean` remains unchanged and reopens from the portable app. | |
 
 Send back the PASS/FAIL table, output of row 1, and the environment used
-(Sandbox, VM, or PC plus Windows version).
+(Sandbox, VM, or PC plus Windows version). Include a screenshot of both visible
+Vault Selection windows. If either is blank, add `java-options=-Dprism.verbose=true`
+to a temporary copy of that package's `EncryptDrive.cfg` and send only the lines
+that identify the Prism init order, selected pipeline, D3D initialization, and
+any fallback. Do not change the RC3 artifacts themselves.
 
 ## Final artifact smoke and publishing
 

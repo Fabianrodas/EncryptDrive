@@ -94,6 +94,7 @@ $common = @(
 # to drop the signature files; EncryptDrive never registers it as a JCE provider.
 Invoke-Checked "jpackage app-image" {
     jpackage --type app-image --dest target/dist @common `
+        --java-options "-Dprism.order=sw" `
         --icon packaging/windows/EncryptDrive.ico `
         --module-path target/modules `
         --module "com.fabianrodas.encryptdrive/com.fabianrodas.encryptdrive.App" `
